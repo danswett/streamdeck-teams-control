@@ -140,14 +140,56 @@ public sealed class TeamsClient : IDisposable
         }
     }
 
+    private static readonly Dictionary<int, bool> TeamsPidCache = new();
+    private static long _pidCacheStamp;
+
+    /// <summary>
+    /// Teams windows already checked and found not to host a meeting, with when
+    /// they were checked.
+    ///
+    /// A failed search is the expensive case — UIA walks the entire subtree
+    /// before giving up, and the chat window holds hundreds of elements. Joining
+    /// a meeting opens a new window, so an unseen window is always searched at
+    /// once; known-negative ones are only re-checked occasionally in case a
+    /// meeting starts inside an existing window.
+    /// </summary>
+    private readonly Dictionary<IntPtr, long> _nonMeetingWindows = new();
+
+    private const int NonMeetingRecheckMs = 8_000;
+
+    private static IntPtr HandleOf(AutomationElement el)
+    {
+        try { return new IntPtr(el.Properties.NativeWindowHandle.Value.ToInt64()); }
+        catch { return IntPtr.Zero; }
+    }
+
     private static bool IsTeams(AutomationElement el)
     {
+        int pid;
+        try { pid = el.Properties.ProcessId.Value; }
+        catch { return false; }
+
+        // Process lookups are not free and the desktop is rescanned whenever no
+        // meeting is cached, so the answer is remembered briefly.
+        var now = Environment.TickCount64;
+        if (now - _pidCacheStamp > 10_000)
+        {
+            TeamsPidCache.Clear();
+            _pidCacheStamp = now;
+        }
+
+        if (TeamsPidCache.TryGetValue(pid, out var known)) return known;
+
+        bool isTeams;
         try
         {
-            using var p = Process.GetProcessById(el.Properties.ProcessId.Value);
-            return string.Equals(p.ProcessName, "ms-teams", StringComparison.OrdinalIgnoreCase);
+            using var p = Process.GetProcessById(pid);
+            isTeams = string.Equals(p.ProcessName, "ms-teams", StringComparison.OrdinalIgnoreCase);
         }
-        catch { return false; }
+        catch { isTeams = false; }
+
+        TeamsPidCache[pid] = isTeams;
+        return isTeams;
     }
 
     private static AutomationElement? FindById(AutomationElement scope, string automationId)
@@ -213,21 +255,42 @@ public sealed class TeamsClient : IDisposable
         try { children = _automation.GetDesktop().FindAllChildren(); }
         catch { return null; }
 
+        var now = Environment.TickCount64;
         foreach (var w in children)
         {
             if (!IsTeams(w)) continue;
+
+            var hwnd = HandleOf(w);
+            if (hwnd != IntPtr.Zero
+                && _nonMeetingWindows.TryGetValue(hwnd, out var checkedAt)
+                && now - checkedAt < NonMeetingRecheckMs)
+            {
+                continue;
+            }
+
             try
             {
-                if (HasAnyMarker(w))
+                // Discovery probes for the toolbar only. Searching every marker
+                // here meant four full descendant walks per Teams window - and
+                // the chat window alone holds hundreds of elements - on every
+                // poll while no meeting was running. The wider marker set is
+                // still used on the cached window, where flyouts matter.
+                if (FindById(w, _config.MeetingProbeAutomationId) is not null)
                 {
                     _meetingWindow = w;
-                    _markersSeenAt = Environment.TickCount64;
+                    _markersSeenAt = now;
                     _renderWidget = FindRenderWidget(w);
+                    if (hwnd != IntPtr.Zero) _nonMeetingWindows.Remove(hwnd);
                     return w;
                 }
+
+                if (hwnd != IntPtr.Zero) _nonMeetingWindows[hwnd] = now;
             }
             catch { /* window died mid-walk */ }
         }
+
+        // Drop entries for windows that have since closed.
+        if (_nonMeetingWindows.Count > 16) _nonMeetingWindows.Clear();
 
         _lastStates.Clear();
         return null;

@@ -106,12 +106,19 @@ public static class Program
         var lastFingerprint = "";
         var nextPoll = 0L;
 
+        // Finding a meeting means rescanning the desktop, which is far dearer
+        // than reading a cached control. Outside a meeting there is nothing to
+        // report, so back off; a second or two before the keys light up when a
+        // call starts is not worth burning a core for.
+        var idlePollMs = Math.Max(pollMs, 2500);
+        var currentPollMs = pollMs;
+
         while (_running)
         {
             WorkItem? item = null;
             try
             {
-                var wait = (int)Math.Clamp(nextPoll - Environment.TickCount64, 0, pollMs);
+                var wait = (int)Math.Clamp(nextPoll - Environment.TickCount64, 0, currentPollMs);
                 Queue.TryTake(out item, wait);
             }
             catch (InvalidOperationException) { break; }
@@ -135,11 +142,13 @@ public static class Program
             }
 
             if (Environment.TickCount64 < nextPoll) continue;
-            nextPoll = Environment.TickCount64 + pollMs;
 
             try
             {
                 var snap = client.GetSnapshot();
+                currentPollMs = snap.InMeeting ? pollMs : idlePollMs;
+                nextPoll = Environment.TickCount64 + currentPollMs;
+
                 var fp = snap.Fingerprint();
                 if (fp != lastFingerprint)
                 {
@@ -149,6 +158,7 @@ public static class Program
             }
             catch (Exception ex)
             {
+                nextPoll = Environment.TickCount64 + currentPollMs;
                 Console.Error.WriteLine($"poll failed: {ex.Message}");
             }
         }
