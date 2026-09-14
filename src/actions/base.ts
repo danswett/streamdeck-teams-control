@@ -1,5 +1,4 @@
 import {
-	type DidReceiveSettingsEvent,
 	type KeyAction,
 	type KeyDownEvent,
 	SingletonAction,
@@ -24,33 +23,29 @@ export abstract class TeamsAction<T extends JsonObject = JsonObject> extends Sin
 	#unsubscribe: (() => void) | undefined;
 	#visible = 0;
 
+	/** Last image drawn per key, so unchanged state costs nothing. */
+	#painted = new Map<string, string>();
+
 	/** Sidecar control key this action presses, or undefined if it never presses one. */
 	protected abstract targetFor(settings: T): string | undefined;
 
 	/** Produces the SVG for the current Teams state. */
-	protected abstract draw(state: TeamsState, settings: T): string;
+	protected abstract draw(state: TeamsState): string;
 
 	override onWillAppear(ev: WillAppearEvent<T>): void {
 		this.#visible++;
 		if (!this.#unsubscribe) {
 			this.#unsubscribe = bridge.subscribe((state) => this.#paintAll(state));
 		}
-		if (ev.action.isKey()) {
-			void this.#paint(ev.action, bridge.state, ev.payload.settings);
-		}
+		if (ev.action.isKey()) void this.#paint(ev.action, bridge.state);
 	}
 
-	override onWillDisappear(_ev: WillDisappearEvent<T>): void {
+	override onWillDisappear(ev: WillDisappearEvent<T>): void {
+		this.#painted.delete(ev.action.id);
 		this.#visible = Math.max(0, this.#visible - 1);
 		if (this.#visible === 0 && this.#unsubscribe) {
 			this.#unsubscribe();
 			this.#unsubscribe = undefined;
-		}
-	}
-
-	override onDidReceiveSettings(ev: DidReceiveSettingsEvent<T>): void {
-		if (ev.action.isKey()) {
-			void this.#paint(ev.action, bridge.state, ev.payload.settings);
 		}
 	}
 
@@ -67,18 +62,21 @@ export abstract class TeamsAction<T extends JsonObject = JsonObject> extends Sin
 
 	#paintAll(state: TeamsState): void {
 		for (const action of this.actions) {
-			if (!action.isKey()) continue;
-			void action
-				.getSettings<T>()
-				.then((settings) => this.#paint(action, state, settings))
-				.catch((err: unknown) => logger.debug(`repaint skipped: ${String(err)}`));
+			if (action.isKey()) void this.#paint(action, state);
 		}
 	}
 
-	async #paint(action: KeyAction<T>, state: TeamsState, settings: T): Promise<void> {
+	async #paint(action: KeyAction<T>, state: TeamsState): Promise<void> {
+		const svg = this.draw(state);
+
+		// Stream Deck redraws on every setImage, so skip identical frames.
+		if (this.#painted.get(action.id) === svg) return;
+		this.#painted.set(action.id, svg);
+
 		try {
-			await action.setImage(toDataUri(this.draw(state, settings)));
+			await action.setImage(toDataUri(svg));
 		} catch (err) {
+			this.#painted.delete(action.id);
 			logger.debug(`setImage failed: ${String(err)}`);
 		}
 	}

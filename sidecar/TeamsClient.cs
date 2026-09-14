@@ -94,6 +94,17 @@ public sealed class TeamsClient : IDisposable
     /// <summary>Last known control states, carried forward across transient tree changes.</summary>
     private readonly Dictionary<string, bool> _lastStates = new();
 
+    /// <summary>When a meeting marker was last seen, used to ride out flyouts.</summary>
+    private long _markersSeenAt;
+
+    /// <summary>
+    /// How long a meeting window stays "in a meeting" after its markers vanish.
+    /// The background-effects flyout replaces the entire tree with its own
+    /// contents, so none of the markers are present while it is open — without
+    /// this, every key would dim whenever a menu was up.
+    /// </summary>
+    private const int MarkerGraceMs = 15_000;
+
     public TeamsClient(SelectorConfig config, bool restoreFocus = true)
     {
         _config = config;
@@ -176,11 +187,21 @@ public sealed class TeamsClient : IDisposable
     /// <summary>Locates the Teams window that currently hosts meeting controls.</summary>
     private AutomationElement? ResolveMeetingWindow()
     {
-        if (IsAlive(_meetingWindow) && HasAnyMarker(_meetingWindow!))
+        if (IsAlive(_meetingWindow))
         {
-            // The render widget can be recreated while the window lives on.
-            if (_renderWidget == IntPtr.Zero) _renderWidget = FindRenderWidget(_meetingWindow!);
-            return _meetingWindow;
+            // The cheap cached-probe check covers the common case; the fuller
+            // marker scan only runs when a flyout has hidden the toolbar.
+            if (IsToolbarVisible(_meetingWindow!) || HasAnyMarker(_meetingWindow!))
+            {
+                _markersSeenAt = Environment.TickCount64;
+                // The render widget can be recreated while the window lives on.
+                if (_renderWidget == IntPtr.Zero) _renderWidget = FindRenderWidget(_meetingWindow!);
+                return _meetingWindow;
+            }
+
+            // An open flyout can hide every marker; hold the meeting briefly
+            // rather than reporting that it ended.
+            if (Environment.TickCount64 - _markersSeenAt < MarkerGraceMs) return _meetingWindow;
         }
 
         _meetingWindow = null;
@@ -200,6 +221,7 @@ public sealed class TeamsClient : IDisposable
                 if (HasAnyMarker(w))
                 {
                     _meetingWindow = w;
+                    _markersSeenAt = Environment.TickCount64;
                     _renderWidget = FindRenderWidget(w);
                     return w;
                 }
@@ -222,8 +244,26 @@ public sealed class TeamsClient : IDisposable
     }
 
     /// <summary>True when the meeting toolbar itself is reachable, i.e. no flyout is covering it.</summary>
-    private bool IsToolbarVisible(AutomationElement win) =>
-        FindById(win, _config.MeetingProbeAutomationId) is not null;
+    /// <summary>
+    /// True when the meeting toolbar itself is reachable, i.e. no flyout is
+    /// covering it.
+    ///
+    /// The probe element is cached: a live UIA element throws once it leaves the
+    /// tree, which is exactly the signal needed, and checking it costs one
+    /// property read instead of a full descendant walk on every poll.
+    /// </summary>
+    private bool IsToolbarVisible(AutomationElement win)
+    {
+        const string cacheKey = "probe";
+        if (_cache.TryGetValue(cacheKey, out var probe) && IsAlive(probe)) return true;
+        _cache.Remove(cacheKey);
+
+        var el = FindById(win, _config.MeetingProbeAutomationId);
+        if (el is null) return false;
+
+        _cache[cacheKey] = el;
+        return true;
+    }
 
     private AutomationElement? ResolveControl(string key, ControlSpec spec)
     {
@@ -235,6 +275,21 @@ public sealed class TeamsClient : IDisposable
 
         var el = FindById(win, spec.AutomationId);
         if (el is not null) _cache[key] = el;
+        return el;
+    }
+
+    /// <summary>
+    /// Resolves a flyout's trigger button, cached like any other control.
+    /// Without this the poll walked the tree once per menu-nested control.
+    /// </summary>
+    private AutomationElement? ResolveMenuHost(AutomationElement win, string menuId)
+    {
+        var cacheKey = $"menu:{menuId}";
+        if (_cache.TryGetValue(cacheKey, out var cached) && IsAlive(cached)) return cached;
+        _cache.Remove(cacheKey);
+
+        var el = FindById(win, menuId);
+        if (el is not null) _cache[cacheKey] = el;
         return el;
     }
 
@@ -275,14 +330,24 @@ public sealed class TeamsClient : IDisposable
             return snap;
         }
 
+        // The seven menu-nested controls share just two menus, so each menu is
+        // located once per snapshot rather than once per control. Resolving them
+        // individually cost seven full tree walks every poll.
+        var menuAvailable = new Dictionary<string, bool>(StringComparer.Ordinal);
+
         foreach (var (key, spec) in _config.Controls)
         {
             // Menu-nested controls (reactions, hand, blur) are not readable
             // without opening their flyout, so only report availability.
             if (!string.IsNullOrEmpty(spec.Menu))
             {
-                var host = FindById(win, spec.Menu!);
-                snap.Available[key] = host is not null && SafeEnabled(host);
+                if (!menuAvailable.TryGetValue(spec.Menu!, out var menuOk))
+                {
+                    var host = ResolveMenuHost(win, spec.Menu!);
+                    menuOk = host is not null && SafeEnabled(host);
+                    menuAvailable[spec.Menu!] = menuOk;
+                }
+                snap.Available[key] = menuOk;
                 continue;
             }
 
@@ -713,6 +778,14 @@ public sealed class TeamsClient : IDisposable
             }
 
             if (!Press(item)) return (false, $"could not invoke item for '{target}'");
+
+            // Two problems, one fix. The flyout does not reliably close on its
+            // own, and after a selection Teams swallows the next click on that
+            // menu button. A click on inert space dismisses the popup and clears
+            // the suppression, so the following press works first time instead
+            // of needing the retry below.
+            Thread.Sleep(200);
+            TryClickAway(win);
             return (true, null);
         }
         finally

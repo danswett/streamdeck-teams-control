@@ -53,7 +53,7 @@ public static class Program
 
         var selectorsPath = GetArg(args, "--selectors")
                             ?? Path.Combine(AppContext.BaseDirectory, "selectors.json");
-        var pollMs = int.TryParse(GetArg(args, "--poll"), out var p) ? Math.Clamp(p, 150, 5000) : 400;
+        var pollMs = int.TryParse(GetArg(args, "--poll"), out var p) ? Math.Clamp(p, 150, 5000) : 700;
 
         var config = LoadConfig(selectorsPath);
         var restoreFocus = !HasFlag(args, "--no-focus-guard");
