@@ -1,7 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
-			<g fill="#FFFFFF">
-				<circle cx="56" cy="50" r="18"/>
-				<path d="M24 114 a32 32 0 0 1 64 0 z"/>
-				<circle cx="98" cy="56" r="14" opacity="0.85"/>
-				<path d="M74 114 a26 26 0 0 1 50 0 z" opacity="0.85"/>
-			</g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144"><g transform="translate(20.160 20.160) scale(2.16000)" fill="#FFFFFF"><path d="M16 24a8 8 0 1 0 0-16 8 8 0 0 0 0 16m18 0a6 6 0 1 0 0-12 6 6 0 0 0 0 12M6.75 27A3.75 3.75 0 0 0 3 30.75V32s0 9 13 9 13-9 13-9v-1.25A3.75 3.75 0 0 0 25.25 27zm21.92 11.09c1.38.56 3.12.91 5.33.91 10.5 0 10.5-8 10.5-8v-.25A3.75 3.75 0 0 0 40.75 27H29.6c.86 1 1.39 2.32 1.39 3.75v1.35l-.04.58q-.05.53-.24 1.33a11 11 0 0 1-2.05 4.08"/></g></svg>

@@ -7,8 +7,8 @@
 	"Category": "Teams Meeting Controls",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"Icon": "imgs/plugin/marketplace",
-	"URL": "https://github.com/dswett/streamdeck-teams-control",
-	"SupportURL": "https://github.com/dswett/streamdeck-teams-control/issues",
+	"URL": "https://github.com/danswett/streamdeck-teams-control",
+	"SupportURL": "https://github.com/danswett/streamdeck-teams-control/issues",
 	"CodePath": "bin/plugin.js",
 	"PropertyInspectorPath": "ui/default.html",
 	"SDKVersion": 3,
@@ -51,15 +51,54 @@
 			"States": [{ "Image": "imgs/actions/hand/key", "TitleAlignment": "bottom" }]
 		},
 		{
-			"Name": "Reaction",
-			"UUID": "com.dswett.teamscontrol.react",
-			"Icon": "imgs/actions/react/icon",
-			"Tooltip": "Send a meeting reaction",
+			"Name": "React: Like",
+			"UUID": "com.dswett.teamscontrol.react-like",
+			"Icon": "imgs/actions/react-like/icon",
+			"Tooltip": "Send a Like reaction",
 			"Controllers": ["Keypad"],
 			"SupportedInMultiActions": true,
 			"UserTitleEnabled": false,
-			"PropertyInspectorPath": "ui/reaction.html",
-			"States": [{ "Image": "imgs/actions/react/key", "TitleAlignment": "bottom" }]
+			"States": [{ "Image": "imgs/actions/react-like/key", "TitleAlignment": "bottom" }]
+		},
+		{
+			"Name": "React: Love",
+			"UUID": "com.dswett.teamscontrol.react-love",
+			"Icon": "imgs/actions/react-love/icon",
+			"Tooltip": "Send a Love reaction",
+			"Controllers": ["Keypad"],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"States": [{ "Image": "imgs/actions/react-love/key", "TitleAlignment": "bottom" }]
+		},
+		{
+			"Name": "React: Applause",
+			"UUID": "com.dswett.teamscontrol.react-applause",
+			"Icon": "imgs/actions/react-applause/icon",
+			"Tooltip": "Send an Applause reaction",
+			"Controllers": ["Keypad"],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"States": [{ "Image": "imgs/actions/react-applause/key", "TitleAlignment": "bottom" }]
+		},
+		{
+			"Name": "React: Laugh",
+			"UUID": "com.dswett.teamscontrol.react-laugh",
+			"Icon": "imgs/actions/react-laugh/icon",
+			"Tooltip": "Send a Laugh reaction",
+			"Controllers": ["Keypad"],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"States": [{ "Image": "imgs/actions/react-laugh/key", "TitleAlignment": "bottom" }]
+		},
+		{
+			"Name": "React: Wow",
+			"UUID": "com.dswett.teamscontrol.react-wow",
+			"Icon": "imgs/actions/react-wow/icon",
+			"Tooltip": "Send a Wow reaction",
+			"Controllers": ["Keypad"],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"States": [{ "Image": "imgs/actions/react-wow/key", "TitleAlignment": "bottom" }]
 		},
 		{
 			"Name": "Background Blur",

@@ -40,10 +40,10 @@ the same accessibility layer screen readers use.
 
 | Action | Live state shown | Notes |
 |---|---|---|
-| **Mute** | ✅ muted / unmuted | Struck-through red mic when muted |
-| **Camera** | ✅ on / off | Struck-through red camera when off |
+| **Mute** | ✅ muted / unmuted | Red `mic_off` glyph when muted |
+| **Camera** | ✅ on / off | Red `video_off` glyph when off |
 | **Raise Hand** | availability only | Lives in the React flyout |
-| **Reaction** | availability only | Pick Like / Love / Applause / Laugh / Wow |
+| **React: Like / Love / Applause / Laugh / Wow** | availability only | Five separate actions, one per reaction |
 | **Background Blur** | availability only | Lives in the video options flyout |
 | **Share Screen** | ✅ sharing / not | Opens the share tray |
 | **Chat** | availability only | Toggles the meeting chat pane |
@@ -52,6 +52,22 @@ the same accessibility layer screen readers use.
 
 Every key dims to grey when you are not in a meeting, so the deck always
 reflects reality.
+
+### Artwork
+
+Icons are Microsoft's own **Fluent UI System Icons** and **Fluent Emoji**, both
+MIT licensed — the same sets Teams itself renders, so the keys match the app.
+They are extracted into `src/glyphs.generated.json` at build time and composed
+into SVGs at runtime, which is what allows three states per key when Stream Deck
+only supports two.
+
+Regenerate after changing the glyph list:
+
+```bash
+node tools/build-glyphs.ts    # extract from node_modules -> src/glyphs.generated.json
+node tools/generate-icons.ts  # manifest artwork
+node tools/preview-icons.ts   # dist/preview/icon-states.png contact sheet
+```
 
 ---
 
@@ -125,7 +141,8 @@ npm run build:plugin    # rollup -> *.sdPlugin/bin/plugin.js
 npm run watch           # rebuild + restart plugin on change
 npm run validate        # streamdeck validate
 npm run pack            # -> dist/*.streamDeckPlugin
-node tools/generate-icons.ts   # regenerate manifest artwork from src/icons.ts
+node tools/build-glyphs.ts     # re-extract Fluent artwork
+node tools/generate-icons.ts   # regenerate manifest artwork
 ```
 
 Logs: `com.dswett.teamscontrol.sdPlugin/logs/com.dswett.teamscontrol.0.log`
@@ -220,9 +237,12 @@ meeting content — only the state of the meeting toolbar buttons.
 - [`@elgato/streamdeck`](https://github.com/elgatosf/streamdeck) — MIT
 - [FlaUI](https://github.com/FlaUI/FlaUI) — MIT (UI Automation wrapper)
 - [sdpi-components](https://sdpi-components.dev) — MIT (property inspector UI)
+- [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) — MIT (control glyphs)
+- [Fluent Emoji](https://github.com/microsoft/fluentui-emoji) — MIT (reactions)
 
-Not affiliated with or endorsed by Microsoft or Elgato. All icon artwork in this
-repository is original.
+Not affiliated with or endorsed by Microsoft or Elgato. No proprietary Microsoft
+or Elgato artwork is bundled; all icons come from the MIT-licensed Fluent sets
+above.
 
 ## License
 

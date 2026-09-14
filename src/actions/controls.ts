@@ -1,13 +1,7 @@
 import { action, type KeyDownEvent, type KeyUpEvent } from "@elgato/streamdeck";
 
 import { type TeamsState } from "../bridge";
-import {
-	REACTION_KEYS,
-	renderGlyph,
-	renderReaction,
-	renderSimple,
-	renderToggle
-} from "../icons";
+import { renderGlyph, renderReaction, renderSimple, renderToggle } from "../icons";
 import { TeamsAction } from "./base";
 
 /** True when Teams is in a meeting and the control is present and enabled. */
@@ -22,8 +16,15 @@ export class MuteAction extends TeamsAction {
 	}
 
 	protected override draw(state: TeamsState): string {
-		// A muted mic is struck through and red, matching the Teams toolbar.
-		return renderToggle("mic", usable(state, "mute"), state.states["mute"], true, true);
+		// `mute` is true when muted, which is the struck-through Fluent glyph.
+		return renderToggle({
+			onKey: "micOff",
+			offKey: "mic",
+			onTone: "danger",
+			offTone: "on",
+			active: state.states["mute"],
+			available: usable(state, "mute")
+		});
 	}
 }
 
@@ -34,8 +35,15 @@ export class CameraAction extends TeamsAction {
 	}
 
 	protected override draw(state: TeamsState): string {
-		// State is "camera on", so the slash belongs on the inactive side.
-		return renderToggle("camera", usable(state, "camera"), state.states["camera"], false, true);
+		// `camera` is true when the camera is on.
+		return renderToggle({
+			onKey: "camera",
+			offKey: "cameraOff",
+			onTone: "on",
+			offTone: "danger",
+			active: state.states["camera"],
+			available: usable(state, "camera")
+		});
 	}
 }
 
@@ -47,26 +55,8 @@ export class HandAction extends TeamsAction {
 
 	protected override draw(state: TeamsState): string {
 		if (!usable(state, "hand")) return renderGlyph("hand", "unavailable");
-		// Raised hands read better as a highlight than as a struck-through glyph.
+		// A raised hand reads better as a highlight than as a separate glyph.
 		return renderGlyph("hand", state.states["hand"] ? "accent" : "on");
-	}
-}
-
-type ReactionSettings = {
-	reaction?: string;
-};
-
-@action({ UUID: "com.dswett.teamscontrol.react" })
-export class ReactionAction extends TeamsAction<ReactionSettings> {
-	protected override targetFor(settings: ReactionSettings): string {
-		const key = settings.reaction ?? "react-like";
-		return REACTION_KEYS.includes(key) ? key : "react-like";
-	}
-
-	protected override draw(state: TeamsState, settings: ReactionSettings): string {
-		const key = this.targetFor(settings);
-		// Reactions live in the React flyout, so availability tracks that menu.
-		return renderReaction(key, usable(state, key));
 	}
 }
 
@@ -89,8 +79,14 @@ export class ShareAction extends TeamsAction {
 	}
 
 	protected override draw(state: TeamsState): string {
-		if (!usable(state, "share")) return renderGlyph("share", "unavailable");
-		return renderGlyph("share", state.states["share"] ? "accent" : "on");
+		return renderToggle({
+			onKey: "shareStop",
+			offKey: "share",
+			onTone: "accent",
+			offTone: "on",
+			active: state.states["share"],
+			available: usable(state, "share")
+		});
 	}
 }
 
@@ -116,6 +112,47 @@ export class PeopleAction extends TeamsAction {
 	}
 }
 
+/**
+ * Base for the five meeting reactions. Each is its own action so they can be
+ * dragged onto the deck individually, matching how Teams presents them.
+ */
+abstract class ReactionAction extends TeamsAction {
+	protected abstract readonly reaction: string;
+
+	protected override targetFor(): string {
+		return this.reaction;
+	}
+
+	protected override draw(state: TeamsState): string {
+		return renderReaction(this.reaction, usable(state, this.reaction));
+	}
+}
+
+@action({ UUID: "com.dswett.teamscontrol.react-like" })
+export class ReactLikeAction extends ReactionAction {
+	protected override readonly reaction = "react-like";
+}
+
+@action({ UUID: "com.dswett.teamscontrol.react-love" })
+export class ReactLoveAction extends ReactionAction {
+	protected override readonly reaction = "react-love";
+}
+
+@action({ UUID: "com.dswett.teamscontrol.react-applause" })
+export class ReactApplauseAction extends ReactionAction {
+	protected override readonly reaction = "react-applause";
+}
+
+@action({ UUID: "com.dswett.teamscontrol.react-laugh" })
+export class ReactLaughAction extends ReactionAction {
+	protected override readonly reaction = "react-laugh";
+}
+
+@action({ UUID: "com.dswett.teamscontrol.react-wow" })
+export class ReactWowAction extends ReactionAction {
+	protected override readonly reaction = "react-wow";
+}
+
 type LeaveSettings = {
 	requireHold?: boolean;
 };
@@ -131,7 +168,7 @@ export class LeaveAction extends TeamsAction<LeaveSettings> {
 	}
 
 	protected override draw(state: TeamsState): string {
-		return renderSimple("leave", usable(state, "leave"), true);
+		return renderSimple("leave", usable(state, "leave"), "danger");
 	}
 
 	/**

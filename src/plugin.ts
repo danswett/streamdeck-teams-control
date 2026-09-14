@@ -8,7 +8,11 @@ import {
 	LeaveAction,
 	MuteAction,
 	PeopleAction,
-	ReactionAction,
+	ReactApplauseAction,
+	ReactLaughAction,
+	ReactLikeAction,
+	ReactLoveAction,
+	ReactWowAction,
 	ShareAction
 } from "./actions/controls";
 import { bridge } from "./bridge";
@@ -18,7 +22,11 @@ streamDeck.logger.setLevel("info");
 streamDeck.actions.registerAction(new MuteAction());
 streamDeck.actions.registerAction(new CameraAction());
 streamDeck.actions.registerAction(new HandAction());
-streamDeck.actions.registerAction(new ReactionAction());
+streamDeck.actions.registerAction(new ReactLikeAction());
+streamDeck.actions.registerAction(new ReactLoveAction());
+streamDeck.actions.registerAction(new ReactApplauseAction());
+streamDeck.actions.registerAction(new ReactLaughAction());
+streamDeck.actions.registerAction(new ReactWowAction());
 streamDeck.actions.registerAction(new BlurAction());
 streamDeck.actions.registerAction(new ShareAction());
 streamDeck.actions.registerAction(new ChatAction());
