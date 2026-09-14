@@ -1,0 +1,74 @@
+{
+	"$comment": [
+		"Maps Stream Deck actions onto Microsoft Teams meeting controls.",
+		"",
+		"Teams' local third-party API (ws://localhost:8124) was retired on 2026-06-30",
+		"with no replacement, so controls are driven through UI Automation instead.",
+		"AutomationIds below were read directly from the Teams meeting toolbar and are",
+		"locale-independent. The *Pattern fields match the button's accessible name,",
+		"which IS localised - translate those if you run Teams in another language.",
+		"",
+		"A button's name describes the action it performs, so it is the inverse of the",
+		"current state: 'Unmute mic' means you are currently muted.",
+		"",
+		"Edit this file and restart the plugin to re-map controls after a Teams update.",
+		"Use the Diagnostics panel in any action's property inspector to dump the live",
+		"UI tree into the plugin log."
+	],
+	"version": 1,
+	"meetingProbeAutomationId": "microphone-button",
+	"controls": {
+		"mute": {
+			"automationId": "microphone-button",
+			"activePattern": "^\\s*unmute\\b",
+			"inactivePattern": "^\\s*mute\\b"
+		},
+		"camera": {
+			"automationId": "video-button",
+			"activePattern": "camera\\s+off",
+			"inactivePattern": "camera\\s+on"
+		},
+		"leave": {
+			"automationId": "hangup-button"
+		},
+		"share": {
+			"automationId": "share-button",
+			"activePattern": "stop\\s+(sharing|presenting)",
+			"inactivePattern": "^\\s*share\\b"
+		},
+		"chat": {
+			"automationId": "chat-button"
+		},
+		"people": {
+			"automationId": "roster-button"
+		},
+		"hand": {
+			"menu": "reaction-menu-button",
+			"menuItemName": "(raise|lower)\\s+(your\\s+)?hand"
+		},
+		"react-like": {
+			"menu": "reaction-menu-button",
+			"menuItemName": "^\\s*(like|thumbs\\s*up)\\b"
+		},
+		"react-love": {
+			"menu": "reaction-menu-button",
+			"menuItemName": "^\\s*(love|heart)\\b"
+		},
+		"react-applause": {
+			"menu": "reaction-menu-button",
+			"menuItemName": "^\\s*(applause|applaud|clap)\\b"
+		},
+		"react-laugh": {
+			"menu": "reaction-menu-button",
+			"menuItemName": "^\\s*(laugh|haha)\\b"
+		},
+		"react-wow": {
+			"menu": "reaction-menu-button",
+			"menuItemName": "^\\s*(wow|surprised)\\b"
+		},
+		"blur": {
+			"menu": "video-button-configure",
+			"menuItemName": "blur|background\\s+effects"
+		}
+	}
+}

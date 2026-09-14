@@ -1,0 +1,20 @@
+# Node.js
+node_modules/
+
+# Stream Deck build output
+*.sdPlugin/bin
+*.sdPlugin/logs
+
+# Packaged plugin + Marketplace assets
+dist/
+
+# .NET sidecar build output
+sidecar/bin/
+sidecar/obj/
+
+# Editor / OS noise
+.vs/
+.idea/
+*.user
+Thumbs.db
+.DS_Store

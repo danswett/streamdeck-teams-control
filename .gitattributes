@@ -1,0 +1,10 @@
+# Normalise line endings so the repo is consistent across platforms.
+* text=auto eol=lf
+
+# Windows-only tooling keeps CRLF.
+*.ps1 text eol=crlf
+*.csproj text eol=crlf
+
+# Binary assets.
+*.png binary
+*.exe binary

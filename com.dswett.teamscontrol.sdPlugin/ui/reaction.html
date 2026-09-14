@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+	<head lang="en">
+		<meta charset="utf-8" />
+		<script src="sdpi-components.js"></script>
+	</head>
+	<body>
+		<sdpi-item label="Reaction">
+			<sdpi-select setting="reaction" default="react-like">
+				<option value="react-like">👍 Like</option>
+				<option value="react-love">❤️ Love</option>
+				<option value="react-applause">👏 Applause</option>
+				<option value="react-laugh">😂 Laugh</option>
+				<option value="react-wow">😮 Wow</option>
+			</sdpi-select>
+		</sdpi-item>
+
+		<details>
+			<summary style="cursor: pointer; margin: 8px 0; color: #999">Diagnostics</summary>
+			<sdpi-item label="Map Teams UI">
+				<button id="discover-react">Dump React menu</button>
+			</sdpi-item>
+			<sdpi-item label="">
+				<button id="discover-toolbar">Dump toolbar</button>
+			</sdpi-item>
+			<p style="color: #999; font-size: 11px; padding: 0 8px">
+				Join a meeting first. Results are written to the plugin log, which you
+				can open from Stream Deck via Help → Open Logs Folder.
+			</p>
+		</details>
+
+		<script>
+			const { streamDeckClient } = SDPIComponents;
+			document.getElementById("discover-react").addEventListener("click", () => {
+				streamDeckClient.send("sendToPlugin", { command: "discover", menu: "reaction-menu-button" });
+			});
+			document.getElementById("discover-toolbar").addEventListener("click", () => {
+				streamDeckClient.send("sendToPlugin", { command: "discover", menu: "" });
+			});
+		</script>
+	</body>
+</html>

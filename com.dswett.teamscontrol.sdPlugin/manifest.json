@@ -1,0 +1,116 @@
+{
+	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+	"Name": "Teams Meeting Controls",
+	"Version": "1.0.0.0",
+	"Author": "dswett",
+	"Description": "Control Microsoft Teams meetings from your Stream Deck. Mute, camera, raise hand, reactions, background blur and more — with live state on every key. Works while Teams is in the background; never sends keystrokes.",
+	"Category": "Teams Meeting Controls",
+	"CategoryIcon": "imgs/plugin/category-icon",
+	"Icon": "imgs/plugin/marketplace",
+	"URL": "https://github.com/dswett/streamdeck-teams-control",
+	"SupportURL": "https://github.com/dswett/streamdeck-teams-control/issues",
+	"CodePath": "bin/plugin.js",
+	"PropertyInspectorPath": "ui/default.html",
+	"SDKVersion": 3,
+	"Software": { "MinimumVersion": "7.1" },
+	"OS": [{ "Platform": "windows", "MinimumVersion": "10" }],
+	"Nodejs": { "Version": "24" },
+	"UUID": "com.dswett.teamscontrol",
+	"ApplicationsToMonitor": {
+		"windows": ["ms-teams.exe"]
+	},
+	"Actions": [
+		{
+			"Name": "Mute",
+			"UUID": "com.dswett.teamscontrol.mute",
+			"Icon": "imgs/actions/mute/icon",
+			"Tooltip": "Mute and unmute your microphone",
+			"Controllers": ["Keypad"],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"States": [{ "Image": "imgs/actions/mute/key", "TitleAlignment": "bottom" }]
+		},
+		{
+			"Name": "Camera",
+			"UUID": "com.dswett.teamscontrol.camera",
+			"Icon": "imgs/actions/camera/icon",
+			"Tooltip": "Turn your camera on or off",
+			"Controllers": ["Keypad"],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"States": [{ "Image": "imgs/actions/camera/key", "TitleAlignment": "bottom" }]
+		},
+		{
+			"Name": "Raise Hand",
+			"UUID": "com.dswett.teamscontrol.hand",
+			"Icon": "imgs/actions/hand/icon",
+			"Tooltip": "Raise or lower your hand",
+			"Controllers": ["Keypad"],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"States": [{ "Image": "imgs/actions/hand/key", "TitleAlignment": "bottom" }]
+		},
+		{
+			"Name": "Reaction",
+			"UUID": "com.dswett.teamscontrol.react",
+			"Icon": "imgs/actions/react/icon",
+			"Tooltip": "Send a meeting reaction",
+			"Controllers": ["Keypad"],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/reaction.html",
+			"States": [{ "Image": "imgs/actions/react/key", "TitleAlignment": "bottom" }]
+		},
+		{
+			"Name": "Background Blur",
+			"UUID": "com.dswett.teamscontrol.blur",
+			"Icon": "imgs/actions/blur/icon",
+			"Tooltip": "Turn background blur on or off",
+			"Controllers": ["Keypad"],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"States": [{ "Image": "imgs/actions/blur/key", "TitleAlignment": "bottom" }]
+		},
+		{
+			"Name": "Share Screen",
+			"UUID": "com.dswett.teamscontrol.share",
+			"Icon": "imgs/actions/share/icon",
+			"Tooltip": "Open the share tray",
+			"Controllers": ["Keypad"],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"States": [{ "Image": "imgs/actions/share/key", "TitleAlignment": "bottom" }]
+		},
+		{
+			"Name": "Chat",
+			"UUID": "com.dswett.teamscontrol.chat",
+			"Icon": "imgs/actions/chat/icon",
+			"Tooltip": "Show or hide the meeting chat",
+			"Controllers": ["Keypad"],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"States": [{ "Image": "imgs/actions/chat/key", "TitleAlignment": "bottom" }]
+		},
+		{
+			"Name": "People",
+			"UUID": "com.dswett.teamscontrol.people",
+			"Icon": "imgs/actions/people/icon",
+			"Tooltip": "Show or hide the participant roster",
+			"Controllers": ["Keypad"],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"States": [{ "Image": "imgs/actions/people/key", "TitleAlignment": "bottom" }]
+		},
+		{
+			"Name": "Leave",
+			"UUID": "com.dswett.teamscontrol.leave",
+			"Icon": "imgs/actions/leave/icon",
+			"Tooltip": "Leave the meeting",
+			"Controllers": ["Keypad"],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/leave.html",
+			"States": [{ "Image": "imgs/actions/leave/key", "TitleAlignment": "bottom" }]
+		}
+	]
+}
