@@ -39,7 +39,11 @@ const CONTROLS: Record<string, string> = {
 	chat: "chat_28_filled",
 	people: "people_28_filled",
 	leave: "call_end_28_filled",
-	emoji: "emoji_28_filled"
+	emoji: "emoji_28_filled",
+	// Category icon. Stream Deck requires this to be monochrome white on
+	// transparent, and the Microsoft Teams logo is Microsoft's trademark, so a
+	// neutral "team" glyph stands in for it.
+	category: "people_team_28_filled"
 };
 
 /** Reaction artwork, matching the five reactions Teams offers. */

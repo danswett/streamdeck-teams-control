@@ -62,7 +62,7 @@ write(path.join(handDir, "key.svg"), renderEmoji("hand", true));
 
 // Plugin-level artwork.
 const pluginDir = path.join(IMGS, "plugin");
-write(path.join(pluginDir, "category-icon.svg"), renderGlyph("emoji", "on"));
+write(path.join(pluginDir, "category-icon.svg"), renderGlyph("category", "on"));
 
 // Stream Deck requires the plugin icon itself to be PNG.
 const markSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 144 144">
