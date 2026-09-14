@@ -41,10 +41,10 @@ the same accessibility layer screen readers use.
 
 | Action | Live state shown | Notes |
 |---|---|---|
-| **Mute** | ✅ muted / unmuted | Red `mic_off` glyph when muted |
-| **Camera** | ✅ on / off | Red `video_off` glyph when off |
-| **Raise Hand** | availability only | Lives in the React flyout |
-| **React: Like / Love / Applause / Laugh / Wow** | availability only | Five separate actions, one per reaction |
+| **Mute** | ✅ muted / unmuted | Slashed `mic_off` glyph when muted |
+| **Camera** | ✅ on / off | Slashed `video_off` glyph when off |
+| **Raise Hand** | availability only | Lifts on press. Lives in the React flyout |
+| **React: Like / Love / Applause / Laugh / Wow** | availability only | Five separate actions; each pops on press |
 | **Background Blur** | availability only | Lives in the video options flyout |
 | **Share Screen** | ✅ sharing / not | Opens the share tray |
 | **Chat** | availability only | Toggles the meeting chat pane |
@@ -62,12 +62,18 @@ They are extracted into `src/glyphs.generated.json` at build time and composed
 into SVGs at runtime, which is what allows three states per key when Stream Deck
 only supports two.
 
+The reaction and raise-hand keys animate when pressed. Stream Deck has no
+animated-image support — `setImage` rejects GIF, and the manifest's GIF support
+cannot be driven per press — so frames are pushed individually for about 620 ms,
+and only while a key is being pressed.
+
 Regenerate after changing the glyph list:
 
 ```bash
-node tools/build-glyphs.ts    # extract from node_modules -> src/glyphs.generated.json
-node tools/generate-icons.ts  # manifest artwork
-node tools/preview-icons.ts   # dist/preview/icon-states.png contact sheet
+node tools/build-glyphs.ts     # extract from node_modules -> src/glyphs.generated.json
+node tools/generate-icons.ts   # manifest artwork
+node tools/preview-icons.ts    # dist/preview/icon-states.png contact sheet
+node tools/preview-animation.ts react-like   # filmstrip of the press animation
 ```
 
 ---
