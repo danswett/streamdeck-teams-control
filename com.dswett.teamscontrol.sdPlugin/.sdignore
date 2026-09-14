@@ -1,0 +1,4 @@
+# Excluded from the packaged .streamDeckPlugin.
+logs/
+bin/sidecar/TeamsBridge.old*.exe
+bin/**/*.pdb
