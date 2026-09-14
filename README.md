@@ -147,6 +147,17 @@ node tools/generate-icons.ts   # regenerate manifest artwork
 
 Logs: `com.dswett.teamscontrol.sdPlugin/logs/com.dswett.teamscontrol.0.log`
 
+> **Manifest changes need a full Stream Deck app restart.** `streamdeck restart`
+> recycles the plugin *process*, but Stream Deck caches `manifest.json` and only
+> re-reads it when the app starts. If you add, rename or remove an action and it
+> does not show up in the actions list, quit and reopen Stream Deck.
+
+> **Rebuilding the sidecar while the plugin runs** fails with a file lock:
+> Stream Deck immediately relaunches a plugin that exits, which respawns the
+> sidecar and re-locks the binary. `sidecar/rebuild.ps1` handles this by
+> publishing to a staging folder, renaming the running image (Windows allows
+> this) and dropping the new one in its place.
+
 The sidecar also runs standalone, which is the quickest way to debug UIA:
 
 ```powershell
