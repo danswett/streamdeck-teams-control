@@ -135,31 +135,50 @@ export function renderEmoji(key: string, available: boolean): string {
 }
 
 /**
- * One frame of the press animation, mimicking how a reaction pops in Teams.
+ * One frame of a key press animation.
  *
  * `progress` runs 0 to 1. Stream Deck cannot play animated images — `setImage`
  * rejects GIF — so movement has to be driven frame by frame.
+ *
+ * A single sine arch drives every property: it peaks halfway through and
+ * returns exactly to rest at the end, so the final frame matches the static
+ * icon and no easing table is needed. The defaults are capped so the artwork
+ * grows without clipping at the key edge.
  */
-export function renderReactionFrame(key: string, progress: number): string {
+export function renderEmojiFrame(
+	key: string,
+	progress: number,
+	options: { pop?: number; lift?: number; tilt?: number } = {}
+): string {
 	const def = REACTION_GLYPHS[key] ?? EMOJI_GLYPHS[key];
 	if (!def) return wrap("");
 
-	// A single sine arch gives the pop and the settle without easing tables:
-	// it peaks halfway through and returns exactly to rest at the end. The
-	// peak is capped so the artwork stays inside the key instead of clipping.
-	const arch = Math.sin(Math.PI * Math.min(Math.max(progress, 0), 1));
-	const scale = 1 + 0.2 * arch;
-	const lift = -6 * arch;
-	const tilt = 9 * Math.sin(2 * Math.PI * progress);
+	const { pop = 0.2, lift = -6, tilt = 9 } = options;
+
+	const t = Math.min(Math.max(progress, 0), 1);
+	const arch = Math.sin(Math.PI * t);
+	const scale = 1 + pop * arch;
+	const offsetY = lift * arch;
+	const angle = tilt === 0 ? 0 : tilt * Math.sin(2 * Math.PI * t);
 
 	const centre = SIZE / 2;
 	const art = `<g transform="${transformFor(def, REACTION_FILL)}">${def.body}</g>`;
+	const rotate = angle === 0 ? "" : ` rotate(${angle.toFixed(2)})`;
 
 	return wrap(
-		`<g transform="translate(${centre} ${(centre + lift).toFixed(2)}) ` +
-			`rotate(${tilt.toFixed(2)}) scale(${scale.toFixed(4)}) ` +
-			`translate(${-centre} ${-centre})">${art}</g>`
+		`<g transform="translate(${centre} ${(centre + offsetY).toFixed(2)})${rotate} ` +
+			`scale(${scale.toFixed(4)}) translate(${-centre} ${-centre})">${art}</g>`
 	);
+}
+
+/** Press animation for a reaction: a pop with a little wobble. */
+export function renderReactionFrame(key: string, progress: number): string {
+	return renderEmojiFrame(key, progress);
+}
+
+/** Press animation for raise hand: lifts straight up, no wobble. */
+export function renderHandFrame(progress: number): string {
+	return renderEmojiFrame("hand", progress, { pop: 0.08, lift: -12, tilt: 0 });
 }
 
 function renderEmojiGlyph(def: GlyphDef | undefined, available: boolean): string {

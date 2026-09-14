@@ -10,11 +10,11 @@ import { fileURLToPath } from "node:url";
 
 import { Resvg } from "@resvg/resvg-js";
 
-import { renderReactionFrame } from "../src/icons.ts";
+import { renderHandFrame, renderReactionFrame } from "../src/icons.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-const KEY = "react-like";
+const KEY = process.argv[2] ?? "react-like";
 const FRAMES = 12;
 const CELL = 110;
 const PAD = 8;
@@ -30,7 +30,7 @@ for (let i = 0; i < FRAMES; i++) {
 	const y = PAD;
 
 	body += `<rect x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="12" fill="#000"/>`;
-	const svg = renderReactionFrame(KEY, t)
+	const svg = (KEY === "hand" ? renderHandFrame(t) : renderReactionFrame(KEY, t))
 		.replace(/^<svg[^>]*>/, "")
 		.replace(/<\/svg>$/, "");
 	// Key art is authored on a 144 canvas; scale it into the filmstrip cell.
@@ -43,7 +43,7 @@ const sheet = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="
 
 const outDir = path.join(ROOT, "dist", "preview");
 mkdirSync(outDir, { recursive: true });
-const out = path.join(outDir, "reaction-animation.png");
+const out = path.join(outDir, `${KEY}-animation.png`);
 writeFileSync(
 	out,
 	new Resvg(sheet, { fitTo: { mode: "width", value: width }, font: { loadSystemFonts: true } })

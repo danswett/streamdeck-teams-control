@@ -4,6 +4,7 @@ import { bridge, type TeamsState } from "../bridge";
 import {
 	renderEmoji,
 	renderGlyph,
+	renderHandFrame,
 	renderReaction,
 	renderReactionFrame,
 	renderSimple,
@@ -65,6 +66,15 @@ export class HandAction extends TeamsAction {
 		// Uses the raised-hand emoji rather than a monochrome glyph, matching
 		// how the reaction keys read.
 		return renderEmoji("hand", usable(state, "hand"));
+	}
+
+	override async onKeyDown(ev: KeyDownEvent): Promise<void> {
+		// Raising a hand reads as an upward motion, so this one lifts straight
+		// up rather than wobbling like the reactions.
+		if (usable(bridge.state, "hand")) {
+			void this.playFrames(ev.action, (t) => renderHandFrame(t));
+		}
+		await super.onKeyDown(ev);
 	}
 }
 
