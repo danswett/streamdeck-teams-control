@@ -3,19 +3,23 @@
 		"Maps Stream Deck actions onto Microsoft Teams meeting controls.",
 		"",
 		"Teams' local third-party API (ws://localhost:8124) was retired on 2026-06-30",
-		"with no replacement, so controls are driven through UI Automation instead.",
-		"AutomationIds below were read directly from the Teams meeting toolbar and are",
-		"locale-independent. The *Pattern fields match the button's accessible name,",
-		"which IS localised - translate those if you run Teams in another language.",
+		"under MC1266901 with no replacement, so controls are driven through UI",
+		"Automation instead.",
 		"",
-		"A button's name describes the action it performs, so it is the inverse of the",
+		"Entries here are MERGED OVER the plugin's built-in defaults, so you only need",
+		"to include the controls you want to change. Deleting this file is safe.",
+		"",
+		"'automationId' values are locale-independent and are the preferred selector.",
+		"'activePattern' / 'inactivePattern' match the button's accessible NAME, which",
+		"IS localised - translate those to use state icons in another language. A",
+		"button's name describes the action it performs, so it is the inverse of the",
 		"current state: 'Unmute mic' means you are currently muted.",
 		"",
-		"Edit this file and restart the plugin to re-map controls after a Teams update.",
-		"Use the Diagnostics panel in any action's property inspector to dump the live",
-		"UI tree into the plugin log."
+		"Captured from Teams 26255.500.5120.7530 on 2026-09-14. After a Teams update,",
+		"use the Diagnostics panel in any action's property inspector to dump the live",
+		"UI tree to the plugin log, then correct the ids below and restart the plugin."
 	],
-	"version": 1,
+	"version": 2,
 	"meetingProbeAutomationId": "microphone-button",
 	"controls": {
 		"mute": {
@@ -42,33 +46,36 @@
 		"people": {
 			"automationId": "roster-button"
 		},
+
 		"hand": {
 			"menu": "reaction-menu-button",
-			"menuItemName": "(raise|lower)\\s+(your\\s+)?hand"
+			"menuItemAutomationId": "raisehands-button"
 		},
 		"react-like": {
 			"menu": "reaction-menu-button",
-			"menuItemName": "^\\s*(like|thumbs\\s*up)\\b"
+			"menuItemAutomationId": "like-button"
 		},
 		"react-love": {
 			"menu": "reaction-menu-button",
-			"menuItemName": "^\\s*(love|heart)\\b"
+			"menuItemAutomationId": "heart-button"
 		},
 		"react-applause": {
 			"menu": "reaction-menu-button",
-			"menuItemName": "^\\s*(applause|applaud|clap)\\b"
+			"menuItemAutomationId": "applause-button"
 		},
 		"react-laugh": {
 			"menu": "reaction-menu-button",
-			"menuItemName": "^\\s*(laugh|haha)\\b"
+			"menuItemAutomationId": "laugh-button"
 		},
 		"react-wow": {
 			"menu": "reaction-menu-button",
-			"menuItemName": "^\\s*(wow|surprised)\\b"
+			"menuItemAutomationId": "surprised-button"
 		},
+
 		"blur": {
 			"menu": "video-button-configure",
-			"menuItemName": "blur|background\\s+effects"
+			"menuItemName": "^\\s*standard\\s+blur\\s*$",
+			"menuItemOffName": "^\\s*no\\s+background\\s+effect\\s*$"
 		}
 	}
 }

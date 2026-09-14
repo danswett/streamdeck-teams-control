@@ -2,7 +2,7 @@ import { action, type KeyDownEvent, type KeyUpEvent } from "@elgato/streamdeck";
 
 import { type TeamsState } from "../bridge";
 import {
-	REACTION_EMOJI,
+	REACTION_KEYS,
 	renderGlyph,
 	renderReaction,
 	renderSimple,
@@ -60,7 +60,7 @@ type ReactionSettings = {
 export class ReactionAction extends TeamsAction<ReactionSettings> {
 	protected override targetFor(settings: ReactionSettings): string {
 		const key = settings.reaction ?? "react-like";
-		return key in REACTION_EMOJI ? key : "react-like";
+		return REACTION_KEYS.includes(key) ? key : "react-like";
 	}
 
 	protected override draw(state: TeamsState, settings: ReactionSettings): string {

@@ -121,14 +121,50 @@ const GLYPHS: Record<Glyph, GlyphDef> = {
 	}
 };
 
-/** Emoji used for meeting reactions; rendered as text so they stay full colour. */
-export const REACTION_EMOJI: Record<string, string> = {
-	"react-like": "\u{1F44D}",
-	"react-love": "\u{2764}\u{FE0F}",
-	"react-applause": "\u{1F44F}",
-	"react-laugh": "\u{1F602}",
-	"react-wow": "\u{1F62E}"
+/** Reaction artwork, drawn as vectors so it never depends on an emoji font. */
+type Palette = { face: string; ink: string; heart: string; hand: string };
+
+const LIVE: Palette = { face: "#FFC83D", ink: "#3A2E00", heart: "#F1707B", hand: "#FFC83D" };
+const DIM: Palette = { face: "#4C4C4C", ink: "#1A1A1A", heart: "#4C4C4C", hand: "#4C4C4C" };
+
+const REACTIONS: Record<string, (p: Palette) => string> = {
+	"react-like": (p) => `
+		<path d="M26 64 h20 a4 4 0 0 1 4 4 v44 a4 4 0 0 1 -4 4 h-20 a6 6 0 0 1 -6 -6
+			v-40 a6 6 0 0 1 6 -6 z" fill="${p.hand}"/>
+		<path d="M50 64 c9 0 15 -7 17 -15 l4 -17 c2 -9 15 -8 15 3 v19 h22 c9 0 15 8 13 16
+			l-8 32 c-2 9 -10 15 -19 15 h-44 z" fill="${p.hand}"/>`,
+
+	"react-love": (p) => `
+		<path d="M72 120 C38 95 20 77 20 56 C20 39 33 26 50 26 C61 26 68 32 72 40
+			C76 32 83 26 94 26 C111 26 124 39 124 56 C124 77 106 95 72 120 Z" fill="${p.heart}"/>`,
+
+	"react-applause": (p) => `
+		<g fill="${p.hand}">
+			<path d="M40 118 c-10 -6 -16 -18 -13 -30 l8 -30 c2 -8 14 -6 13 3 l-3 18 22 -34
+				c5 -8 16 -2 12 7 l-14 26 26 -18 c8 -5 15 5 8 11 z"/>
+			<path d="M104 116 c10 -6 15 -18 12 -29 l-6 -22 c-2 -8 -13 -6 -12 2 l2 13 -16 -24
+				c-5 -8 -15 -2 -11 6 l10 19 -19 -13 c-7 -5 -14 4 -7 10 z" opacity="0.85"/>
+		</g>
+		<g stroke="${p.hand}" stroke-width="6" stroke-linecap="round" opacity="0.7">
+			<path d="M70 30 V16"/><path d="M46 36 L38 24"/><path d="M96 36 L104 24"/>
+		</g>`,
+
+	"react-laugh": (p) => `
+		<circle cx="72" cy="72" r="46" fill="${p.face}"/>
+		<g stroke="${p.ink}" stroke-width="7" fill="none" stroke-linecap="round">
+			<path d="M44 62 q10 -12 20 0"/>
+			<path d="M80 62 q10 -12 20 0"/>
+		</g>
+		<path d="M44 82 a28 28 0 0 0 56 0 z" fill="${p.ink}"/>`,
+
+	"react-wow": (p) => `
+		<circle cx="72" cy="72" r="46" fill="${p.face}"/>
+		<circle cx="55" cy="60" r="7" fill="${p.ink}"/>
+		<circle cx="89" cy="60" r="7" fill="${p.ink}"/>
+		<ellipse cx="72" cy="93" rx="13" ry="17" fill="${p.ink}"/>`
 };
+
+export const REACTION_KEYS = Object.keys(REACTIONS);
 
 export const REACTION_LABEL: Record<string, string> = {
 	"react-like": "Like",
@@ -168,17 +204,10 @@ export function renderGlyph(glyph: Glyph, tone: Tone, struck = false): string {
 	return wrap(inner);
 }
 
-/** Renders a reaction key. Dimmed to a flat glyph when unavailable. */
+/** Renders a reaction key, greyed out when the control is unavailable. */
 export function renderReaction(key: string, available: boolean): string {
-	const emoji = REACTION_EMOJI[key] ?? "\u{1F44D}";
-	if (!available) {
-		return wrap(`
-			<text x="72" y="72" text-anchor="middle" dominant-baseline="central"
-				font-size="74" opacity="0.22" fill="#FFFFFF">${emoji}</text>`);
-	}
-	return wrap(`
-		<text x="72" y="72" text-anchor="middle" dominant-baseline="central"
-			font-size="82">${emoji}</text>`);
+	const draw = REACTIONS[key] ?? REACTIONS["react-like"]!;
+	return wrap(draw(available ? LIVE : DIM));
 }
 
 /**

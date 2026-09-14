@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 
 import { Resvg } from "@resvg/resvg-js";
 
-import { type Glyph, REACTION_EMOJI, renderGlyph } from "../src/icons.ts";
+import { type Glyph, renderGlyph, renderReaction } from "../src/icons.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const IMGS = path.join(ROOT, "com.dswett.teamscontrol.sdPlugin", "imgs");
@@ -43,11 +43,8 @@ for (const [name, glyph] of Object.entries(ACTIONS)) {
 	write(path.join(dir, "key.svg"), renderGlyph(glyph, name === "leave" ? "danger" : "on"));
 }
 
-// The reaction action is emoji-based rather than glyph-based.
+// The reaction action gets a neutral face for its list icon and a "like" key.
 const reactDir = path.join(IMGS, "actions", "react");
-const emojiSvg = (size: number, emoji: string): string =>
-	`<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">` +
-	`<text x="72" y="72" text-anchor="middle" dominant-baseline="central" font-size="${size}">${emoji}</text></svg>`;
 
 // White outline version for the action list, which must stay monochrome.
 write(
@@ -59,7 +56,7 @@ write(
 		<path d="M48 86 Q72 108 96 86" stroke="#FFFFFF" stroke-width="10" fill="none" stroke-linecap="round"/>
 	</svg>`
 );
-write(path.join(reactDir, "key.svg"), emojiSvg(82, REACTION_EMOJI["react-like"]!));
+write(path.join(reactDir, "key.svg"), renderReaction("react-like", true));
 
 // Plugin-level artwork.
 const pluginDir = path.join(IMGS, "plugin");

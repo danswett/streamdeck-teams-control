@@ -240,21 +240,30 @@ public static class Program
 
     private static SelectorConfig LoadConfig(string path)
     {
-        if (File.Exists(path))
+        var config = Defaults.Config();
+        if (!File.Exists(path)) return config;
+
+        try
         {
-            try
-            {
-                var json = File.ReadAllText(path);
-                var cfg = ParseConfig(json);
-                if (cfg is not null && cfg.Controls.Count > 0) return cfg;
-                Console.Error.WriteLine("selectors.json had no controls; using built-in defaults");
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"failed to read {path}: {ex.Message}; using built-in defaults");
-            }
+            // Overlaid onto the defaults rather than replacing them, so a partial
+            // or outdated selectors.json can only change what it names.
+            var overrides = ParseConfig(File.ReadAllText(path));
+            if (overrides is null) return config;
+
+            if (!string.IsNullOrWhiteSpace(overrides.MeetingProbeAutomationId))
+                config.MeetingProbeAutomationId = overrides.MeetingProbeAutomationId;
+
+            foreach (var (key, spec) in overrides.Controls) config.Controls[key] = spec;
+
+            if (overrides.Controls.Count > 0)
+                Console.Error.WriteLine($"applied {overrides.Controls.Count} selector override(s) from {path}");
         }
-        return Defaults.Config();
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"failed to read {path}: {ex.Message}; using built-in defaults");
+        }
+
+        return config;
     }
 
     /// <summary>Hand-rolled so the sidecar stays trim-safe (no reflection-based binding).</summary>
@@ -279,6 +288,7 @@ public static class Program
                 Menu = Str(o, "menu"),
                 MenuItemAutomationId = Str(o, "menuItemAutomationId"),
                 MenuItemName = Str(o, "menuItemName"),
+                MenuItemOffName = Str(o, "menuItemOffName"),
                 ActivePattern = Str(o, "activePattern"),
                 InactivePattern = Str(o, "inactivePattern")
             };

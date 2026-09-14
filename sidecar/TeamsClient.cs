@@ -18,16 +18,25 @@ public sealed class ControlSpec
     public string? Menu { get; set; }
     public string? MenuItemAutomationId { get; set; }
     public string? MenuItemName { get; set; }
+    /// <summary>
+    /// Item to click when the primary menu item is already checked. Background
+    /// effects are a radio group rather than a toggle: clicking "Standard blur"
+    /// again leaves blur on, so turning it off means clicking "No background
+    /// effect" instead.
+    /// </summary>
+    public string? MenuItemOffName { get; set; }
     public string? ActivePattern { get; set; }
     public string? InactivePattern { get; set; }
 
     private Regex? _active;
     private Regex? _inactive;
     private Regex? _menuItem;
+    private Regex? _menuItemOff;
 
     public Regex? ActiveRegex => _active ??= Compile(ActivePattern);
     public Regex? InactiveRegex => _inactive ??= Compile(InactivePattern);
     public Regex? MenuItemRegex => _menuItem ??= Compile(MenuItemName);
+    public Regex? MenuItemOffRegex => _menuItemOff ??= Compile(MenuItemOffName);
 
     private static Regex? Compile(string? p) =>
         string.IsNullOrWhiteSpace(p) ? null : new Regex(p, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
@@ -67,6 +76,20 @@ public sealed class TeamsClient : IDisposable
     private AutomationElement? _meetingWindow;
     private readonly Dictionary<string, AutomationElement> _cache = new();
     private readonly HashSet<IntPtr> _nudged = new();
+
+    /// <summary>
+    /// Any one of these proves a meeting window. While a flyout is open Teams
+    /// drops the whole toolbar from the accessibility tree and exposes only the
+    /// popup, so probing for the mic button alone would look like "meeting
+    /// ended" every time a menu is opened.
+    /// </summary>
+    private static readonly string[] MeetingMarkers =
+    {
+        "microphone-button", "hangup-button", "raisehands-button", "like-button"
+    };
+
+    /// <summary>Last known control states, carried forward across transient tree changes.</summary>
+    private readonly Dictionary<string, bool> _lastStates = new();
 
     public TeamsClient(SelectorConfig config) => _config = config;
 
@@ -134,10 +157,19 @@ public sealed class TeamsClient : IDisposable
         catch { return false; }
     }
 
+    private static bool HasAnyMarker(AutomationElement win)
+    {
+        foreach (var marker in MeetingMarkers)
+        {
+            if (FindById(win, marker) is not null) return true;
+        }
+        return false;
+    }
+
     /// <summary>Locates the Teams window that currently hosts meeting controls.</summary>
     private AutomationElement? ResolveMeetingWindow()
     {
-        if (IsAlive(_meetingWindow) && FindById(_meetingWindow!, _config.MeetingProbeAutomationId) is not null)
+        if (IsAlive(_meetingWindow) && HasAnyMarker(_meetingWindow!))
             return _meetingWindow;
 
         _meetingWindow = null;
@@ -153,7 +185,7 @@ public sealed class TeamsClient : IDisposable
             if (!IsTeams(w)) continue;
             try
             {
-                if (FindById(w, _config.MeetingProbeAutomationId) is not null)
+                if (HasAnyMarker(w))
                 {
                     _meetingWindow = w;
                     return w;
@@ -161,8 +193,14 @@ public sealed class TeamsClient : IDisposable
             }
             catch { /* window died mid-walk */ }
         }
+
+        _lastStates.Clear();
         return null;
     }
+
+    /// <summary>True when the meeting toolbar itself is reachable, i.e. no flyout is covering it.</summary>
+    private bool IsToolbarVisible(AutomationElement win) =>
+        FindById(win, _config.MeetingProbeAutomationId) is not null;
 
     private AutomationElement? ResolveControl(string key, ControlSpec spec)
     {
@@ -205,6 +243,15 @@ public sealed class TeamsClient : IDisposable
 
         snap.WindowTitle = NameOf(win);
 
+        if (!IsToolbarVisible(win))
+        {
+            // A flyout is covering the toolbar. Report the meeting as live with
+            // the last known state rather than blanking every key.
+            foreach (var key in _config.Controls.Keys) snap.Available[key] = true;
+            foreach (var (k, v) in _lastStates) snap.States[k] = v;
+            return snap;
+        }
+
         foreach (var (key, spec) in _config.Controls)
         {
             // Menu-nested controls (reactions, hand, blur) are not readable
@@ -217,11 +264,24 @@ public sealed class TeamsClient : IDisposable
             }
 
             var el = ResolveControl(key, spec);
-            if (el is null) { snap.Available[key] = false; continue; }
+            if (el is null)
+            {
+                snap.Available[key] = false;
+                if (_lastStates.TryGetValue(key, out var carried)) snap.States[key] = carried;
+                continue;
+            }
 
             snap.Available[key] = SafeEnabled(el);
             var st = ReadState(el, spec);
-            if (st.HasValue) snap.States[key] = st.Value;
+            if (st.HasValue)
+            {
+                snap.States[key] = st.Value;
+                _lastStates[key] = st.Value;
+            }
+            else if (_lastStates.TryGetValue(key, out var carried))
+            {
+                snap.States[key] = carried;
+            }
         }
 
         return snap;
@@ -271,16 +331,161 @@ public sealed class TeamsClient : IDisposable
     }
 
     /// <summary>
-    /// Finds an element inside a just-opened flyout. The flyout is a popup that
-    /// may be parented to the desktop rather than the meeting window, so both
-    /// scopes are searched.
+    /// Closes an open Teams flyout without sending any input.
+    ///
+    /// Invoking a flyout item through UI Automation fires the item's handler but
+    /// not the focus/outside-click that normally dismisses the popup, so the
+    /// flyout stays open — and while it is open Teams removes the meeting
+    /// toolbar from the accessibility tree, wedging every later call.
+    ///
+    /// Observed structure, consistent across the React and video-options
+    /// flyouts: item -> ... -> &lt;Window&gt; (the popup) -> &lt;Group&gt; with an
+    /// Invoke pattern. That Group is the dismiss layer; invoking it does what
+    /// clicking away would. Groups *inside* the popup also expose Invoke but do
+    /// nothing, so the popup Window is used as the landmark.
+    /// </summary>
+    private void DismissFlyout(AutomationElement win, AutomationElement? anchor, AutomationElement? host)
+    {
+        if (host is not null) TryCollapse(host);
+        if (WaitForToolbar(win, 300)) return;
+
+        if (anchor is not null)
+        {
+            // Build the ancestor chain once; the tree changes as we invoke.
+            var chain = new List<AutomationElement>();
+            var node = SafeParent(anchor);
+            for (var i = 0; i < 10 && node is not null; i++)
+            {
+                chain.Add(node);
+                node = SafeParent(node);
+            }
+
+            var windowIndex = chain.FindIndex(e =>
+            {
+                try { return e.Properties.ControlType.ValueOrDefault == ControlType.Window; }
+                catch { return false; }
+            });
+
+            // Preferred target first, then every other invoke-able ancestor.
+            var order = new List<int>();
+            if (windowIndex >= 0)
+            {
+                for (var i = windowIndex + 1; i < chain.Count; i++) order.Add(i);
+            }
+            for (var i = 0; i < chain.Count; i++)
+            {
+                if (!order.Contains(i)) order.Add(i);
+            }
+
+            foreach (var i in order)
+            {
+                try
+                {
+                    var invoke = chain[i].Patterns.Invoke.PatternOrDefault;
+                    if (invoke is null) continue;
+                    invoke.Invoke();
+                    if (WaitForToolbar(win, 600)) return;
+                }
+                catch { }
+            }
+        }
+
+        if (!WaitForToolbar(win, 600))
+            Console.Error.WriteLine("warning: could not dismiss Teams flyout; toolbar still hidden");
+    }
+
+    private static AutomationElement? SafeParent(AutomationElement el)
+    {
+        try { return el.Parent; }
+        catch { return null; }
+    }
+
+    private bool WaitForToolbar(AutomationElement win, int timeoutMs)
+    {
+        var deadline = Environment.TickCount64 + timeoutMs;
+        while (true)
+        {
+            if (IsToolbarVisible(win)) return true;
+            if (Environment.TickCount64 >= deadline) return false;
+            Thread.Sleep(60);
+        }
+    }
+
+    /// <summary>
+    /// Clears a flyout that is currently hiding the toolbar. Any control still
+    /// visible must belong to the open popup, so it serves as the anchor for
+    /// the same ancestor-based dismissal used after an invoke.
+    /// </summary>
+    private void RecoverFromOpenFlyout(AutomationElement win)
+    {
+        AutomationElement? anchor = null;
+        try
+        {
+            var candidates = win.FindAllDescendants(cf =>
+                cf.ByControlType(ControlType.Button)
+                  .Or(cf.ByControlType(ControlType.CheckBox))
+                  .Or(cf.ByControlType(ControlType.MenuItem)));
+
+            foreach (var c in candidates)
+            {
+                // Only a control sitting under a popup Window is a useful anchor.
+                if (HasWindowAncestor(c)) { anchor = c; break; }
+            }
+        }
+        catch { }
+
+        if (anchor is null) return;
+        Console.Error.WriteLine("recovering: a Teams flyout was hiding the toolbar");
+        DismissFlyout(win, anchor, null);
+    }
+
+    private static bool HasWindowAncestor(AutomationElement el)
+    {
+        var node = SafeParent(el);
+        for (var i = 0; i < 6 && node is not null; i++)
+        {
+            try
+            {
+                if (node.Properties.ControlType.ValueOrDefault == ControlType.Window) return true;
+            }
+            catch { return false; }
+            node = SafeParent(node);
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Scopes to search for a flyout. Teams renders some popups outside the
+    /// meeting window, but walking the whole desktop is far too slow, so this
+    /// is limited to Teams' own top-level windows with the meeting first.
+    /// </summary>
+    private AutomationElement[] SearchScopes(AutomationElement win)
+    {
+        var scopes = new List<AutomationElement> { win };
+        try
+        {
+            foreach (var w in _automation.GetDesktop().FindAllChildren())
+            {
+                if (!IsTeams(w)) continue;
+                if (Equals(w, win)) continue;
+                scopes.Add(w);
+            }
+        }
+        catch { }
+        return scopes.ToArray();
+    }
+
+    /// <summary>
+    /// Finds an element inside a just-opened flyout, polling until it appears.
     /// </summary>
     private AutomationElement? FindInPopup(AutomationElement win, string? autoId, Regex? nameRx, int timeoutMs)
     {
         var deadline = Environment.TickCount64 + timeoutMs;
-        while (Environment.TickCount64 < deadline)
+        var scopes = SearchScopes(win);
+
+        while (true)
         {
-            foreach (var scope in new[] { win, _automation.GetDesktop() })
+            foreach (var scope in scopes)
             {
                 try
                 {
@@ -295,7 +500,9 @@ public sealed class TeamsClient : IDisposable
                         var all = scope.FindAllDescendants(cf =>
                             cf.ByControlType(ControlType.Button)
                               .Or(cf.ByControlType(ControlType.MenuItem))
-                              .Or(cf.ByControlType(ControlType.ListItem)));
+                              .Or(cf.ByControlType(ControlType.ListItem))
+                              .Or(cf.ByControlType(ControlType.CheckBox))
+                              .Or(cf.ByControlType(ControlType.RadioButton)));
 
                         foreach (var c in all)
                         {
@@ -305,9 +512,10 @@ public sealed class TeamsClient : IDisposable
                 }
                 catch { }
             }
-            Thread.Sleep(40);
+
+            if (Environment.TickCount64 >= deadline) return null;
+            Thread.Sleep(80);
         }
-        return null;
     }
 
     public (bool ok, string? error) Invoke(string target)
@@ -317,6 +525,10 @@ public sealed class TeamsClient : IDisposable
 
         var win = ResolveMeetingWindow();
         if (win is null) return (false, "not in a meeting");
+
+        // A flyout left open by a previous action, or by the user, hides the
+        // toolbar. Clear it first so a key press is never a no-op.
+        if (!IsToolbarVisible(win)) RecoverFromOpenFlyout(win);
 
         // Direct toolbar control.
         if (string.IsNullOrEmpty(spec.Menu))
@@ -332,21 +544,43 @@ public sealed class TeamsClient : IDisposable
         if (host is null) return (false, $"menu '{spec.Menu}' not found");
         if (!TryExpand(host)) return (false, $"could not open menu '{spec.Menu}'");
 
-        var dismissed = false;
+        AutomationElement? item = null;
         try
         {
-            var item = FindInPopup(win, spec.MenuItemAutomationId, spec.MenuItemRegex, 1500);
+            // Background-effect menus are large and populate lazily, so allow
+            // a little longer than a simple reaction flyout.
+            item = FindInPopup(win, spec.MenuItemAutomationId, spec.MenuItemRegex, 2500);
             if (item is null) return (false, $"item for '{target}' not found in menu");
-            if (!TryInvoke(item)) return (false, $"could not invoke item for '{target}'");
 
-            // Choosing an item dismisses the flyout on its own.
-            dismissed = true;
+            // Radio-style menus need the "off" entry to undo the selection.
+            if (spec.MenuItemOffRegex is not null && IsChecked(item) == true)
+            {
+                var offItem = FindInPopup(win, null, spec.MenuItemOffRegex, 800);
+                if (offItem is not null) item = offItem;
+            }
+
+            if (!TryInvoke(item)) return (false, $"could not invoke item for '{target}'");
             return (true, null);
         }
         finally
         {
-            if (!dismissed) TryCollapse(host);
+            // Always required: the flyout does not close by itself when driven
+            // through UI Automation, and leaving it open hides the toolbar.
+            DismissFlyout(win, item, host);
         }
+    }
+
+    /// <summary>Reads a menu item's checked state, where it exposes one.</summary>
+    private static bool? IsChecked(AutomationElement el)
+    {
+        try
+        {
+            var toggle = el.Patterns.Toggle.PatternOrDefault;
+            if (toggle is not null)
+                return toggle.ToggleState.ValueOrDefault == ToggleState.On;
+        }
+        catch { }
+        return null;
     }
 
     /// <summary>
@@ -370,9 +604,10 @@ public sealed class TeamsClient : IDisposable
 
         var scopes = host is null
             ? new[] { win }
-            : new[] { win, _automation.GetDesktop() };
+            : SearchScopes(win);
 
         var seen = new HashSet<string>();
+        AutomationElement? popupAnchor = null;
         foreach (var scope in scopes)
         {
             AutomationElement[] all;
@@ -392,6 +627,7 @@ public sealed class TeamsClient : IDisposable
                     if (string.IsNullOrWhiteSpace(name) && string.IsNullOrWhiteSpace(autoId)) continue;
 
                     if (!seen.Add($"{type}|{autoId}|{name}")) continue;
+                    popupAnchor ??= e;
 
                     results.Add(new Dictionary<string, string>
                     {
@@ -410,7 +646,7 @@ public sealed class TeamsClient : IDisposable
             }
         }
 
-        if (host is not null) TryCollapse(host);
+        if (host is not null) DismissFlyout(win, popupAnchor, host);
         return results;
     }
 
