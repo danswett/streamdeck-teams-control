@@ -1,7 +1,14 @@
 import { action, type KeyDownEvent, type KeyUpEvent } from "@elgato/streamdeck";
 
-import { type TeamsState } from "../bridge";
-import { renderEmoji, renderGlyph, renderReaction, renderSimple, renderToggle } from "../icons";
+import { bridge, type TeamsState } from "../bridge";
+import {
+	renderEmoji,
+	renderGlyph,
+	renderReaction,
+	renderReactionFrame,
+	renderSimple,
+	renderToggle
+} from "../icons";
 import { TeamsAction } from "./base";
 
 /** True when Teams is in a meeting and the control is present and enabled. */
@@ -126,6 +133,15 @@ abstract class ReactionAction extends TeamsAction {
 
 	protected override draw(state: TeamsState): string {
 		return renderReaction(this.reaction, usable(state, this.reaction));
+	}
+
+	override async onKeyDown(ev: KeyDownEvent): Promise<void> {
+		// Started without awaiting so the key pops immediately; sending the
+		// reaction involves opening a Teams flyout and takes noticeably longer.
+		if (usable(bridge.state, this.reaction)) {
+			void this.playFrames(ev.action, (t) => renderReactionFrame(this.reaction, t));
+		}
+		await super.onKeyDown(ev);
 	}
 }
 

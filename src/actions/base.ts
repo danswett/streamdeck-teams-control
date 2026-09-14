@@ -26,11 +26,49 @@ export abstract class TeamsAction<T extends JsonObject = JsonObject> extends Sin
 	/** Last image drawn per key, so unchanged state costs nothing. */
 	#painted = new Map<string, string>();
 
+	/** Keys currently playing an animation; state repaints must not interrupt them. */
+	readonly #animating = new Set<string>();
+
 	/** Sidecar control key this action presses, or undefined if it never presses one. */
 	protected abstract targetFor(settings: T): string | undefined;
 
 	/** Produces the SVG for the current Teams state. */
 	protected abstract draw(state: TeamsState): string;
+
+	/**
+	 * Plays a short animation on a key.
+	 *
+	 * Stream Deck has no animated-image support — `setImage` rejects GIF — so
+	 * frames are pushed individually. Only runs on a press, so the cost is a
+	 * brief burst on one key rather than anything continuous.
+	 */
+	protected async playFrames(
+		action: KeyAction<T>,
+		frame: (progress: number) => string,
+		durationMs = 620,
+		fps = 30
+	): Promise<void> {
+		const id = action.id;
+		if (this.#animating.has(id)) return; // already popping; let it finish
+		this.#animating.add(id);
+
+		const count = Math.max(2, Math.round((durationMs / 1000) * fps));
+		const interval = durationMs / count;
+
+		try {
+			for (let i = 1; i <= count; i++) {
+				await action.setImage(toDataUri(frame(i / count)));
+				await new Promise((resolve) => setTimeout(resolve, interval));
+			}
+		} catch (err) {
+			logger.debug(`animation stopped: ${String(err)}`);
+		} finally {
+			this.#animating.delete(id);
+			// Force the resting image back, bypassing the unchanged-frame cache.
+			this.#painted.delete(id);
+			await this.#paint(action, bridge.state);
+		}
+	}
 
 	override onWillAppear(ev: WillAppearEvent<T>): void {
 		this.#visible++;
@@ -42,6 +80,7 @@ export abstract class TeamsAction<T extends JsonObject = JsonObject> extends Sin
 
 	override onWillDisappear(ev: WillDisappearEvent<T>): void {
 		this.#painted.delete(ev.action.id);
+		this.#animating.delete(ev.action.id);
 		this.#visible = Math.max(0, this.#visible - 1);
 		if (this.#visible === 0 && this.#unsubscribe) {
 			this.#unsubscribe();
@@ -67,6 +106,9 @@ export abstract class TeamsAction<T extends JsonObject = JsonObject> extends Sin
 	}
 
 	async #paint(action: KeyAction<T>, state: TeamsState): Promise<void> {
+		// Never overwrite a frame mid-animation.
+		if (this.#animating.has(action.id)) return;
+
 		const svg = this.draw(state);
 
 		// Stream Deck redraws on every setImage, so skip identical frames.

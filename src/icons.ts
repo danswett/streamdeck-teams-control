@@ -36,7 +36,8 @@ const COLORS: Record<Tone, string> = {
 
 /** Fraction of the key the artwork fills. */
 const CONTROL_FILL = 0.80;
-const REACTION_FILL = 0.84;
+/** Left a little headroom so the press animation can grow without clipping. */
+const REACTION_FILL = 0.78;
 
 export const REACTION_KEYS = Object.keys(REACTION_GLYPHS);
 
@@ -131,6 +132,34 @@ export function renderReaction(key: string, available: boolean): string {
 /** Renders a full-colour emoji used outside the reaction set, such as the hand. */
 export function renderEmoji(key: string, available: boolean): string {
 	return renderEmojiGlyph(EMOJI_GLYPHS[key], available);
+}
+
+/**
+ * One frame of the press animation, mimicking how a reaction pops in Teams.
+ *
+ * `progress` runs 0 to 1. Stream Deck cannot play animated images — `setImage`
+ * rejects GIF — so movement has to be driven frame by frame.
+ */
+export function renderReactionFrame(key: string, progress: number): string {
+	const def = REACTION_GLYPHS[key] ?? EMOJI_GLYPHS[key];
+	if (!def) return wrap("");
+
+	// A single sine arch gives the pop and the settle without easing tables:
+	// it peaks halfway through and returns exactly to rest at the end. The
+	// peak is capped so the artwork stays inside the key instead of clipping.
+	const arch = Math.sin(Math.PI * Math.min(Math.max(progress, 0), 1));
+	const scale = 1 + 0.2 * arch;
+	const lift = -6 * arch;
+	const tilt = 9 * Math.sin(2 * Math.PI * progress);
+
+	const centre = SIZE / 2;
+	const art = `<g transform="${transformFor(def, REACTION_FILL)}">${def.body}</g>`;
+
+	return wrap(
+		`<g transform="translate(${centre} ${(centre + lift).toFixed(2)}) ` +
+			`rotate(${tilt.toFixed(2)}) scale(${scale.toFixed(4)}) ` +
+			`translate(${-centre} ${-centre})">${art}</g>`
+	);
 }
 
 function renderEmojiGlyph(def: GlyphDef | undefined, available: boolean): string {
