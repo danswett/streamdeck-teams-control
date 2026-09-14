@@ -72,6 +72,7 @@ public sealed class TeamsClient : IDisposable
     private static extern bool EnumChildWindows(IntPtr parent, EnumWindowProc cb, IntPtr lParam);
 
     private readonly SelectorConfig _config;
+    private readonly bool _restoreFocus;
     private readonly UIA3Automation _automation = new();
     private AutomationElement? _meetingWindow;
     private readonly Dictionary<string, AutomationElement> _cache = new();
@@ -91,7 +92,11 @@ public sealed class TeamsClient : IDisposable
     /// <summary>Last known control states, carried forward across transient tree changes.</summary>
     private readonly Dictionary<string, bool> _lastStates = new();
 
-    public TeamsClient(SelectorConfig config) => _config = config;
+    public TeamsClient(SelectorConfig config, bool restoreFocus = true)
+    {
+        _config = config;
+        _restoreFocus = restoreFocus;
+    }
 
     public void Dispose() => _automation.Dispose();
 
@@ -523,6 +528,21 @@ public sealed class TeamsClient : IDisposable
         if (!_config.Controls.TryGetValue(target, out var spec))
             return (false, $"unknown target '{target}'");
 
+        // Chromium activates the Teams window when a control is invoked, so the
+        // window that had focus is put back afterwards.
+        var previousFocus = _restoreFocus ? FocusGuard.Capture() : IntPtr.Zero;
+        try
+        {
+            return InvokeCore(target, spec);
+        }
+        finally
+        {
+            if (previousFocus != IntPtr.Zero) FocusGuard.RestoreAfter(previousFocus);
+        }
+    }
+
+    private (bool ok, string? error) InvokeCore(string target, ControlSpec spec)
+    {
         var win = ResolveMeetingWindow();
         if (win is null) return (false, "not in a meeting");
 

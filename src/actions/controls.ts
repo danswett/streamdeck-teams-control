@@ -1,7 +1,7 @@
 import { action, type KeyDownEvent, type KeyUpEvent } from "@elgato/streamdeck";
 
 import { type TeamsState } from "../bridge";
-import { renderGlyph, renderReaction, renderSimple, renderToggle } from "../icons";
+import { renderEmoji, renderGlyph, renderReaction, renderSimple, renderToggle } from "../icons";
 import { TeamsAction } from "./base";
 
 /** True when Teams is in a meeting and the control is present and enabled. */
@@ -16,11 +16,12 @@ export class MuteAction extends TeamsAction {
 	}
 
 	protected override draw(state: TeamsState): string {
-		// `mute` is true when muted, which is the struck-through Fluent glyph.
+		// `mute` is true when muted. The slashed glyph already communicates the
+		// state, so both sides stay white rather than turning red.
 		return renderToggle({
 			onKey: "micOff",
 			offKey: "mic",
-			onTone: "danger",
+			onTone: "on",
 			offTone: "on",
 			active: state.states["mute"],
 			available: usable(state, "mute")
@@ -35,12 +36,12 @@ export class CameraAction extends TeamsAction {
 	}
 
 	protected override draw(state: TeamsState): string {
-		// `camera` is true when the camera is on.
+		// `camera` is true when the camera is on; the off glyph carries the slash.
 		return renderToggle({
 			onKey: "camera",
 			offKey: "cameraOff",
 			onTone: "on",
-			offTone: "danger",
+			offTone: "on",
 			active: state.states["camera"],
 			available: usable(state, "camera")
 		});
@@ -54,9 +55,9 @@ export class HandAction extends TeamsAction {
 	}
 
 	protected override draw(state: TeamsState): string {
-		if (!usable(state, "hand")) return renderGlyph("hand", "unavailable");
-		// A raised hand reads better as a highlight than as a separate glyph.
-		return renderGlyph("hand", state.states["hand"] ? "accent" : "on");
+		// Uses the raised-hand emoji rather than a monochrome glyph, matching
+		// how the reaction keys read.
+		return renderEmoji("hand", usable(state, "hand"));
 	}
 }
 

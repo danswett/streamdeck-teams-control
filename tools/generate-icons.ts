@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 
 import { Resvg } from "@resvg/resvg-js";
 
-import { REACTION_KEYS, renderGlyph, renderReaction } from "../src/icons.ts";
+import { REACTION_KEYS, renderEmoji, renderGlyph, renderReaction } from "../src/icons.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const IMGS = path.join(ROOT, "com.dswett.teamscontrol.sdPlugin", "imgs");
@@ -19,7 +19,6 @@ const IMGS = path.join(ROOT, "com.dswett.teamscontrol.sdPlugin", "imgs");
 const ACTIONS: Record<string, { glyph: string; danger?: boolean }> = {
 	mute: { glyph: "mic" },
 	camera: { glyph: "camera" },
-	hand: { glyph: "hand" },
 	blur: { glyph: "blur" },
 	share: { glyph: "share" },
 	chat: { glyph: "chat" },
@@ -55,6 +54,11 @@ for (const key of REACTION_KEYS) {
 	write(path.join(dir, "icon.svg"), renderReaction(key, true));
 	write(path.join(dir, "key.svg"), renderReaction(key, true));
 }
+
+// Raise hand uses the emoji rather than a monochrome glyph.
+const handDir = path.join(IMGS, "actions", "hand");
+write(path.join(handDir, "icon.svg"), renderEmoji("hand", true));
+write(path.join(handDir, "key.svg"), renderEmoji("hand", true));
 
 // Plugin-level artwork.
 const pluginDir = path.join(IMGS, "plugin");

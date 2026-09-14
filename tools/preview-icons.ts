@@ -13,6 +13,7 @@ import { Resvg } from "@resvg/resvg-js";
 import {
 	REACTION_KEYS,
 	REACTION_LABEL,
+	renderEmoji,
 	renderGlyph,
 	renderReaction,
 	renderSimple,
@@ -73,9 +74,8 @@ const rows: { title: string; cells: Cell[] }[] = [
 	{
 		title: "Hand",
 		cells: [
-			{ label: "lowered", svg: renderGlyph("hand", "on") },
-			{ label: "RAISED", svg: renderGlyph("hand", "accent") },
-			{ label: "no meeting", svg: renderGlyph("hand", "unavailable") }
+			{ label: "available", svg: renderEmoji("hand", true) },
+			{ label: "no meeting", svg: renderEmoji("hand", false) }
 		]
 	},
 	{

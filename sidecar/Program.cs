@@ -26,7 +26,8 @@ public static class Program
         var pollMs = int.TryParse(GetArg(args, "--poll"), out var p) ? Math.Clamp(p, 150, 5000) : 400;
 
         var config = LoadConfig(selectorsPath);
-        var worker = new Thread(() => WorkerLoop(config, pollMs)) { IsBackground = true, Name = "uia" };
+        var restoreFocus = !HasFlag(args, "--no-focus-guard");
+        var worker = new Thread(() => WorkerLoop(config, pollMs, restoreFocus)) { IsBackground = true, Name = "uia" };
         // UIA requires MTA; console Main is already MTA but the worker must be explicit.
         worker.SetApartmentState(ApartmentState.MTA);
         worker.Start();
@@ -69,9 +70,9 @@ public static class Program
         return 0;
     }
 
-    private static void WorkerLoop(SelectorConfig config, int pollMs)
+    private static void WorkerLoop(SelectorConfig config, int pollMs, bool restoreFocus)
     {
-        var client = new TeamsClient(config);
+        var client = new TeamsClient(config, restoreFocus);
         var lastFingerprint = "";
         var nextPoll = 0L;
 
@@ -237,6 +238,9 @@ public static class Program
                 return args[i + 1];
         return null;
     }
+
+    private static bool HasFlag(string[] args, string name) =>
+        args.Any(a => string.Equals(a, name, StringComparison.OrdinalIgnoreCase));
 
     private static SelectorConfig LoadConfig(string path)
     {

@@ -18,20 +18,28 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SYS = path.join(ROOT, "node_modules", "@fluentui", "svg-icons", "icons");
 const EMOJI = path.join(ROOT, "node_modules", "fluentui-emoji", "icons", "flat");
 
-/** Control glyphs. These carry no fill, so they can be recoloured per state. */
+/**
+ * Control glyphs. These carry no fill, so they can be recoloured per state.
+ *
+ * All taken from the same 28px size tier: Fluent draws each tier with its own
+ * stroke weight and level of detail, so mixing tiers makes the keys look
+ * inconsistent next to each other.
+ */
 const CONTROLS: Record<string, string> = {
-	mic: "mic_48_filled",
-	micOff: "mic_off_48_filled",
-	camera: "video_48_filled",
-	cameraOff: "video_off_48_filled",
+	mic: "mic_28_filled",
+	micOff: "mic_off_28_filled",
+	camera: "video_28_filled",
+	cameraOff: "video_off_28_filled",
 	hand: "hand_right_28_filled",
-	blur: "blur_28_filled",
-	share: "share_screen_start_48_filled",
-	shareStop: "share_screen_stop_48_filled",
-	chat: "chat_48_filled",
-	people: "people_48_filled",
-	leave: "call_end_48_filled",
-	emoji: "emoji_48_filled"
+	// Teams calls this "background effects"; the plain blur glyph reads poorly
+	// at key size.
+	blur: "video_background_effect_28_filled",
+	share: "share_screen_start_28_filled",
+	shareStop: "share_screen_stop_28_filled",
+	chat: "chat_28_filled",
+	people: "people_28_filled",
+	leave: "call_end_28_filled",
+	emoji: "emoji_28_filled"
 };
 
 /** Reaction artwork, matching the five reactions Teams offers. */
@@ -41,6 +49,11 @@ const REACTIONS: Record<string, string> = {
 	"react-applause": "clapping-hands-default",
 	"react-laugh": "grinning-squinting-face",
 	"react-wow": "face-with-open-mouth"
+};
+
+/** Emoji used outside the reaction set. */
+const EXTRA_EMOJI: Record<string, string> = {
+	hand: "raised-hand-default"
 };
 
 type Parsed = { viewBox: string; body: string };
@@ -80,7 +93,8 @@ const data = {
 		"  fluentui-emoji ('flat' style)                - reactions, full colour"
 	],
 	controls: emit(CONTROLS, SYS),
-	reactions: emit(REACTIONS, EMOJI)
+	reactions: emit(REACTIONS, EMOJI),
+	emoji: emit(EXTRA_EMOJI, EMOJI)
 };
 
 const target = path.join(ROOT, "src", "glyphs.generated.json");

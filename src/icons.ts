@@ -19,6 +19,7 @@ export type GlyphDef = {
 
 const CONTROL_GLYPHS = glyphs.controls as Record<string, GlyphDef>;
 const REACTION_GLYPHS = glyphs.reactions as Record<string, GlyphDef>;
+const EMOJI_GLYPHS = glyphs.emoji as Record<string, GlyphDef>;
 
 /** Stream Deck key canvas. 144px is the high-DPI size; it scales down cleanly. */
 const SIZE = 144;
@@ -34,7 +35,7 @@ const COLORS: Record<Tone, string> = {
 };
 
 /** Fraction of the key the artwork fills. */
-const CONTROL_FILL = 0.72;
+const CONTROL_FILL = 0.80;
 const REACTION_FILL = 0.84;
 
 export const REACTION_KEYS = Object.keys(REACTION_GLYPHS);
@@ -124,7 +125,15 @@ export function renderSimple(key: string, available: boolean, tone: Tone = "on")
 
 /** Renders a full-colour reaction, dimmed when the control is unavailable. */
 export function renderReaction(key: string, available: boolean): string {
-	const def = REACTION_GLYPHS[key] ?? REACTION_GLYPHS["react-like"];
+	return renderEmojiGlyph(REACTION_GLYPHS[key] ?? REACTION_GLYPHS["react-like"], available);
+}
+
+/** Renders a full-colour emoji used outside the reaction set, such as the hand. */
+export function renderEmoji(key: string, available: boolean): string {
+	return renderEmojiGlyph(EMOJI_GLYPHS[key], available);
+}
+
+function renderEmojiGlyph(def: GlyphDef | undefined, available: boolean): string {
 	if (!def) return wrap("");
 
 	const art = `<g transform="${transformFor(def, REACTION_FILL)}">${def.body}</g>`;
