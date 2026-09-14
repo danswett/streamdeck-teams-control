@@ -75,6 +75,8 @@ public sealed class TeamsClient : IDisposable
     private readonly bool _restoreFocus;
     private readonly UIA3Automation _automation = new();
     private AutomationElement? _meetingWindow;
+    /// <summary>Chromium input target for the meeting window; see InputPoster.</summary>
+    private IntPtr _renderWidget;
     private readonly Dictionary<string, AutomationElement> _cache = new();
     private readonly HashSet<IntPtr> _nudged = new();
 
@@ -175,9 +177,14 @@ public sealed class TeamsClient : IDisposable
     private AutomationElement? ResolveMeetingWindow()
     {
         if (IsAlive(_meetingWindow) && HasAnyMarker(_meetingWindow!))
+        {
+            // The render widget can be recreated while the window lives on.
+            if (_renderWidget == IntPtr.Zero) _renderWidget = FindRenderWidget(_meetingWindow!);
             return _meetingWindow;
+        }
 
         _meetingWindow = null;
+        _renderWidget = IntPtr.Zero;
         _cache.Clear();
         EnableAccessibility();
 
@@ -193,6 +200,7 @@ public sealed class TeamsClient : IDisposable
                 if (HasAnyMarker(w))
                 {
                     _meetingWindow = w;
+                    _renderWidget = FindRenderWidget(w);
                     return w;
                 }
             }
@@ -201,6 +209,16 @@ public sealed class TeamsClient : IDisposable
 
         _lastStates.Clear();
         return null;
+    }
+
+    private static IntPtr FindRenderWidget(AutomationElement window)
+    {
+        try
+        {
+            var hwnd = new IntPtr(window.Properties.NativeWindowHandle.Value.ToInt64());
+            return InputPoster.FindRenderWidget(hwnd);
+        }
+        catch { return IntPtr.Zero; }
     }
 
     /// <summary>True when the meeting toolbar itself is reachable, i.e. no flyout is covering it.</summary>
@@ -292,6 +310,20 @@ public sealed class TeamsClient : IDisposable
         return snap;
     }
 
+    /// <summary>
+    /// Presses a control. A posted click is tried first because UIA's Invoke
+    /// activates the Teams window; Invoke remains the fallback for cases where
+    /// the element has no on-screen bounds, such as a minimised window.
+    /// </summary>
+    private bool Press(AutomationElement el)
+    {
+        if (InputPoster.TryClick(_renderWidget, el)) return true;
+
+        // The fallback activates the Teams window, so it is worth knowing about.
+        Console.Error.WriteLine("posted click unavailable; falling back to UIA Invoke (window will activate)");
+        return TryInvoke(el);
+    }
+
     private static bool TryInvoke(AutomationElement el)
     {
         try
@@ -316,6 +348,16 @@ public sealed class TeamsClient : IDisposable
         catch { }
 
         return false;
+    }
+
+    private bool ExpandMenu(AutomationElement host)
+    {
+        // Same reasoning as Press: posting avoids activating the window, which
+        // also means the flyout opens behind whatever the user is working in.
+        if (InputPoster.TryClick(_renderWidget, host)) return true;
+
+        Console.Error.WriteLine("posted click unavailable for menu; falling back to UIA Expand (window will activate)");
+        return TryExpand(host);
     }
 
     private static bool TryExpand(AutomationElement el)
@@ -349,8 +391,34 @@ public sealed class TeamsClient : IDisposable
     /// clicking away would. Groups *inside* the popup also expose Invoke but do
     /// nothing, so the popup Window is used as the landmark.
     /// </summary>
-    private void DismissFlyout(AutomationElement win, AutomationElement? anchor, AutomationElement? host)
+    private void DismissFlyout(
+        AutomationElement win,
+        AutomationElement? anchor,
+        AutomationElement? host,
+        (int x, int y)? hostPoint = null)
     {
+        // A posted click behaves like a real one, so selecting an item usually
+        // closes the flyout by itself. Give it time to settle before doing
+        // anything: clicking the menu button again while it is already closing
+        // would re-open it, and the next key press would then just close it
+        // instead of acting.
+        if (WaitForToolbar(win, 1500)) return;
+
+        // Clicking the menu button again toggles the flyout shut. Its screen
+        // position was captured before opening, because the toolbar leaves the
+        // accessibility tree while a popup is up.
+        if (hostPoint is { } p && InputPoster.TryClickPoint(_renderWidget, p.x, p.y))
+        {
+            if (WaitForToolbar(win, 900)) return;
+        }
+
+        // Otherwise click an inert spot inside the meeting window, which is what
+        // dismisses a popup normally.
+        if (TryClickAway(win))
+        {
+            if (WaitForToolbar(win, 900)) return;
+        }
+
         if (host is not null) TryCollapse(host);
         if (WaitForToolbar(win, 300)) return;
 
@@ -397,6 +465,44 @@ public sealed class TeamsClient : IDisposable
 
         if (!WaitForToolbar(win, 600))
             Console.Error.WriteLine("warning: could not dismiss Teams flyout; toolbar still hidden");
+    }
+
+    /// <summary>
+    /// Clicks a deliberately inert point near the top of the meeting window,
+    /// which dismisses an open popup the same way clicking away would.
+    /// </summary>
+    private bool TryClickAway(AutomationElement win)
+    {
+        try
+        {
+            var r = win.BoundingRectangle;
+            if (r.Width <= 0 || r.Height <= 0) return false;
+            return InputPoster.TryClickPoint(_renderWidget, r.X + r.Width / 2, r.Y + 80);
+        }
+        catch { return false; }
+    }
+
+    /// <summary>Lists what is currently reachable, for diagnosing a missed menu item.</summary>
+    private string DescribePopup(AutomationElement win)
+    {
+        var parts = new List<string>();
+        try
+        {
+            foreach (var scope in SearchScopes(win))
+            {
+                foreach (var c in scope.FindAllDescendants(cf =>
+                    cf.ByControlType(ControlType.Button).Or(cf.ByControlType(ControlType.CheckBox))))
+                {
+                    var id = c.Properties.AutomationId.ValueOrDefault ?? "";
+                    var name = NameOf(c);
+                    if (id.Length == 0 && name.Length == 0) continue;
+                    parts.Add($"{id}|{name}");
+                    if (parts.Count >= 12) return string.Join(", ", parts) + ", ...";
+                }
+            }
+        }
+        catch { }
+        return string.Join(", ", parts);
     }
 
     private static AutomationElement? SafeParent(AutomationElement el)
@@ -556,13 +662,19 @@ public sealed class TeamsClient : IDisposable
             var el = ResolveControl(target, spec);
             if (el is null) return (false, $"control '{target}' not found");
             if (!SafeEnabled(el)) return (false, $"control '{target}' is disabled");
-            return TryInvoke(el) ? (true, null) : (false, $"could not invoke '{target}'");
+            return Press(el) ? (true, null) : (false, $"could not invoke '{target}'");
         }
 
         // Flyout-nested control: open the menu, click the item, make sure it closed.
         var host = FindById(win, spec.Menu!);
         if (host is null) return (false, $"menu '{spec.Menu}' not found");
-        if (!TryExpand(host)) return (false, $"could not open menu '{spec.Menu}'");
+
+        // Captured before opening: once the flyout is up, Teams removes the
+        // toolbar from the tree and the host can no longer be located.
+        var hostPoint = CentreOf(host);
+
+        if (!ExpandMenu(host)) return (false, $"could not open menu '{spec.Menu}'");
+        var expanded = true;
 
         AutomationElement? item = null;
         try
@@ -570,7 +682,28 @@ public sealed class TeamsClient : IDisposable
             // Background-effect menus are large and populate lazily, so allow
             // a little longer than a simple reaction flyout.
             item = FindInPopup(win, spec.MenuItemAutomationId, spec.MenuItemRegex, 2500);
-            if (item is null) return (false, $"item for '{target}' not found in menu");
+
+            // If the toolbar is still showing, the menu never opened. Teams
+            // swallows exactly one click on the trigger after a previous
+            // selection — including one the user made by hand — so pressing it
+            // again opens it.
+            if (item is null && IsToolbarVisible(win))
+            {
+                Console.Error.WriteLine($"menu '{spec.Menu}' did not open; pressing it again");
+                Thread.Sleep(200);
+                if (ExpandMenu(host))
+                {
+                    item = FindInPopup(win, spec.MenuItemAutomationId, spec.MenuItemRegex, 2000);
+                }
+            }
+
+            if (item is null)
+            {
+                Console.Error.WriteLine(
+                    $"item for '{target}' not found. toolbarVisible={IsToolbarVisible(win)} " +
+                    $"expandedOk={expanded} candidates=[{DescribePopup(win)}]");
+                return (false, $"item for '{target}' not found in menu");
+            }
 
             // Radio-style menus need the "off" entry to undo the selection.
             if (spec.MenuItemOffRegex is not null && IsChecked(item) == true)
@@ -579,15 +712,26 @@ public sealed class TeamsClient : IDisposable
                 if (offItem is not null) item = offItem;
             }
 
-            if (!TryInvoke(item)) return (false, $"could not invoke item for '{target}'");
+            if (!Press(item)) return (false, $"could not invoke item for '{target}'");
             return (true, null);
         }
         finally
         {
-            // Always required: the flyout does not close by itself when driven
-            // through UI Automation, and leaving it open hides the toolbar.
-            DismissFlyout(win, item, host);
+            // Always required: the flyout does not reliably close by itself, and
+            // leaving it open hides the toolbar.
+            DismissFlyout(win, item, host, hostPoint);
         }
+    }
+
+    private static (int x, int y)? CentreOf(AutomationElement el)
+    {
+        try
+        {
+            var r = el.BoundingRectangle;
+            if (r.Width <= 0 || r.Height <= 0) return null;
+            return (r.X + r.Width / 2, r.Y + r.Height / 2);
+        }
+        catch { return null; }
     }
 
     /// <summary>Reads a menu item's checked state, where it exposes one.</summary>

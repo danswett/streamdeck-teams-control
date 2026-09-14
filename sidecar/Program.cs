@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 
@@ -13,12 +14,41 @@ public static class Program
 {
     private sealed record WorkItem(int Id, string Cmd, string? Target, string? Menu);
 
+    [DllImport("user32.dll")]
+    private static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+
+    [DllImport("shcore.dll")]
+    private static extern int SetProcessDpiAwareness(int value);
+
+    /// <summary>
+    /// Controls are clicked by posting to screen coordinates read from UI
+    /// Automation. Without per-monitor DPI awareness Windows would virtualise
+    /// those coordinates and the clicks would land in the wrong place on a
+    /// scaled or multi-monitor setup.
+    /// </summary>
+    private static void MakeDpiAware()
+    {
+        try
+        {
+            // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+            if (SetProcessDpiAwarenessContext(new IntPtr(-4))) return;
+        }
+        catch { }
+
+        try
+        {
+            SetProcessDpiAwareness(2); // PROCESS_PER_MONITOR_DPI_AWARE
+        }
+        catch { }
+    }
+
     private static readonly BlockingCollection<WorkItem> Queue = new(new ConcurrentQueue<WorkItem>());
     private static readonly object WriteLock = new();
     private static volatile bool _running = true;
 
     public static int Main(string[] args)
     {
+        MakeDpiAware();
         Console.OutputEncoding = new UTF8Encoding(false);
 
         var selectorsPath = GetArg(args, "--selectors")

@@ -4,7 +4,8 @@ Control Microsoft Teams meetings from an Elgato Stream Deck — mute, camera,
 raise hand, reactions, background blur, screen share, chat, roster and leave —
 with **live state on every key**.
 
-Teams does not need to be focused, and **no keystrokes are sent**.
+Teams does not need to be focused, it is never pulled to the front, and **no
+keystrokes are sent**.
 
 > **Windows only.** See [Why not macOS?](#why-not-macos).
 
@@ -86,7 +87,7 @@ TeamsBridge.exe ── .NET 10 + FlaUI (UIA3)
 Microsoft Teams (ms-teams.exe, WebView2)
 ```
 
-Three details make this work reliably:
+Four details make this work reliably:
 
 1. **Chromium builds its accessibility tree lazily.** A UIA walk of the Teams
    window returns *zero* elements until a client asks for it. The sidecar sends
@@ -96,9 +97,23 @@ Three details make this work reliably:
 2. **Controls are found by `AutomationId`, not by label.** Teams exposes stable,
    locale-independent ids on its meeting toolbar (`microphone-button`,
    `video-button`, `hangup-button`, `share-button`, `reaction-menu-button`,
-   `chat-button`, `roster-button`, `callingButtons-showMoreBtn`).
+   `chat-button`, `roster-button`, `callingButtons-showMoreBtn`), and inside the
+   React flyout (`raisehands-button`, `like-button`, `heart-button`,
+   `applause-button`, `laugh-button`, `surprised-button`).
 
-3. **State comes from the accessible name, which is the inverse of state.** The
+3. **Controls are pressed by posting mouse messages, not by UIA `Invoke`.** UIA's
+   Invoke works, but Chromium *activates its window* when it runs, so every key
+   press yanked Teams to the front. A `WM_LBUTTONDOWN`/`UP` posted straight to
+   the child `Chrome_RenderWidgetHostHWND` goes into that window's message queue
+   instead of through the window manager: it needs no focus, raises no window and
+   moves no cursor. Measured with 10 ms sampling, the foreground window never
+   changes. UIA `Invoke` remains the fallback for cases with no on-screen bounds,
+   such as a minimised window.
+
+   This is also why the flyouts are no longer disruptive — the popup opens
+   *behind* whatever you are working in, so you never see it.
+
+4. **State comes from the accessible name, which is the inverse of state.** The
    label describes the action the button performs, so `Unmute mic` means you are
    *currently muted*. This part **is** localised — see
    [Other languages](#other-languages).
