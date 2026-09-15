@@ -305,6 +305,11 @@ disagree.
 git tag -a v1.4.0 -m "v1.4.0" && git push origin v1.4.0
 ```
 
+That covers GitHub. **Marketplace is a separate, manual step** — Elgato has no
+public API or CLI for submission, so a new version is uploaded by hand in Maker
+Console and then waits on review. The full procedure is in
+[`marketplace/README.md`](marketplace/README.md#publishing-a-new-version).
+
 Marketplace submission goes through Elgato's
 [Maker Console](https://docs.elgato.com/maker-console/submitting-products/) and
 takes the same `.streamDeckPlugin` file. **No code signing certificate is
