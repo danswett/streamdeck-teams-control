@@ -36,14 +36,22 @@ const MUTED = "#9A9AA2";
 const ACCENT = "#5059C9";
 const FONT = "Segoe UI, Segoe UI Variable, sans-serif";
 
+// Tones must match src/actions/controls.ts exactly, or the listing shows
+// artwork the plugin never renders. Mute and camera stay white in both states
+// because the slashed glyph already carries the meaning.
 const mute = (active: boolean, available = true): string =>
-	renderToggle({ onKey: "micOff", offKey: "mic", onTone: "danger", offTone: "on", active, available });
+	renderToggle({ onKey: "micOff", offKey: "mic", onTone: "on", offTone: "on", active, available });
 
 const camera = (active: boolean, available = true): string =>
-	renderToggle({ onKey: "camera", offKey: "cameraOff", onTone: "on", offTone: "danger", active, available });
+	renderToggle({ onKey: "camera", offKey: "cameraOff", onTone: "on", offTone: "on", active, available });
 
+// Share is the one control that does tint: accent while sharing.
 const share = (active: boolean, available = true): string =>
 	renderToggle({ onKey: "shareStop", offKey: "share", onTone: "accent", offTone: "on", active, available });
+
+// Blur has no reported state - the sidecar returns availability only - so it is
+// always drawn white, exactly as BlurAction does.
+const blur = (available = true): string => renderGlyph("blur", available ? "on" : "unavailable");
 
 /** Strips the wrapper so a key SVG can be nested inside a larger document. */
 function inner(svg: string): string {
@@ -128,7 +136,7 @@ function thumbnail(): string {
 			{ svg: camera(false) },
 			{ svg: renderEmoji("hand", true) },
 			{ svg: renderReaction("react-like", true) },
-			{ svg: renderGlyph("blur", "accent") },
+			{ svg: blur() },
 			{ svg: renderSimple("leave", true, "danger") }
 		],
 		440,
@@ -149,16 +157,18 @@ function galleryState(): string {
 	let body = `<text x="${W / 2}" y="170" fill="${TEXT}" font-family="${FONT}" font-size="60"
 		font-weight="600" text-anchor="middle">Every key mirrors Teams</text>`;
 
+	// Only the three controls that actually report a state belong here; blur
+	// reports availability only, so pairing it would promise something the
+	// plugin cannot show.
 	body += row(
 		[
 			{ svg: mute(false), caption: "unmuted" },
 			{ svg: camera(true), caption: "camera on" },
-			{ svg: share(false), caption: "not sharing" },
-			{ svg: renderGlyph("blur", "on"), caption: "blur off" }
+			{ svg: share(false), caption: "not sharing" }
 		],
 		290,
 		170,
-		60,
+		80,
 		W
 	);
 
@@ -166,12 +176,11 @@ function galleryState(): string {
 		[
 			{ svg: mute(true), caption: "muted" },
 			{ svg: camera(false), caption: "camera off" },
-			{ svg: share(true), caption: "sharing" },
-			{ svg: renderGlyph("blur", "accent"), caption: "blur on" }
+			{ svg: share(true), caption: "sharing" }
 		],
 		580,
 		170,
-		60,
+		80,
 		W
 	);
 
@@ -188,7 +197,7 @@ function galleryActions(): string {
 			{ svg: mute(true), caption: "Mute" },
 			{ svg: camera(false), caption: "Camera" },
 			{ svg: renderEmoji("hand", true), caption: "Raise hand" },
-			{ svg: renderGlyph("blur", "accent"), caption: "Blur" },
+			{ svg: blur(), caption: "Blur" },
 			{ svg: share(false), caption: "Share" },
 			{ svg: renderSimple("chat", true), caption: "Chat" },
 			{ svg: renderSimple("people", true), caption: "People" }
@@ -224,7 +233,7 @@ function galleryIdle(): string {
 			{ svg: camera(true, false) },
 			{ svg: renderEmoji("hand", false) },
 			{ svg: renderReaction("react-like", false) },
-			{ svg: renderGlyph("blur", "unavailable") },
+			{ svg: blur(false) },
 			{ svg: renderSimple("leave", false, "danger") }
 		],
 		380,

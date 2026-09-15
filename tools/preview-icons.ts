@@ -28,7 +28,7 @@ const mute = (active: boolean | undefined, available: boolean): string =>
 	renderToggle({
 		onKey: "micOff",
 		offKey: "mic",
-		onTone: "danger",
+		onTone: "on",
 		offTone: "on",
 		active,
 		available
@@ -39,7 +39,7 @@ const camera = (active: boolean | undefined, available: boolean): string =>
 		onKey: "camera",
 		offKey: "cameraOff",
 		onTone: "on",
-		offTone: "danger",
+		offTone: "on",
 		active,
 		available
 	});
@@ -81,8 +81,9 @@ const rows: { title: string; cells: Cell[] }[] = [
 	{
 		title: "Blur",
 		cells: [
-			{ label: "off", svg: renderGlyph("blur", "on") },
-			{ label: "ON", svg: renderGlyph("blur", "accent") },
+			// The sidecar reports availability for blur but no state, so there is
+			// no "on" colour to preview.
+			{ label: "available", svg: renderGlyph("blur", "on") },
 			{ label: "no meeting", svg: renderGlyph("blur", "unavailable") }
 		]
 	},
