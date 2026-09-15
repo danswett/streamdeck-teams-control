@@ -16,6 +16,12 @@ public static class Program
 
     private const int TrimIntervalMs = 60_000;
 
+    /// <summary>
+    /// How often memory is returned during a meeting. Much rarer than the idle
+    /// path because the collection competes with key presses.
+    /// </summary>
+    private const int MeetingTrimIntervalMs = 300_000;
+
     [DllImport("user32.dll")]
     private static extern bool SetProcessDpiAwarenessContext(IntPtr value);
 
@@ -41,12 +47,20 @@ public static class Program
     ///
     /// Only runs on the idle path, so it never delays a key press.
     /// </summary>
-    private static void ReleaseMemory()
+    private static void ReleaseMemory(bool compacting)
     {
         try
         {
-            GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
-            GC.WaitForPendingFinalizers();
+            if (compacting)
+            {
+                GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+                GC.WaitForPendingFinalizers();
+            }
+            else
+            {
+                GC.Collect(2, GCCollectionMode.Forced, blocking: false, compacting: false);
+            }
+
             SetProcessWorkingSetSizeEx(GetCurrentProcess(), new IntPtr(-1), new IntPtr(-1), 0);
         }
         catch { }
@@ -208,12 +222,22 @@ public static class Program
                 }
 
                 // Give memory back once things have settled, and periodically
-                // thereafter. Skipped while in a meeting so a compacting
-                // collection can never land between a key press and its result.
-                if (!snap.InMeeting && Environment.TickCount64 - lastTrim > TrimIntervalMs)
+                // thereafter.
+                var sinceTrim = Environment.TickCount64 - lastTrim;
+                if (!snap.InMeeting && sinceTrim > TrimIntervalMs)
                 {
                     lastTrim = Environment.TickCount64;
-                    ReleaseMemory();
+                    ReleaseMemory(compacting: true);
+                }
+                else if (snap.InMeeting && sinceTrim > MeetingTrimIntervalMs && Queue.Count == 0)
+                {
+                    // A long meeting would otherwise never reclaim anything: a
+                    // 22-minute soak drifted up 9 MB because the only release
+                    // path was the idle one. Do it far less often here, never
+                    // compacting and never blocking, and only with no work
+                    // queued, so it cannot land between a press and its result.
+                    lastTrim = Environment.TickCount64;
+                    ReleaseMemory(compacting: false);
                 }
             }
             catch (Exception ex)

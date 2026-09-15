@@ -290,6 +290,10 @@ public sealed class TeamsClient : IDisposable
     private long _lastUpgradeCheck;
     private const int UpgradeCheckMs = 5_000;
 
+    /// <summary>When the wider marker scan last ran; see ResolveMeetingWindow.</summary>
+    private long _lastDeepScan;
+    private const int DeepScanIntervalMs = 10_000;
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetWindowTextW(IntPtr hWnd, char[] buffer, int count);
 
@@ -513,6 +517,39 @@ public sealed class TeamsClient : IDisposable
             _renderWidget = FindRenderWidget(fallback);
             if (fallbackHwnd != IntPtr.Zero) _nonMeetingWindows.Remove(fallbackHwnd);
             return fallback;
+        }
+
+        // An open flyout removes the whole toolbar from the tree, leaving only
+        // the flyout's own buttons, so the cheap probe finds nothing. A running
+        // sidecar rides that out on its cached window, but one that *starts*
+        // while a flyout is open has no cache and would report no meeting until
+        // the flyout closed.
+        //
+        // Fall back to the wider marker set, which includes the flyout buttons.
+        // Only when nothing else matched, and not on every poll: a failed search
+        // walks an entire window subtree, and this is the idle path.
+        if (Environment.TickCount64 - _lastDeepScan > DeepScanIntervalMs)
+        {
+            _lastDeepScan = Environment.TickCount64;
+
+            foreach (var w in children)
+            {
+                if (!IsTeams(w)) continue;
+                try
+                {
+                    if (!HasAnyMarker(w)) continue;
+
+                    _meetingWindow = w;
+                    _meetingWindowIsFull = IsFullToolbar(w);
+                    _markersSeenAt = now;
+                    _renderWidget = FindRenderWidget(w);
+
+                    var found = HandleOf(w);
+                    if (found != IntPtr.Zero) _nonMeetingWindows.Remove(found);
+                    return w;
+                }
+                catch { /* window died mid-walk */ }
+            }
         }
 
         // Drop entries for windows that have since closed.
@@ -843,8 +880,18 @@ public sealed class TeamsClient : IDisposable
     }
 
     /// <summary>
-    /// Clicks a deliberately inert point near the top of the meeting window,
-    /// which dismisses an open popup the same way clicking away would.
+    /// Clicks an inert point inside the meeting window to dismiss a popup.
+    ///
+    /// This used to click the horizontal centre, 80px down. In the current Teams
+    /// the meeting toolbar is centred along the top, so that point landed inside
+    /// `reaction-menu-button` and *re-opened* the flyout it was meant to close,
+    /// leaving the toolbar out of the tree and breaking the next action. The
+    /// middle of the window is no better: it is the participant tile, and
+    /// clicking it opens a profile card over the meeting.
+    ///
+    /// So candidates sit in the quiet corners of the content area, and each is
+    /// checked against the controls actually on screen rather than assumed to be
+    /// empty.
     /// </summary>
     private bool TryClickAway(AutomationElement win)
     {
@@ -852,9 +899,61 @@ public sealed class TeamsClient : IDisposable
         {
             var r = win.BoundingRectangle;
             if (r.Width <= 0 || r.Height <= 0) return false;
-            return InputPoster.TryClickPoint(_renderWidget, r.X + r.Width / 2, r.Y + 80);
+
+            // Well inside the content area: a few pixels from the border falls on
+            // the window frame, where a click never reaches the web content and
+            // so dismisses nothing. These avoid the toolbar row along the top and
+            // the participant tile in the middle.
+            int AtX(double f) => r.X + (int)(r.Width * f);
+            int AtY(double f) => r.Y + (int)(r.Height * f);
+
+            var candidates = new (int X, int Y)[]
+            {
+                (AtX(0.12), AtY(0.80)),
+                (AtX(0.88), AtY(0.80)),
+                (AtX(0.12), AtY(0.28)),
+                (AtX(0.88), AtY(0.28)),
+                (AtX(0.50), AtY(0.93))
+            };
+            var occupied = ClickableBounds(win);
+
+            foreach (var (x, y) in candidates)
+            {
+                if (occupied.Any(b => b.Contains(x, y))) continue;
+                if (InputPoster.TryClickPoint(_renderWidget, x, y)) return true;
+            }
+
+            return false;
         }
         catch { return false; }
+    }
+
+    /// <summary>Bounds of everything currently clickable in the window.</summary>
+    private static List<System.Drawing.Rectangle> ClickableBounds(AutomationElement win)
+    {
+        var bounds = new List<System.Drawing.Rectangle>();
+        try
+        {
+            var found = win.FindAllDescendants(cf =>
+                cf.ByControlType(ControlType.Button)
+                    .Or(cf.ByControlType(ControlType.MenuItem))
+                    .Or(cf.ByControlType(ControlType.ListItem))
+                    .Or(cf.ByControlType(ControlType.CheckBox))
+                    .Or(cf.ByControlType(ControlType.RadioButton)));
+
+            foreach (var e in found)
+            {
+                try
+                {
+                    var r = e.BoundingRectangle;
+                    if (r.Width > 0 && r.Height > 0) bounds.Add(r);
+                }
+                catch { }
+            }
+        }
+        catch { }
+
+        return bounds;
     }
 
     /// <summary>Lists what is currently reachable, for diagnosing a missed menu item.</summary>

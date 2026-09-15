@@ -344,6 +344,16 @@ Two Teams behaviours are handled explicitly rather than left to chance:
   session, say — `microphone-button` is present but disabled. Mute then reports
   as unavailable and its key dims, instead of appearing to work and doing
   nothing.
+- **Dismissing a flyout needs care about where you click.** The meeting toolbar
+  is centred along the *top* of the window and the participant tile fills the
+  middle, so the two most obvious "empty" spots are the two worst: one re-opens
+  the reaction flyout and the other opens a profile card over the meeting. The
+  dismissal click is placed in the quiet corners of the content area and checked
+  against the controls actually on screen first.
+- **A flyout hides the whole toolbar.** A running sidecar rides that out using
+  its cached window, but one that *starts* while a flyout is open has no cache,
+  so it also looks for the flyout's own buttons before concluding there is no
+  meeting.
 
 If Teams breaks something, please
 [open an issue](https://github.com/danswett/streamdeck-teams-control/issues)
