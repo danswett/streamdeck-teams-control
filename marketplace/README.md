@@ -90,7 +90,35 @@ Free.
 
 ## Release notes
 
-Use the notes from the matching GitHub release:
+For the **first** Marketplace version, use the notes below rather than the
+GitHub release notes — those describe changes against a previous build, which a
+new Marketplace user has never seen.
+
+```
+First release.
+
+Control Microsoft Teams meetings from your Stream Deck, with every key showing the live state of the call.
+
+Thirteen actions: mute, camera, raise hand, five reactions (like, love, applause, laugh, wow), background blur, screen share, chat, people, and leave.
+
+LIVE STATE
+Keys mirror Teams rather than guessing. A muted microphone shows the muted icon before you press anything, and a change you make in Teams itself reaches the keys in about a third of a second. Every key dims when no meeting is running, so there is nothing to press by mistake, and lights up the moment a call starts.
+
+STAYS OUT OF YOUR WAY
+Teams never needs to be in focus and is never pulled to the front, so you can mute, react or raise your hand without losing your place in whatever you are working in. No keystrokes are sent, so nothing leaks into the window you are actually typing in, and no global hotkeys are reserved.
+
+Reactions and raise hand animate when pressed, the way they do in Teams.
+
+REQUIREMENTS
+Windows 10 or later, Stream Deck 7.1 or later, and the Microsoft Teams desktop app. Windows only; macOS is not supported.
+
+Not affiliated with or endorsed by Microsoft.
+```
+
+1,170 characters, within the 1,500 limit.
+
+For **subsequent** versions, use the notes from the matching GitHub release,
+which describe what changed:
 https://github.com/danswett/streamdeck-teams-control/releases
 
 ---
