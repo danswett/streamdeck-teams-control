@@ -77,7 +77,7 @@ const markSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512
 writePng(path.join(pluginDir, "marketplace.png"), markSvg, 256);
 writePng(path.join(pluginDir, "marketplace@2x.png"), markSvg, 512);
 
-// Not referenced by the manifest: Maker Console asks for a 288px app icon.
-writePng(path.join(ROOT, "dist", "marketplace", "app-icon-288.png"), markSvg, 288);
+// The 288px Marketplace app icon is produced by tools/generate-marketplace.ts,
+// alongside the thumbnail and gallery images it has to sit beside.
 
 console.log("Done.");

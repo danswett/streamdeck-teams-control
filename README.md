@@ -312,6 +312,12 @@ required** — Elgato applies its own DRM to uploaded plugins — so the unsigne
 binary is not a blocker, though Windows SmartScreen may still warn on a
 sideloaded build.
 
+Everything else the submission needs — app icon, thumbnail, three gallery
+images, the listing copy and a pre-flight checklist — lives in
+[`marketplace/`](marketplace/README.md). Regenerate the images with
+`npm run marketplace`; they are rendered from the same glyph set the keys use,
+so the listing cannot drift from what ships.
+
 ---
 
 ## Stability
