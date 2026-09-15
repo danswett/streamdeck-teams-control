@@ -39,7 +39,36 @@ public sealed class ControlSpec
     public Regex? MenuItemOffRegex => _menuItemOff ??= Compile(MenuItemOffName);
 
     private static Regex? Compile(string? p) =>
-        string.IsNullOrWhiteSpace(p) ? null : new Regex(p, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        string.IsNullOrWhiteSpace(p) ? null : new Regex(p, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, MatchTimeout);
+
+    /// <summary>
+    /// These patterns come from selectors.json, which users are invited to edit
+    /// to localise the state labels. A pattern that backtracks catastrophically
+    /// would otherwise wedge the UIA worker thread with no error at all, so
+    /// matching is bounded and a timeout is treated as "did not match".
+    /// </summary>
+    public static readonly TimeSpan MatchTimeout = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>
+    /// Compiles every pattern so a bad one is reported when the file is read,
+    /// rather than thrown lazily on each state read forever after.
+    /// </summary>
+    public string? Validate()
+    {
+        foreach (var (label, pattern) in new[]
+                 {
+                     ("activePattern", ActivePattern),
+                     ("inactivePattern", InactivePattern),
+                     ("menuItemName", MenuItemName),
+                     ("menuItemOffName", MenuItemOffName)
+                 })
+        {
+            if (string.IsNullOrWhiteSpace(pattern)) continue;
+            try { _ = new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, MatchTimeout); }
+            catch (ArgumentException ex) { return $"{label}: {ex.Message}"; }
+        }
+        return null;
+    }
 }
 
 public sealed class SelectorConfig
@@ -568,9 +597,25 @@ public sealed class TeamsClient : IDisposable
         var name = NameOf(el);
         if (name.Length == 0) return null;
 
-        if (spec.ActiveRegex?.IsMatch(name) == true) return true;
-        if (spec.InactiveRegex?.IsMatch(name) == true) return false;
+        if (SafeMatch(spec.ActiveRegex, name)) return true;
+        if (SafeMatch(spec.InactiveRegex, name)) return false;
         return null;
+    }
+
+    /// <summary>
+    /// A user-supplied pattern that backtracks badly hits its match timeout; a
+    /// key that fails to report state is a far better outcome than a worker
+    /// thread stuck on one regex.
+    /// </summary>
+    private static bool SafeMatch(Regex? rx, string value)
+    {
+        if (rx is null) return false;
+        try { return rx.IsMatch(value); }
+        catch (RegexMatchTimeoutException)
+        {
+            Console.Error.WriteLine($"selector pattern timed out against '{value}'; treating as no match");
+            return false;
+        }
     }
 
     public MeetingSnapshot GetSnapshot()

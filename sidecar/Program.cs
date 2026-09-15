@@ -358,10 +358,24 @@ public static class Program
             if (!string.IsNullOrWhiteSpace(overrides.MeetingProbeAutomationId))
                 config.MeetingProbeAutomationId = overrides.MeetingProbeAutomationId;
 
-            foreach (var (key, spec) in overrides.Controls) config.Controls[key] = spec;
+            var applied = 0;
+            foreach (var (key, spec) in overrides.Controls)
+            {
+                // A pattern is only compiled when a state is read, so an invalid
+                // one would otherwise surface as an error on every poll, long
+                // after the edit that caused it. Reject it here and keep the
+                // working default instead.
+                if (spec.Validate() is { } problem)
+                {
+                    Console.Error.WriteLine($"ignoring override '{key}' from {path} - {problem}");
+                    continue;
+                }
+                config.Controls[key] = spec;
+                applied++;
+            }
 
-            if (overrides.Controls.Count > 0)
-                Console.Error.WriteLine($"applied {overrides.Controls.Count} selector override(s) from {path}");
+            if (applied > 0)
+                Console.Error.WriteLine($"applied {applied} selector override(s) from {path}");
         }
         catch (Exception ex)
         {
