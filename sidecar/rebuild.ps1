@@ -15,7 +15,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $stage = Join-Path $env:TEMP "tb-stage"
-$dest = Join-Path $Root "com.dswett.teamscontrol.sdPlugin\bin\sidecar"
+$dest = Join-Path $Root "com.bad-duck.teamscontrol.sdPlugin\bin\sidecar"
 
 Push-Location $Root
 try {
@@ -44,7 +44,7 @@ try {
     Copy-Item (Join-Path $stage "TeamsBridge.exe") $live -Force
 
     Write-Host "Restarting plugin..." -ForegroundColor Cyan
-    npx streamdeck restart com.dswett.teamscontrol | Out-Null
+    npx streamdeck restart com.bad-duck.teamscontrol | Out-Null
 
     # `streamdeck restart` does not reliably recycle the plugin process, so the
     # sidecar is terminated directly; the plugin's supervisor respawns it from

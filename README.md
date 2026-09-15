@@ -181,7 +181,7 @@ git clone https://github.com/danswett/streamdeck-teams-control.git
 cd streamdeck-teams-control
 npm install
 npm run build          # builds the sidecar, then the plugin bundle
-npx streamdeck link com.dswett.teamscontrol.sdPlugin
+npx streamdeck link com.bad-duck.teamscontrol.sdPlugin
 ```
 
 Then **restart the Stream Deck app** — it only discovers newly added plugins at
@@ -233,7 +233,7 @@ the suite is in two halves.
 Note that `test-state-latency-external.ps1` defaults to toggling mute; pass
 `-Target camera` when audio is unavailable, such as in a remote session.
 
-Logs: `com.dswett.teamscontrol.sdPlugin/logs/com.dswett.teamscontrol.0.log`
+Logs: `com.bad-duck.teamscontrol.sdPlugin/logs/com.bad-duck.teamscontrol.0.log`
 
 > **Manifest changes need a full Stream Deck app restart.** `streamdeck restart`
 > recycles the plugin *process*, but Stream Deck caches `manifest.json` and only
@@ -287,7 +287,7 @@ If `dotnet restore` cannot reach nuget.org, pass your mirror explicitly:
 ```powershell
 dotnet restore sidecar/TeamsBridge.csproj --source <your-nuget-mirror>
 dotnet publish sidecar/TeamsBridge.csproj -c Release --no-restore `
-  -o com.dswett.teamscontrol.sdPlugin/bin/sidecar
+  -o com.bad-duck.teamscontrol.sdPlugin/bin/sidecar
 ```
 
 The committed `NuGet.config` deliberately points at nuget.org so a clean
@@ -301,7 +301,7 @@ release. The workflow refuses to publish when the tag and the manifest version
 disagree.
 
 ```bash
-# bump "Version" in com.dswett.teamscontrol.sdPlugin/manifest.json first
+# bump "Version" in com.bad-duck.teamscontrol.sdPlugin/manifest.json first
 git tag -a v1.4.0 -m "v1.4.0" && git push origin v1.4.0
 ```
 
@@ -333,7 +333,7 @@ API contract**. A Teams redesign can move or rename controls.
 That risk is contained rather than hidden:
 
 - All selectors live in
-  [`selectors.json`](com.dswett.teamscontrol.sdPlugin/selectors.json) beside the
+  [`selectors.json`](com.bad-duck.teamscontrol.sdPlugin/selectors.json) beside the
   manifest. Edit it and restart the plugin — no rebuild needed. Patterns are
   compiled when the file is read, so a mistake is named and skipped at startup
   and the working default is kept, rather than failing on every state read

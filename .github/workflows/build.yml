@@ -43,14 +43,14 @@ jobs:
         run: npm run build:plugin
 
       - name: Validate manifest
-        run: npx streamdeck validate com.dswett.teamscontrol.sdPlugin --no-update-check
+        run: npx streamdeck validate com.bad-duck.teamscontrol.sdPlugin --no-update-check
 
       - name: Package
-        run: npx streamdeck pack com.dswett.teamscontrol.sdPlugin --output dist --force --no-update-check
+        run: npx streamdeck pack com.bad-duck.teamscontrol.sdPlugin --output dist --force --no-update-check
 
       - name: Upload plugin
         uses: actions/upload-artifact@v7
         with:
-          name: com.dswett.teamscontrol.streamDeckPlugin
+          name: com.bad-duck.teamscontrol.streamDeckPlugin
           path: dist/*.streamDeckPlugin
           if-no-files-found: error

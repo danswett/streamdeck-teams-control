@@ -10,7 +10,7 @@
     so they end where they started.
 #>
 param(
-    [string]$Exe = "C:\Users\dswett\repos\streamdeck-teams-control\com.dswett.teamscontrol.sdPlugin\bin\sidecar\TeamsBridge.exe",
+    [string]$Exe = "C:\Users\dswett\repos\streamdeck-teams-control\com.bad-duck.teamscontrol.sdPlugin\bin\sidecar\TeamsBridge.exe",
     [string]$OutFile = "$env:TEMP\teams-live-test.jsonl"
 )
 

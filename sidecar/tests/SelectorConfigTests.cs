@@ -157,7 +157,7 @@ public class SelectorConfigTests : IDisposable
         // Guards against shipping a selectors.json that the sidecar would reject
         // at runtime - the file is data, so nothing else would catch it.
         var repo = FindRepoRoot();
-        var shipped = Path.Combine(repo, "com.dswett.teamscontrol.sdPlugin", "selectors.json");
+        var shipped = Path.Combine(repo, "com.bad-duck.teamscontrol.sdPlugin", "selectors.json");
         Assert.True(File.Exists(shipped), $"expected {shipped}");
 
         var parsed = Program.ParseConfig(File.ReadAllText(shipped));

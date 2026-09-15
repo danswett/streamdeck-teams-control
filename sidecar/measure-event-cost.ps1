@@ -8,7 +8,7 @@
 #>
 param(
     [string]$Exe = "$env:TEMP\tb-dbg\TeamsBridge.exe",
-    [string]$Selectors = "C:\Users\dswett\repos\streamdeck-teams-control\com.dswett.teamscontrol.sdPlugin\selectors.json",
+    [string]$Selectors = "C:\Users\dswett\repos\streamdeck-teams-control\com.bad-duck.teamscontrol.sdPlugin\selectors.json",
     [int]$Seconds = 45
 )
 

@@ -13,7 +13,7 @@ import { Resvg } from "@resvg/resvg-js";
 import { REACTION_KEYS, renderEmoji, renderGlyph, renderReaction } from "../src/icons.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const IMGS = path.join(ROOT, "com.dswett.teamscontrol.sdPlugin", "imgs");
+const IMGS = path.join(ROOT, "com.bad-duck.teamscontrol.sdPlugin", "imgs");
 
 /** action folder -> glyph used for its list icon and default key image. */
 const ACTIONS: Record<string, { glyph: string; danger?: boolean }> = {

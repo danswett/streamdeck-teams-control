@@ -20,7 +20,7 @@ shows the artwork that actually ships.
 | `gallery-2-actions.png` | Gallery 2 of 3 | 1920 × 960 PNG |
 | `gallery-3-no-meeting.png` | Gallery 3 of 3 | 1920 × 960 PNG |
 
-Product file: `dist/com.dswett.teamscontrol.streamDeckPlugin`, built by
+Product file: `dist/com.bad-duck.teamscontrol.streamDeckPlugin`, built by
 `npm run pack` and attached to every GitHub release by the release workflow.
 
 ---
@@ -58,6 +58,24 @@ complete sentences rather than breaking mid-clause.
 `teams`, `microsoft teams`, `meetings`, `mute`, `camera`, `video call`,
 `conferencing`, `work from home`, `productivity`, `windows`
 
+## Identity
+
+These must agree, because the `Author` field is shown in both Stream Deck and
+Marketplace, and Elgato's guidelines ask for the organization name.
+
+| Where | Value |
+|---|---|
+| Maker organization | Bad Duck Software |
+| Marketplace handle | `@badduck` |
+| Manifest `Author` | `Bad Duck Software` |
+| Plugin UUID | `com.bad-duck.teamscontrol` |
+| Support email (Maker Console) | support@bad-duck.com |
+
+The UUID is reverse-DNS on the organization's own domain. **It cannot be changed
+once the plugin is published** — Elgato's guidelines list changing a UUID after
+publishing as something not to do — so it was settled before the first
+submission rather than after.
+
 ## Additional links
 
 | Label | URL |
@@ -88,7 +106,7 @@ the tag against the manifest version, and attaches the package to the GitHub
 release.
 
 ```bash
-# 1. bump "Version" in com.dswett.teamscontrol.sdPlugin/manifest.json
+# 1. bump "Version" in com.bad-duck.teamscontrol.sdPlugin/manifest.json
 #    Stream Deck wants four parts, for example 1.5.0.0
 # 2. commit it
 git tag -a v1.5.0 -m "v1.5.0" && git push origin v1.5.0
@@ -125,8 +143,8 @@ to maker@elgato.com.
 
 ## Before submitting
 
-- [ ] A Maker Console account exists and the organization name matches the
-      manifest `Author` field.
+- [x] A Maker Console account exists and the organization name matches the
+      manifest `Author` field — Bad Duck Software, set in 1.5.0.
 - [ ] Decide on the trademark question below.
 - [ ] `npm run test` passes and CI is green on the commit being shipped.
 - [ ] The `.streamDeckPlugin` uploaded is the one the release workflow built.

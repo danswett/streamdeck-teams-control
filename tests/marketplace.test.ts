@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
  * https://docs.elgato.com/guidelines/stream-deck/plugins/
  */
 
-const PLUGIN_DIR = path.resolve(__dirname, "..", "com.dswett.teamscontrol.sdPlugin");
+const PLUGIN_DIR = path.resolve(__dirname, "..", "com.bad-duck.teamscontrol.sdPlugin");
 const manifest = JSON.parse(readFileSync(path.join(PLUGIN_DIR, "manifest.json"), "utf8")) as {
 	UUID: string;
 	Name: string;

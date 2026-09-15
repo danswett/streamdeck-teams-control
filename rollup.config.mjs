@@ -7,7 +7,7 @@ import path from "node:path";
 import url from "node:url";
 
 const isWatching = !!process.env.ROLLUP_WATCH;
-const sdPlugin = "com.dswett.teamscontrol.sdPlugin";
+const sdPlugin = "com.bad-duck.teamscontrol.sdPlugin";
 
 /**
  * @type {import('rollup').RollupOptions}

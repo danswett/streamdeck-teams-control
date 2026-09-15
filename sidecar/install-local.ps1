@@ -11,7 +11,7 @@
 #>
 param(
     [string]$Root = "C:\Users\dswett\repos\streamdeck-teams-control",
-    [string]$Uuid = "com.dswett.teamscontrol"
+    [string]$Uuid = "com.bad-duck.teamscontrol"
 )
 
 $ErrorActionPreference = 'Stop'

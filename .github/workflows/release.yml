@@ -38,8 +38,8 @@ jobs:
       - name: Build and package
         run: |
           npm run build
-          npx streamdeck validate com.dswett.teamscontrol.sdPlugin --no-update-check
-          npx streamdeck pack com.dswett.teamscontrol.sdPlugin --output dist --force --no-update-check
+          npx streamdeck validate com.bad-duck.teamscontrol.sdPlugin --no-update-check
+          npx streamdeck pack com.bad-duck.teamscontrol.sdPlugin --output dist --force --no-update-check
 
       - name: Check the tag matches the manifest version
         shell: pwsh
@@ -47,7 +47,7 @@ jobs:
           # A tag that disagrees with the manifest would ship a build the
           # release notes do not describe.
           $tag = "${{ inputs.tag || github.ref_name }}" -replace '^v', ''
-          $manifest = (Get-Content com.dswett.teamscontrol.sdPlugin/manifest.json -Raw | ConvertFrom-Json).Version
+          $manifest = (Get-Content com.bad-duck.teamscontrol.sdPlugin/manifest.json -Raw | ConvertFrom-Json).Version
           Write-Host "tag=$tag manifest=$manifest"
           if (-not $manifest.StartsWith($tag)) {
             throw "tag $tag does not match manifest version $manifest"

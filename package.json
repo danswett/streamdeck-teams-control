@@ -8,14 +8,14 @@
 	"scripts": {
 		"build": "npm run build:sidecar && npm run build:plugin",
 		"build:plugin": "rollup -c",
-		"build:sidecar": "dotnet publish sidecar/TeamsBridge.csproj -c Release -o com.dswett.teamscontrol.sdPlugin/bin/sidecar --nologo",
-		"watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.dswett.teamscontrol\"",
-		"validate": "streamdeck validate com.dswett.teamscontrol.sdPlugin",
+		"build:sidecar": "dotnet publish sidecar/TeamsBridge.csproj -c Release -o com.bad-duck.teamscontrol.sdPlugin/bin/sidecar --nologo",
+		"watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.bad-duck.teamscontrol\"",
+		"validate": "streamdeck validate com.bad-duck.teamscontrol.sdPlugin",
 		"test": "npm run test:ts && npm run test:cs",
 		"test:ts": "vitest run",
 		"test:cs": "dotnet test sidecar/tests/TeamsBridge.Tests.csproj --nologo",
 		"marketplace": "node tools/generate-marketplace.ts",
-		"pack": "npm run build && streamdeck pack com.dswett.teamscontrol.sdPlugin --output dist --no-update-check"
+		"pack": "npm run build && streamdeck pack com.bad-duck.teamscontrol.sdPlugin --output dist --no-update-check"
 	},
 	"devDependencies": {
 		"@elgato/cli": "^1.9.0",

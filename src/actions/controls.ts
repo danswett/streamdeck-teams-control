@@ -17,7 +17,7 @@ function usable(state: TeamsState, key: string): boolean {
 	return state.inMeeting && (state.available[key] ?? false);
 }
 
-@action({ UUID: "com.dswett.teamscontrol.mute" })
+@action({ UUID: "com.bad-duck.teamscontrol.mute" })
 export class MuteAction extends TeamsAction {
 	protected override targetFor(): string {
 		return "mute";
@@ -37,7 +37,7 @@ export class MuteAction extends TeamsAction {
 	}
 }
 
-@action({ UUID: "com.dswett.teamscontrol.camera" })
+@action({ UUID: "com.bad-duck.teamscontrol.camera" })
 export class CameraAction extends TeamsAction {
 	protected override targetFor(): string {
 		return "camera";
@@ -56,7 +56,7 @@ export class CameraAction extends TeamsAction {
 	}
 }
 
-@action({ UUID: "com.dswett.teamscontrol.hand" })
+@action({ UUID: "com.bad-duck.teamscontrol.hand" })
 export class HandAction extends TeamsAction {
 	protected override targetFor(): string {
 		return "hand";
@@ -78,7 +78,7 @@ export class HandAction extends TeamsAction {
 	}
 }
 
-@action({ UUID: "com.dswett.teamscontrol.blur" })
+@action({ UUID: "com.bad-duck.teamscontrol.blur" })
 export class BlurAction extends TeamsAction {
 	protected override targetFor(): string {
 		return "blur";
@@ -90,7 +90,7 @@ export class BlurAction extends TeamsAction {
 	}
 }
 
-@action({ UUID: "com.dswett.teamscontrol.share" })
+@action({ UUID: "com.bad-duck.teamscontrol.share" })
 export class ShareAction extends TeamsAction {
 	protected override targetFor(): string {
 		return "share";
@@ -108,7 +108,7 @@ export class ShareAction extends TeamsAction {
 	}
 }
 
-@action({ UUID: "com.dswett.teamscontrol.chat" })
+@action({ UUID: "com.bad-duck.teamscontrol.chat" })
 export class ChatAction extends TeamsAction {
 	protected override targetFor(): string {
 		return "chat";
@@ -119,7 +119,7 @@ export class ChatAction extends TeamsAction {
 	}
 }
 
-@action({ UUID: "com.dswett.teamscontrol.people" })
+@action({ UUID: "com.bad-duck.teamscontrol.people" })
 export class PeopleAction extends TeamsAction {
 	protected override targetFor(): string {
 		return "people";
@@ -155,27 +155,27 @@ abstract class ReactionAction extends TeamsAction {
 	}
 }
 
-@action({ UUID: "com.dswett.teamscontrol.react-like" })
+@action({ UUID: "com.bad-duck.teamscontrol.react-like" })
 export class ReactLikeAction extends ReactionAction {
 	protected override readonly reaction = "react-like";
 }
 
-@action({ UUID: "com.dswett.teamscontrol.react-love" })
+@action({ UUID: "com.bad-duck.teamscontrol.react-love" })
 export class ReactLoveAction extends ReactionAction {
 	protected override readonly reaction = "react-love";
 }
 
-@action({ UUID: "com.dswett.teamscontrol.react-applause" })
+@action({ UUID: "com.bad-duck.teamscontrol.react-applause" })
 export class ReactApplauseAction extends ReactionAction {
 	protected override readonly reaction = "react-applause";
 }
 
-@action({ UUID: "com.dswett.teamscontrol.react-laugh" })
+@action({ UUID: "com.bad-duck.teamscontrol.react-laugh" })
 export class ReactLaughAction extends ReactionAction {
 	protected override readonly reaction = "react-laugh";
 }
 
-@action({ UUID: "com.dswett.teamscontrol.react-wow" })
+@action({ UUID: "com.bad-duck.teamscontrol.react-wow" })
 export class ReactWowAction extends ReactionAction {
 	protected override readonly reaction = "react-wow";
 }
@@ -186,7 +186,7 @@ type LeaveSettings = {
 
 const HOLD_MS = 700;
 
-@action({ UUID: "com.dswett.teamscontrol.leave" })
+@action({ UUID: "com.bad-duck.teamscontrol.leave" })
 export class LeaveAction extends TeamsAction<LeaveSettings> {
 	#holds = new Map<string, NodeJS.Timeout>();
 

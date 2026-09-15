@@ -19,8 +19,8 @@
     Without it, the harness waits for a meeting to start.
 #>
 param(
-    [string]$Exe = "$env:APPDATA\Elgato\StreamDeck\Plugins\com.dswett.teamscontrol.sdPlugin\bin\sidecar\TeamsBridge.exe",
-    [string]$Selectors = "$env:APPDATA\Elgato\StreamDeck\Plugins\com.dswett.teamscontrol.sdPlugin\selectors.json",
+    [string]$Exe = "$env:APPDATA\Elgato\StreamDeck\Plugins\com.bad-duck.teamscontrol.sdPlugin\bin\sidecar\TeamsBridge.exe",
+    [string]$Selectors = "$env:APPDATA\Elgato\StreamDeck\Plugins\com.bad-duck.teamscontrol.sdPlugin\selectors.json",
     [int]$TimeoutSeconds = 300,
     [switch]$ColdStart
 )
