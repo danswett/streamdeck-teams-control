@@ -1,5 +1,6 @@
 param(
     [string]$Exe = "C:\Users\dswett\repos\streamdeck-teams-control\sidecar\bin\Release\net10.0-windows\win-x64\TeamsBridge.exe",
+    [string]$Selectors = "",
     [string[]]$Commands = @('{"id":1,"cmd":"ping"}', '{"id":2,"cmd":"status"}'),
     [int]$ReadSeconds = 8
 )
@@ -8,6 +9,7 @@ if (-not (Test-Path $Exe)) { throw "sidecar not found: $Exe" }
 
 $psi = [System.Diagnostics.ProcessStartInfo]::new()
 $psi.FileName = $Exe
+if ($Selectors) { $psi.Arguments = "--selectors `"$Selectors`"" }
 $psi.RedirectStandardInput = $true
 $psi.RedirectStandardOutput = $true
 $psi.RedirectStandardError = $true

@@ -14,11 +14,43 @@ public static class Program
 {
     private sealed record WorkItem(int Id, string Cmd, string? Target, string? Menu);
 
+    private const int TrimIntervalMs = 60_000;
+
     [DllImport("user32.dll")]
     private static extern bool SetProcessDpiAwarenessContext(IntPtr value);
 
     [DllImport("shcore.dll")]
     private static extern int SetProcessDpiAwareness(int value);
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetCurrentProcess();
+
+    [DllImport("kernel32.dll")]
+    private static extern bool SetProcessWorkingSetSizeEx(
+        IntPtr process, IntPtr minSize, IntPtr maxSize, uint flags);
+
+    /// <summary>
+    /// Releases memory back to the OS.
+    ///
+    /// Two separate problems. The GC keeps heap segments committed after a busy
+    /// period — a long-running sidecar sat around 18 MB above a freshly started
+    /// one — so an aggressive compacting collection is needed to decommit them.
+    /// Separately, start-up touches a lot of pages that are never read again
+    /// (JIT, the single-file bundle, the first UIA tree walk), and trimming the
+    /// working set releases those; they fault back in if ever needed.
+    ///
+    /// Only runs on the idle path, so it never delays a key press.
+    /// </summary>
+    private static void ReleaseMemory()
+    {
+        try
+        {
+            GC.Collect(2, GCCollectionMode.Aggressive, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+            SetProcessWorkingSetSizeEx(GetCurrentProcess(), new IntPtr(-1), new IntPtr(-1), 0);
+        }
+        catch { }
+    }
 
     /// <summary>
     /// Controls are clicked by posting to screen coordinates read from UI
@@ -57,7 +89,9 @@ public static class Program
 
         var config = LoadConfig(selectorsPath);
         var restoreFocus = !HasFlag(args, "--no-focus-guard");
-        var worker = new Thread(() => WorkerLoop(config, pollMs, restoreFocus)) { IsBackground = true, Name = "uia" };
+        var debugEvents = HasFlag(args, "--debug-events");
+        var useEvents = !HasFlag(args, "--no-events");
+        var worker = new Thread(() => WorkerLoop(config, pollMs, restoreFocus, debugEvents, useEvents)) { IsBackground = true, Name = "uia" };
         // UIA requires MTA; console Main is already MTA but the worker must be explicit.
         worker.SetApartmentState(ApartmentState.MTA);
         worker.Start();
@@ -100,18 +134,30 @@ public static class Program
         return 0;
     }
 
-    private static void WorkerLoop(SelectorConfig config, int pollMs, bool restoreFocus)
+    private static void WorkerLoop(SelectorConfig config, int pollMs, bool restoreFocus, bool debugEvents, bool useEvents)
     {
-        var client = new TeamsClient(config, restoreFocus);
+        using var client = new TeamsClient(config, restoreFocus) { DebugEvents = debugEvents, UseEvents = useEvents };
         var lastFingerprint = "";
         var nextPoll = 0L;
 
-        // Finding a meeting means rescanning the desktop, which is far dearer
-        // than reading a cached control. Outside a meeting there is nothing to
-        // report, so back off; a second or two before the keys light up when a
-        // call starts is not worth burning a core for.
-        var idlePollMs = Math.Max(pollMs, 2500);
-        var currentPollMs = pollMs;
+        // UI Automation events carry the interesting changes - a window opening,
+        // and a control's label changing, which is the mute/camera state signal.
+        // Polling stays only as a backstop for anything an event misses, so both
+        // intervals can be far longer than they were when polling was the only
+        // source of truth.
+        var meetingPollMs = Math.Max(pollMs, 3000);
+        var idlePollMs = Math.Max(pollMs, 15_000);
+        var currentPollMs = meetingPollMs;
+
+        // First trim shortly after start-up, then periodically.
+        var lastTrim = Environment.TickCount64 - TrimIntervalMs + 5_000;
+
+        // Fired from UIA threads; only ever enqueues, never touches UIA.
+        client.Hint += () =>
+        {
+            try { if (!Queue.IsAddingCompleted) Queue.Add(new WorkItem(0, "poll", null, null)); }
+            catch { }
+        };
 
         while (_running)
         {
@@ -136,7 +182,7 @@ public static class Program
                         w.WriteString("error", ex.Message);
                     });
                 }
-                // An action just changed Teams' state; report it promptly.
+                // Something just happened; report it promptly.
                 nextPoll = Environment.TickCount64 + 120;
                 continue;
             }
@@ -146,7 +192,7 @@ public static class Program
             try
             {
                 var snap = client.GetSnapshot();
-                currentPollMs = snap.InMeeting ? pollMs : idlePollMs;
+                currentPollMs = snap.InMeeting ? meetingPollMs : idlePollMs;
                 nextPoll = Environment.TickCount64 + currentPollMs;
 
                 var fp = snap.Fingerprint();
@@ -154,6 +200,15 @@ public static class Program
                 {
                     lastFingerprint = fp;
                     EmitState(snap);
+                }
+
+                // Give memory back once things have settled, and periodically
+                // thereafter. Skipped while in a meeting so a compacting
+                // collection can never land between a key press and its result.
+                if (!snap.InMeeting && Environment.TickCount64 - lastTrim > TrimIntervalMs)
+                {
+                    lastTrim = Environment.TickCount64;
+                    ReleaseMemory();
                 }
             }
             catch (Exception ex)
@@ -169,12 +224,18 @@ public static class Program
         switch (item.Cmd)
         {
             case "ping":
-                Emit(w =>
+            case "poll":
+                // "poll" is an internal nudge from a UIA event; the loop takes a
+                // snapshot straight after handling any work item.
+                if (item.Cmd == "ping")
                 {
-                    w.WriteString("type", "result");
-                    w.WriteNumber("id", item.Id);
-                    w.WriteBoolean("ok", true);
-                });
+                    Emit(w =>
+                    {
+                        w.WriteString("type", "result");
+                        w.WriteNumber("id", item.Id);
+                        w.WriteBoolean("ok", true);
+                    });
+                }
                 break;
 
             case "status":
@@ -320,6 +381,8 @@ public static class Program
         if (root.TryGetProperty("version", out var v) && v.TryGetInt32(out var vi)) cfg.Version = vi;
         if (root.TryGetProperty("meetingProbeAutomationId", out var mp) && mp.GetString() is { } mps)
             cfg.MeetingProbeAutomationId = mps;
+        if (root.TryGetProperty("fullToolbarAutomationId", out var ft) && ft.GetString() is { } fts)
+            cfg.FullToolbarAutomationId = fts;
 
         if (!root.TryGetProperty("controls", out var controls)) return cfg;
 

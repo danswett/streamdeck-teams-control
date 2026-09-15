@@ -46,6 +46,15 @@ public sealed class SelectorConfig
 {
     public int Version { get; set; } = 1;
     public string MeetingProbeAutomationId { get; set; } = "microphone-button";
+
+    /// <summary>
+    /// Marks the full meeting toolbar. Teams can show more than one meeting
+    /// window at once — a compact view alongside the main window — and the
+    /// compact one carries a reduced toolbar with no chat or video options. Both
+    /// match the probe, so this picks the richer window when there is a choice.
+    /// </summary>
+    public string FullToolbarAutomationId { get; set; } = "callingButtons-showMoreBtn";
+
     public Dictionary<string, ControlSpec> Controls { get; set; } = new();
 }
 
@@ -77,6 +86,35 @@ public sealed class TeamsClient : IDisposable
     private AutomationElement? _meetingWindow;
     /// <summary>Chromium input target for the meeting window; see InputPoster.</summary>
     private IntPtr _renderWidget;
+
+    /// <summary>
+    /// Raised from UI Automation threads when something worth re-reading has
+    /// happened. Handlers must do no UIA work themselves — this only nudges the
+    /// worker to take a snapshot sooner than its next scheduled poll.
+    /// </summary>
+    public event Action? Hint;
+
+    /// <summary>When set, every event that fires is logged to stderr.</summary>
+    public bool DebugEvents { get; set; }
+
+    /// <summary>
+    /// When false, no UI Automation subscriptions are made and polling carries
+    /// everything. Used to attribute cost between the two approaches.
+    /// </summary>
+    public bool UseEvents { get; set; } = true;
+
+    private int _hintCount;
+
+    private void RaiseHint(string source)
+    {
+        var n = Interlocked.Increment(ref _hintCount);
+        if (DebugEvents) Console.Error.WriteLine($"uia-event #{n} from {source}");
+        Hint?.Invoke();
+    }
+
+    /// <summary>Property-change subscriptions on the currently cached controls.</summary>
+    private readonly List<(AutomationElement Element, FlaUI.Core.EventHandlers.PropertyChangedEventHandlerBase Handler)> _propertyHandlers = new();
+    private bool _windowWatchRegistered;
     private readonly Dictionary<string, AutomationElement> _cache = new();
     private readonly HashSet<IntPtr> _nudged = new();
 
@@ -111,7 +149,66 @@ public sealed class TeamsClient : IDisposable
         _restoreFocus = restoreFocus;
     }
 
-    public void Dispose() => _automation.Dispose();
+    /// <summary>
+    /// Subscribes to UI Automation events so polling can be reduced to a
+    /// backstop.
+    ///
+    /// Verified to fire for Teams: a window opening anywhere on the desktop, and
+    /// the accessible name of a meeting control changing — which is exactly the
+    /// mute/camera state signal. Polling is kept, slowly, because a missed event
+    /// would otherwise strand the keys.
+    /// </summary>
+    private void EnsureWindowWatch()
+    {
+        if (!UseEvents || _windowWatchRegistered) return;
+        try
+        {
+            _automation.GetDesktop().RegisterAutomationEvent(
+                _automation.EventLibrary.Window.WindowOpenedEvent,
+                TreeScope.Subtree,
+                (_, _) => RaiseHint("window-opened"));
+            _windowWatchRegistered = true;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"window event subscription failed, polling only: {ex.Message}");
+        }
+    }
+
+    /// <summary>Watches the controls whose label carries state.</summary>
+    private void WatchControl(AutomationElement el)
+    {
+        if (!UseEvents) return;
+        try
+        {
+            var handler = el.RegisterPropertyChangedEvent(
+                TreeScope.Element,
+                (_, _, _) => RaiseHint("name-changed"),
+                _automation.PropertyLibrary.Element.Name);
+            _propertyHandlers.Add((el, handler));
+        }
+        catch
+        {
+            // Not fatal: the backstop poll still picks the change up.
+        }
+    }
+
+    private void ClearControlWatches()
+    {
+        foreach (var (el, handler) in _propertyHandlers)
+        {
+            try { el.FrameworkAutomationElement.UnregisterPropertyChangedEventHandler(handler); }
+            catch { }
+        }
+        _propertyHandlers.Clear();
+    }
+
+    public void Dispose()
+    {
+        ClearControlWatches();
+        try { _automation.UnregisterAllEvents(); } catch { }
+        _automation.Dispose();
+    }
 
     /// <summary>
     /// Chromium (and therefore the Teams WebView) only builds its accessibility
@@ -144,23 +241,79 @@ public sealed class TeamsClient : IDisposable
     private static long _pidCacheStamp;
 
     /// <summary>
-    /// Teams windows already checked and found not to host a meeting, with when
-    /// they were checked.
+    /// Teams windows already checked and found not to host a meeting: handle
+    /// mapped to when it was checked and the window title at that time.
     ///
     /// A failed search is the expensive case — UIA walks the entire subtree
     /// before giving up, and the chat window holds hundreds of elements. Joining
     /// a meeting opens a new window, so an unseen window is always searched at
-    /// once; known-negative ones are only re-checked occasionally in case a
-    /// meeting starts inside an existing window.
+    /// once. A cached window is re-searched when its title changes, which is
+    /// what happens if a meeting does start inside an existing window, and
+    /// otherwise only occasionally as a backstop.
     /// </summary>
-    private readonly Dictionary<IntPtr, long> _nonMeetingWindows = new();
+    private readonly Dictionary<IntPtr, (long CheckedAt, string Title)> _nonMeetingWindows = new();
 
     private const int NonMeetingRecheckMs = 8_000;
+
+    /// <summary>True when the cached window carries the full meeting toolbar.</summary>
+    private bool _meetingWindowIsFull;
+
+    private long _lastUpgradeCheck;
+    private const int UpgradeCheckMs = 5_000;
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowTextW(IntPtr hWnd, char[] buffer, int count);
+
+    /// <summary>Win32 window title. Far cheaper than reading the UIA Name property.</summary>
+    private static string TitleOf(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return "";
+        var buffer = new char[512];
+        var length = GetWindowTextW(hwnd, buffer, buffer.Length);
+        return length > 0 ? new string(buffer, 0, length) : "";
+    }
 
     private static IntPtr HandleOf(AutomationElement el)
     {
         try { return new IntPtr(el.Properties.NativeWindowHandle.Value.ToInt64()); }
         catch { return IntPtr.Zero; }
+    }
+
+    private bool IsFullToolbar(AutomationElement win)
+    {
+        if (string.IsNullOrEmpty(_config.FullToolbarAutomationId)) return true;
+        return FindById(win, _config.FullToolbarAutomationId) is not null;
+    }
+
+    /// <summary>
+    /// Swaps a compact meeting window for the full one if it is available.
+    /// Returns true when the cached window changed.
+    /// </summary>
+    private bool TryUpgradeMeetingWindow()
+    {
+        AutomationElement[] children;
+        try { children = _automation.GetDesktop().FindAllChildren(); }
+        catch { return false; }
+
+        foreach (var w in children)
+        {
+            if (!IsTeams(w)) continue;
+            if (Equals(w, _meetingWindow)) continue;
+            try
+            {
+                if (FindById(w, _config.MeetingProbeAutomationId) is null) continue;
+                if (!IsFullToolbar(w)) continue;
+
+                _meetingWindow = w;
+                _meetingWindowIsFull = true;
+                _cache.Clear();
+                ClearControlWatches();
+                _renderWidget = FindRenderWidget(w);
+                return true;
+            }
+            catch { }
+        }
+        return false;
     }
 
     private static bool IsTeams(AutomationElement el)
@@ -238,6 +391,16 @@ public sealed class TeamsClient : IDisposable
                 _markersSeenAt = Environment.TickCount64;
                 // The render widget can be recreated while the window lives on.
                 if (_renderWidget == IntPtr.Zero) _renderWidget = FindRenderWidget(_meetingWindow!);
+
+                // Sitting on a compact window costs real controls, so look for a
+                // fuller one now and then rather than staying stuck on it.
+                if (!_meetingWindowIsFull
+                    && Environment.TickCount64 - _lastUpgradeCheck > UpgradeCheckMs)
+                {
+                    _lastUpgradeCheck = Environment.TickCount64;
+                    if (TryUpgradeMeetingWindow()) return _meetingWindow;
+                }
+
                 return _meetingWindow;
             }
 
@@ -249,21 +412,33 @@ public sealed class TeamsClient : IDisposable
         _meetingWindow = null;
         _renderWidget = IntPtr.Zero;
         _cache.Clear();
+        ClearControlWatches();
         EnableAccessibility();
+        EnsureWindowWatch();
 
         AutomationElement[] children;
         try { children = _automation.GetDesktop().FindAllChildren(); }
         catch { return null; }
 
         var now = Environment.TickCount64;
+        AutomationElement? fallback = null;
+        IntPtr fallbackHwnd = IntPtr.Zero;
+
         foreach (var w in children)
         {
             if (!IsTeams(w)) continue;
 
             var hwnd = HandleOf(w);
+            var title = TitleOf(hwnd);
+
+            // Skip only if this window was already ruled out, recently, and has
+            // not been renamed since. A window that starts hosting a meeting
+            // changes its title, so that case is picked up immediately rather
+            // than waiting for the backstop re-check.
             if (hwnd != IntPtr.Zero
-                && _nonMeetingWindows.TryGetValue(hwnd, out var checkedAt)
-                && now - checkedAt < NonMeetingRecheckMs)
+                && _nonMeetingWindows.TryGetValue(hwnd, out var seen)
+                && now - seen.CheckedAt < NonMeetingRecheckMs
+                && string.Equals(seen.Title, title, StringComparison.Ordinal))
             {
                 continue;
             }
@@ -275,18 +450,40 @@ public sealed class TeamsClient : IDisposable
                 // the chat window alone holds hundreds of elements - on every
                 // poll while no meeting was running. The wider marker set is
                 // still used on the cached window, where flyouts matter.
-                if (FindById(w, _config.MeetingProbeAutomationId) is not null)
+                if (FindById(w, _config.MeetingProbeAutomationId) is null)
                 {
-                    _meetingWindow = w;
-                    _markersSeenAt = now;
-                    _renderWidget = FindRenderWidget(w);
-                    if (hwnd != IntPtr.Zero) _nonMeetingWindows.Remove(hwnd);
-                    return w;
+                    if (hwnd != IntPtr.Zero) _nonMeetingWindows[hwnd] = (now, title);
+                    continue;
                 }
 
-                if (hwnd != IntPtr.Zero) _nonMeetingWindows[hwnd] = now;
+                // Teams can show a compact meeting window alongside the full
+                // one; both match the probe but the compact toolbar is missing
+                // chat and the video options, so prefer the full window.
+                if (!IsFullToolbar(w))
+                {
+                    fallback ??= w;
+                    fallbackHwnd = hwnd;
+                    continue;
+                }
+
+                _meetingWindow = w;
+                _meetingWindowIsFull = true;
+                _markersSeenAt = now;
+                _renderWidget = FindRenderWidget(w);
+                if (hwnd != IntPtr.Zero) _nonMeetingWindows.Remove(hwnd);
+                return w;
             }
             catch { /* window died mid-walk */ }
+        }
+
+        if (fallback is not null)
+        {
+            _meetingWindow = fallback;
+            _meetingWindowIsFull = false;
+            _markersSeenAt = now;
+            _renderWidget = FindRenderWidget(fallback);
+            if (fallbackHwnd != IntPtr.Zero) _nonMeetingWindows.Remove(fallbackHwnd);
+            return fallback;
         }
 
         // Drop entries for windows that have since closed.
@@ -337,7 +534,12 @@ public sealed class TeamsClient : IDisposable
         if (win is null) return null;
 
         var el = FindById(win, spec.AutomationId);
-        if (el is not null) _cache[key] = el;
+        if (el is null) return null;
+
+        _cache[key] = el;
+
+        // The label is the state, so a change to it is the event worth waking for.
+        if (spec.ActiveRegex is not null || spec.InactiveRegex is not null) WatchControl(el);
         return el;
     }
 

@@ -124,8 +124,34 @@ Four details make this work reliably:
    *currently muted*. This part **is** localised — see
    [Other languages](#other-languages).
 
-Elements are cached and only re-resolved when they go stale, so the ~400 ms
-state poll costs a single property read per control.
+Elements are cached and only re-resolved when they go stale, so a state read
+costs a single property read per control.
+
+5. **State is event-driven, not polled.** The sidecar subscribes to UI
+   Automation property-change events on the controls it has resolved, so a
+   change made in Teams itself reaches the keys without waiting for a tick.
+   Measured with a second sidecar performing the toggle so the watcher could
+   not shortcut it, an externally-made change showed up in **315 ms on average,
+   364 ms worst** over four rounds. The subscriptions themselves are close to
+   free: an A/B measurement put them at 0.00% CPU and +0.2 MB.
+
+   Polling remains as a backstop — every 3 s in a meeting, 15 s otherwise —
+   because UIA events are not guaranteed to be delivered. It catches anything
+   the event path drops rather than driving the normal case.
+
+### Cost
+
+Measured on the machine this was built on, in a live meeting:
+
+| | CPU | working set | private |
+|---|---|---|---|
+| sidecar | 1.0% | 22.5 MB | 10.5 MB |
+| plugin (node) | 0.0% | 59.6 MB | 28.9 MB |
+
+Idle, outside a meeting, the sidecar settles at ~0.6% CPU and ~12 MB. Discovery
+is the expensive operation — a *failed* UIA search walks an entire window
+subtree — so windows that turn out not to be meetings are cached as such, and a
+meeting window is re-resolved only when the cached element goes stale.
 
 ---
 
@@ -199,6 +225,20 @@ It speaks line-delimited JSON:
 <<< {"type":"discover","elements":[…]}
 ```
 
+Useful flags when debugging:
+
+| flag | effect |
+|---|---|
+| `--selectors <path>` | load a selector override file |
+| `--poll <ms>` | override the in-meeting backstop interval |
+| `--no-events` | disable UIA subscriptions and poll only |
+| `--debug-events` | log every subscription and event to stderr |
+| `--no-focus-guard` | skip restoring foreground after the UIA fallback |
+
+`--no-events` is the quickest way to tell whether a state problem is in the
+event path or underneath it: if behaviour is identical with it, events were
+not the cause.
+
 ### Building behind a corporate proxy
 
 If `dotnet restore` cannot reach nuget.org, pass your mirror explicitly:
@@ -225,6 +265,18 @@ That risk is contained rather than hidden:
   live Teams UI tree (ids, names, accelerators, ARIA properties, toggle states)
   into the plugin log, so a broken selector can be re-derived in about a minute.
 - Invocation falls back `Invoke` → `Toggle` → `LegacyIAccessible.DoDefaultAction`.
+
+Two Teams behaviours are handled explicitly rather than left to chance:
+
+- **A meeting can own two windows.** Alongside the full meeting window Teams may
+  keep a *Meeting compact view*, which carries a reduced toolbar with no chat or
+  background-effects controls. Both look like meetings, so the sidecar prefers
+  whichever window exposes the full toolbar and only settles for the compact one
+  if that is all there is — otherwise chat and blur would appear unavailable.
+- **A control can exist but be disabled.** With no audio device — a remote
+  session, say — `microphone-button` is present but disabled. Mute then reports
+  as unavailable and its key dims, instead of appearing to work and doing
+  nothing.
 
 If Teams breaks something, please
 [open an issue](https://github.com/danswett/streamdeck-teams-control/issues)
