@@ -50,7 +50,7 @@ public class ControlSpecTests
     public void Patterns_are_case_insensitive_because_Teams_capitalisation_varies()
     {
         var spec = new ControlSpec { AutomationId = "x", ActivePattern = "^unmute" };
-        Assert.True(spec.ActiveRegex!.IsMatch("Unmute mic"));
+        Assert.Matches(spec.ActiveRegex!, "Unmute mic");
     }
 
     [Fact]
