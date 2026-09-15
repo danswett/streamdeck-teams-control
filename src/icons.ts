@@ -163,7 +163,10 @@ export function renderEmojiFrame(
 
 	const centre = SIZE / 2;
 	const art = `<g transform="${transformFor(def, REACTION_FILL)}">${def.body}</g>`;
-	const rotate = angle === 0 ? "" : ` rotate(${angle.toFixed(2)})`;
+	// sin(2π) is not exactly zero, so compare against the printed precision
+	// rather than 0 - otherwise the final frame carries a rotate(-0.00) and no
+	// longer matches the resting icon, costing an extra setImage on every press.
+	const rotate = Math.abs(angle) < 0.005 ? "" : ` rotate(${angle.toFixed(2)})`;
 
 	return wrap(
 		`<g transform="translate(${centre} ${(centre + offsetY).toFixed(2)})${rotate} ` +

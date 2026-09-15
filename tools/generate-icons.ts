@@ -48,16 +48,18 @@ for (const [name, { glyph, danger }] of Object.entries(ACTIONS)) {
 	write(path.join(dir, "key.svg"), renderGlyph(glyph, danger ? "danger" : "on"));
 }
 
-// Each reaction is its own action, so each gets its own artwork.
+// Each reaction is its own action, so each gets its own artwork. The key shows
+// the full-colour emoji, but the action list must be monochrome white on
+// transparent per Elgato's guidelines, so it uses a Fluent system glyph.
 for (const key of REACTION_KEYS) {
 	const dir = path.join(IMGS, "actions", key);
-	write(path.join(dir, "icon.svg"), renderReaction(key, true));
+	write(path.join(dir, "icon.svg"), renderGlyph(`list-${key}`, "on"));
 	write(path.join(dir, "key.svg"), renderReaction(key, true));
 }
 
-// Raise hand uses the emoji rather than a monochrome glyph.
+// Raise hand follows the same split: emoji on the key, monochrome in the list.
 const handDir = path.join(IMGS, "actions", "hand");
-write(path.join(handDir, "icon.svg"), renderEmoji("hand", true));
+write(path.join(handDir, "icon.svg"), renderGlyph("hand", "on"));
 write(path.join(handDir, "key.svg"), renderEmoji("hand", true));
 
 // Plugin-level artwork.

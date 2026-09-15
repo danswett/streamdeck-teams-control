@@ -3,6 +3,7 @@ import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { EMPTY_STATE, splitLines, type TeamsState, toState } from "./protocol";
 
 const logger = streamDeck.logger.createScope("Bridge");
 
@@ -10,22 +11,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SIDECAR = path.join(HERE, "sidecar", "TeamsBridge.exe");
 const SELECTORS = path.resolve(HERE, "..", "selectors.json");
 
-/** Snapshot of Teams as reported by the sidecar. */
-export type TeamsState = {
-	teamsRunning: boolean;
-	inMeeting: boolean;
-	windowTitle: string;
-	states: Record<string, boolean>;
-	available: Record<string, boolean>;
-};
-
-export const EMPTY_STATE: TeamsState = {
-	teamsRunning: false,
-	inMeeting: false,
-	windowTitle: "",
-	states: {},
-	available: {}
-};
+export { EMPTY_STATE, type TeamsState };
 
 type Pending = {
 	resolve: (v: { ok: boolean; error?: string }) => void;
@@ -120,13 +106,9 @@ class Bridge {
 	}
 
 	#onData(chunk: string): void {
-		this.#buffer += chunk;
-		let idx: number;
-		while ((idx = this.#buffer.indexOf("\n")) >= 0) {
-			const line = this.#buffer.slice(0, idx).trim();
-			this.#buffer = this.#buffer.slice(idx + 1);
-			if (line) this.#onMessage(line);
-		}
+		const { lines, rest } = splitLines(this.#buffer + chunk);
+		this.#buffer = rest;
+		for (const line of lines) this.#onMessage(line);
 	}
 
 	#onMessage(line: string): void {
@@ -146,13 +128,7 @@ class Bridge {
 				break;
 
 			case "state":
-				this.#publish({
-					teamsRunning: Boolean(msg["teamsRunning"]),
-					inMeeting: Boolean(msg["inMeeting"]),
-					windowTitle: String(msg["windowTitle"] ?? ""),
-					states: (msg["states"] as Record<string, boolean>) ?? {},
-					available: (msg["available"] as Record<string, boolean>) ?? {}
-				});
+				this.#publish(toState(msg));
 				break;
 
 			case "result": {

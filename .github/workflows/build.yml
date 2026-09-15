@@ -1,0 +1,56 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # The sidecar is a win-x64 UI Automation host and the Stream Deck CLI packs
+    # on Windows, so there is nothing to gain from a matrix here.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests (TypeScript)
+        run: npm run test:ts
+
+      - name: Unit tests (C#)
+        run: npm run test:cs
+
+      - name: Build sidecar
+        run: npm run build:sidecar
+
+      - name: Build plugin
+        run: npm run build:plugin
+
+      - name: Validate manifest
+        run: npx streamdeck validate com.dswett.teamscontrol.sdPlugin --no-update-check
+
+      - name: Package
+        run: npx streamdeck pack com.dswett.teamscontrol.sdPlugin --output dist --force --no-update-check
+
+      - name: Upload plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: com.dswett.teamscontrol.streamDeckPlugin
+          path: dist/*.streamDeckPlugin
+          if-no-files-found: error

@@ -1,5 +1,7 @@
 # Teams Meeting Controls for Stream Deck
 
+[![build](https://github.com/danswett/streamdeck-teams-control/actions/workflows/build.yml/badge.svg)](https://github.com/danswett/streamdeck-teams-control/actions/workflows/build.yml)
+
 Control Microsoft Teams meetings from an Elgato Stream Deck — mute, camera,
 raise hand, reactions, background blur, screen share, chat, roster and leave —
 with **live state on every key**.
@@ -66,6 +68,13 @@ The reaction and raise-hand keys animate when pressed. Stream Deck has no
 animated-image support — `setImage` rejects GIF, and the manifest's GIF support
 cannot be driven per press — so frames are pushed individually for about 620 ms,
 and only while a key is being pressed.
+
+**The action list and the keys use different artwork.** Elgato's guidelines
+require action-list icons to be a monochrome white stroke on transparent, and
+call out colour as incorrect, so the reactions and raise hand appear there as
+Fluent *system* glyphs while the keys themselves show the full-colour emoji.
+`tests/marketplace.test.ts` enforces that, because the artwork is generated and
+the rule is otherwise only noticed at submission time.
 
 Regenerate after changing the glyph list:
 
@@ -187,10 +196,42 @@ npm run build:sidecar   # dotnet publish -> *.sdPlugin/bin/sidecar/
 npm run build:plugin    # rollup -> *.sdPlugin/bin/plugin.js
 npm run watch           # rebuild + restart plugin on change
 npm run validate        # streamdeck validate
+npm run test            # unit tests, TypeScript and C#
 npm run pack            # -> dist/*.streamDeckPlugin
 node tools/build-glyphs.ts     # re-extract Fluent artwork
 node tools/generate-icons.ts   # regenerate manifest artwork
 ```
+
+### Testing
+
+Most of what this plugin does can only be proven against a running meeting, so
+the suite is in two halves.
+
+**Unit tests** run anywhere, and are what CI enforces:
+
+| | covers |
+|---|---|
+| `tests/protocol.test.ts` | stdout framing (split and merged chunks, CRLF) and state mapping |
+| `tests/icons.test.ts` | SVG validity, state artwork, the press animation returning to rest |
+| `tests/marketplace.test.ts` | Elgato artwork and manifest guidelines |
+| `sidecar/tests/` | selector parsing and overlay, regex validation, snapshot fingerprinting |
+
+**Integration scripts** under `sidecar/` need Teams, and most need a meeting:
+
+| script | meeting? | checks |
+|---|---|---|
+| `test-recovery.ps1` | no | malformed input, unknown commands, shutdown, respawn after a kill |
+| `test-dpi.ps1` | no | the sidecar really is per-monitor DPI aware |
+| `test-soak.ps1` | either | handle and memory drift over a long run |
+| `test-flyouts.ps1` | yes | hand, reactions and blur, twice each, to catch the swallowed click |
+| `test-reactions.ps1` | yes | all five reactions |
+| `test-focus-strict.ps1` | yes | foreground never changes, sampled every 10 ms |
+| `test-dimming.ps1` | yes | keys stay lit while a flyout is open |
+| `test-state-latency-external.ps1` | yes | latency for a change the plugin did not make |
+| `measure-perf.ps1` | either | CPU and memory of the installed plugin |
+
+Note that `test-state-latency-external.ps1` defaults to toggling mute; pass
+`-Target camera` when audio is unavailable, such as in a remote session.
 
 Logs: `com.dswett.teamscontrol.sdPlugin/logs/com.dswett.teamscontrol.0.log`
 
@@ -249,6 +290,28 @@ dotnet publish sidecar/TeamsBridge.csproj -c Release --no-restore `
   -o com.dswett.teamscontrol.sdPlugin/bin/sidecar
 ```
 
+The committed `NuGet.config` deliberately points at nuget.org so a clean
+checkout builds for everyone else; override it per command rather than editing
+it.
+
+### Releasing
+
+Tagging `v*` builds, tests, packages and attaches the plugin to the GitHub
+release. The workflow refuses to publish when the tag and the manifest version
+disagree.
+
+```bash
+# bump "Version" in com.dswett.teamscontrol.sdPlugin/manifest.json first
+git tag -a v1.4.0 -m "v1.4.0" && git push origin v1.4.0
+```
+
+Marketplace submission goes through Elgato's
+[Maker Console](https://docs.elgato.com/maker-console/submitting-products/) and
+takes the same `.streamDeckPlugin` file. **No code signing certificate is
+required** — Elgato applies its own DRM to uploaded plugins — so the unsigned
+binary is not a blocker, though Windows SmartScreen may still warn on a
+sideloaded build.
+
 ---
 
 ## Stability
@@ -260,7 +323,11 @@ That risk is contained rather than hidden:
 
 - All selectors live in
   [`selectors.json`](com.dswett.teamscontrol.sdPlugin/selectors.json) beside the
-  manifest. Edit it and restart the plugin — no rebuild needed.
+  manifest. Edit it and restart the plugin — no rebuild needed. Patterns are
+  compiled when the file is read, so a mistake is named and skipped at startup
+  and the working default is kept, rather than failing on every state read
+  afterwards. Matching is also bounded, so a pattern that backtracks badly
+  cannot wedge the sidecar.
 - Every action's property inspector has a **Diagnostics** panel that dumps the
   live Teams UI tree (ids, names, accelerators, ARIA properties, toggle states)
   into the plugin log, so a broken selector can be re-derived in about a minute.
@@ -312,7 +379,17 @@ thin, so a macOS sidecar speaking the same JSON protocol would drop straight in.
 
 The plugin talks only to the local Teams window and the local Stream Deck app.
 It makes no network calls, collects no telemetry, and reads no message or
-meeting content — only the state of the meeting toolbar buttons.
+meeting content — only the state of the meeting toolbar buttons. The sidecar
+opens no TCP or UDP port; it speaks to the plugin over its own stdin and stdout.
+
+The meeting window title is read to tell a meeting window from a chat window,
+but it is never written to the log.
+
+**Before attaching a Diagnostics dump to an issue**, be aware it lists every
+interactive control in the meeting window — its automation id, accessible name
+and enabled state. Teams labels those by action ("Mute", "Open chat"), so a
+dump from an ordinary meeting contains no names, but a pane listing people can
+put participant names in a control label. Read it before posting it.
 
 ---
 

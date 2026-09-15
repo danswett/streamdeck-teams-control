@@ -50,11 +50,21 @@ if (-not $state -or $state -notmatch '"inMeeting":true') {
     $watcher.Kill(); $actor.Kill(); return
 }
 Read-Until $watcher '"type":"result"' | Out-Null
+$script:pendingRead = @{}
+
 function Read-LineTimeout($p, [int]$ms) {
-    # ReadLine blocks forever when the sidecar has nothing to report, which
-    # turns a missed state change into a hung test rather than a failed one.
-    $task = $p.StandardOutput.ReadLineAsync()
+    # An abandoned ReadLineAsync stays attached to the stream, so a timed-out
+    # read would make every later read throw "stream is currently in use".
+    # Keep the in-flight task and wait on it again instead of starting another.
+    $key = $p.Id
+    if (-not $script:pendingRead.ContainsKey($key)) {
+        $script:pendingRead[$key] = $p.StandardOutput.ReadLineAsync()
+    }
+
+    $task = $script:pendingRead[$key]
     if (-not $task.Wait($ms)) { return $null }
+
+    $script:pendingRead.Remove($key)
     return $task.Result
 }
 

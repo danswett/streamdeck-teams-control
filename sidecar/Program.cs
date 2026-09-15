@@ -69,9 +69,14 @@ public static class Program
 
         try
         {
-            SetProcessDpiAwareness(2); // PROCESS_PER_MONITOR_DPI_AWARE
+            if (SetProcessDpiAwareness(2) == 0) return; // PROCESS_PER_MONITOR_DPI_AWARE
         }
         catch { }
+
+        // Worth saying out loud: every posted click would be offset on a scaled
+        // display, and the symptom - presses landing on the wrong control - gives
+        // no hint of the cause.
+        Console.Error.WriteLine("WARNING: could not set per-monitor DPI awareness; clicks may be misplaced on scaled displays");
     }
 
     private static readonly BlockingCollection<WorkItem> Queue = new(new ConcurrentQueue<WorkItem>());
@@ -343,7 +348,7 @@ public static class Program
     private static bool HasFlag(string[] args, string name) =>
         args.Any(a => string.Equals(a, name, StringComparison.OrdinalIgnoreCase));
 
-    private static SelectorConfig LoadConfig(string path)
+    internal static SelectorConfig LoadConfig(string path)
     {
         var config = Defaults.Config();
         if (!File.Exists(path)) return config;
@@ -357,6 +362,9 @@ public static class Program
 
             if (!string.IsNullOrWhiteSpace(overrides.MeetingProbeAutomationId))
                 config.MeetingProbeAutomationId = overrides.MeetingProbeAutomationId;
+
+            if (!string.IsNullOrWhiteSpace(overrides.FullToolbarAutomationId))
+                config.FullToolbarAutomationId = overrides.FullToolbarAutomationId;
 
             var applied = 0;
             foreach (var (key, spec) in overrides.Controls)
@@ -386,7 +394,7 @@ public static class Program
     }
 
     /// <summary>Hand-rolled so the sidecar stays trim-safe (no reflection-based binding).</summary>
-    private static SelectorConfig? ParseConfig(string json)
+    internal static SelectorConfig? ParseConfig(string json)
     {
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;

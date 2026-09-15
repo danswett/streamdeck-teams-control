@@ -9,8 +9,9 @@ node_modules/
 dist/
 
 # .NET sidecar build output
-sidecar/bin/
-sidecar/obj/
+# Pattern without a leading path so it also covers sidecar/tests/.
+bin/
+obj/
 
 # Editor / OS noise
 .vs/

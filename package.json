@@ -11,6 +11,9 @@
 		"build:sidecar": "dotnet publish sidecar/TeamsBridge.csproj -c Release -o com.dswett.teamscontrol.sdPlugin/bin/sidecar --nologo",
 		"watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.dswett.teamscontrol\"",
 		"validate": "streamdeck validate com.dswett.teamscontrol.sdPlugin",
+		"test": "npm run test:ts && npm run test:cs",
+		"test:ts": "vitest run",
+		"test:cs": "dotnet test sidecar/tests/TeamsBridge.Tests.csproj --nologo",
 		"pack": "npm run build && streamdeck pack com.dswett.teamscontrol.sdPlugin --output dist --no-update-check"
 	},
 	"devDependencies": {
@@ -27,7 +30,8 @@
 		"fluentui-emoji": "^1.3.0",
 		"rollup": "^4.0.2",
 		"tslib": "^2.6.2",
-		"typescript": "^5.2.2"
+		"typescript": "^5.2.2",
+		"vitest": "^5.0.0"
 	},
 	"dependencies": {
 		"@elgato/streamdeck": "^2.1.2",

@@ -45,6 +45,19 @@
 
   <ItemGroup>
     <!--
+      The test project lives under this one's directory, so the SDK's default
+      globbing would otherwise compile its files - and its xunit references -
+      into the sidecar itself.
+    -->
+    <Compile Remove="tests/**" />
+    <None Remove="tests/**" />
+
+    <!-- So the test project can reach LoadConfig and ParseConfig. -->
+    <InternalsVisibleTo Include="TeamsBridge.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
       FlaUI wraps the UI Automation COM API (UIA3) without dragging in the WPF
       desktop runtime, which keeps the published sidecar small and trimmable.
     -->

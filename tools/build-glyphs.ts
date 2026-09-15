@@ -43,7 +43,21 @@ const CONTROLS: Record<string, string> = {
 	// Category icon. Stream Deck requires this to be monochrome white on
 	// transparent, and the Microsoft Teams logo is Microsoft's trademark, so a
 	// neutral "team" glyph stands in for it.
-	category: "people_team_28_filled"
+	category: "people_team_28_filled",
+
+	// Monochrome stand-ins for the reactions and the hand, used only for the
+	// action-list icons. Elgato's guidelines require those to be a white
+	// monochrome stroke on transparent, so the full-colour emoji that appear on
+	// the keys themselves cannot be reused there.
+	//
+	// Fluent's system set has no applause glyph, so the two-hands icon stands in.
+	// These are not all from the 28px tier because the set does not carry every
+	// one at that size; they are normalised by viewBox when rendered.
+	"list-react-like": "thumb_like_28_filled",
+	"list-react-love": "heart_28_filled",
+	"list-react-applause": "hand_multiple_28_filled",
+	"list-react-laugh": "emoji_laugh_24_filled",
+	"list-react-wow": "emoji_surprise_24_filled"
 };
 
 /** Reaction artwork, matching the five reactions Teams offers. */
