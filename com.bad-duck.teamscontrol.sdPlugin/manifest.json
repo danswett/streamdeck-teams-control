@@ -7,7 +7,7 @@
 	"Category": "Teams Meeting Controls",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"Icon": "imgs/plugin/marketplace",
-	"URL": "https://github.com/danswett/streamdeck-teams-control",
+	"URL": "https://bad-duck.com",
 	"SupportURL": "https://github.com/danswett/streamdeck-teams-control/issues",
 	"CodePath": "bin/plugin.js",
 	"PropertyInspectorPath": "ui/default.html",

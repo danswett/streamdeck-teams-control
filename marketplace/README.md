@@ -68,6 +68,8 @@ Marketplace, and Elgato's guidelines ask for the organization name.
 | Maker organization | Bad Duck Software |
 | Marketplace handle | `@badduck` |
 | Manifest `Author` | `Bad Duck Software` |
+| Manifest `URL` | https://bad-duck.com |
+| Manifest `SupportURL` | https://github.com/danswett/streamdeck-teams-control/issues |
 | Plugin UUID | `com.bad-duck.teamscontrol` |
 | Support email (Maker Console) | support@bad-duck.com |
 
@@ -76,10 +78,20 @@ once the plugin is published** — Elgato's guidelines list changing a UUID afte
 publishing as something not to do — so it was settled before the first
 submission rather than after.
 
+`URL` is the organization's site, not the Marketplace listing and not the
+repository. The [manifest schema](https://schemas.elgato.com/streamdeck/plugins/manifest.json)
+defines it as "Link to the plugin's website" and gives `https://elgato.com` and
+`https://corsair.com` as the examples; Elgato's own plugins follow that. Linking
+back to Marketplace would be circular, because the field is surfaced inside
+Stream Deck to someone who has already installed the plugin. Bug reports belong
+on `SupportURL` instead, and a domain we control can be repointed without
+shipping a new version.
+
 ## Additional links
 
 | Label | URL |
 |---|---|
+| Website | https://bad-duck.com |
 | Source code | https://github.com/danswett/streamdeck-teams-control |
 | Support | https://github.com/danswett/streamdeck-teams-control/issues |
 | Privacy | https://github.com/danswett/streamdeck-teams-control#privacy |
