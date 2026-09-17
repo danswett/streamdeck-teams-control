@@ -14,6 +14,12 @@ export type TeamsState = {
 	windowTitle: string;
 	states: Record<string, boolean>;
 	available: Record<string, boolean>;
+	/**
+	 * Non-boolean context: the PowerPoint Live role, slide position and deck
+	 * name. Kept apart from `states` because keys render these rather than
+	 * toggling on them.
+	 */
+	context: Record<string, string>;
 };
 
 export const EMPTY_STATE: TeamsState = {
@@ -21,7 +27,8 @@ export const EMPTY_STATE: TeamsState = {
 	inMeeting: false,
 	windowTitle: "",
 	states: {},
-	available: {}
+	available: {},
+	context: {}
 };
 
 /**
@@ -58,7 +65,8 @@ export function toState(msg: Record<string, unknown>): TeamsState {
 		inMeeting: Boolean(msg["inMeeting"]),
 		windowTitle: String(msg["windowTitle"] ?? ""),
 		states: asBoolMap(msg["states"]),
-		available: asBoolMap(msg["available"])
+		available: asBoolMap(msg["available"]),
+		context: asStringMap(msg["context"])
 	};
 }
 
@@ -68,6 +76,18 @@ function asBoolMap(value: unknown): Record<string, boolean> {
 	const out: Record<string, boolean> = {};
 	for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
 		out[k] = Boolean(v);
+	}
+	return out;
+}
+
+function asStringMap(value: unknown): Record<string, string> {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
+
+	const out: Record<string, string> = {};
+	for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+		// A sidecar that started sending a number or null here must not produce
+		// "[object Object]" on a key; only real strings are taken.
+		if (typeof v === "string") out[k] = v;
 	}
 	return out;
 }

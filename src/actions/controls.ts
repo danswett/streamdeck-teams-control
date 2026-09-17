@@ -1,4 +1,4 @@
-import { action, type KeyDownEvent, type KeyUpEvent } from "@elgato/streamdeck";
+import { action, type KeyDownEvent } from "@elgato/streamdeck";
 
 import { bridge, type TeamsState } from "../bridge";
 import {
@@ -10,12 +10,7 @@ import {
 	renderSimple,
 	renderToggle
 } from "../icons";
-import { TeamsAction } from "./base";
-
-/** True when Teams is in a meeting and the control is present and enabled. */
-function usable(state: TeamsState, key: string): boolean {
-	return state.inMeeting && (state.available[key] ?? false);
-}
+import { GuardedAction, TeamsAction, usable } from "./base";
 
 @action({ UUID: "com.bad-duck.teamscontrol.mute" })
 export class MuteAction extends TeamsAction {
@@ -180,59 +175,13 @@ export class ReactWowAction extends ReactionAction {
 	protected override readonly reaction = "react-wow";
 }
 
-type LeaveSettings = {
-	requireHold?: boolean;
-};
-
-const HOLD_MS = 700;
-
 @action({ UUID: "com.bad-duck.teamscontrol.leave" })
-export class LeaveAction extends TeamsAction<LeaveSettings> {
-	#holds = new Map<string, NodeJS.Timeout>();
-
+export class LeaveAction extends GuardedAction {
 	protected override targetFor(): string {
 		return "leave";
 	}
 
 	protected override draw(state: TeamsState): string {
 		return renderSimple("leave", usable(state, "leave"), "danger");
-	}
-
-	/**
-	 * Leaving a meeting cannot be undone, so an optional press-and-hold guards
-	 * against a mis-tap. Without it the key fires immediately.
-	 */
-	override async onKeyDown(ev: KeyDownEvent<LeaveSettings>): Promise<void> {
-		if (!ev.payload.settings.requireHold) {
-			await super.onKeyDown(ev);
-			return;
-		}
-
-		const id = ev.action.id;
-		this.#clear(id);
-		this.#holds.set(
-			id,
-			setTimeout(() => {
-				this.#holds.delete(id);
-				void super.onKeyDown(ev);
-			}, HOLD_MS)
-		);
-	}
-
-	override async onKeyUp(ev: KeyUpEvent<LeaveSettings>): Promise<void> {
-		if (!ev.payload.settings.requireHold) return;
-		if (this.#holds.has(ev.action.id)) {
-			// Released before the hold completed: cancel and tell the user.
-			this.#clear(ev.action.id);
-			await ev.action.showAlert();
-		}
-	}
-
-	#clear(id: string): void {
-		const t = this.#holds.get(id);
-		if (t) {
-			clearTimeout(t);
-			this.#holds.delete(id);
-		}
 	}
 }

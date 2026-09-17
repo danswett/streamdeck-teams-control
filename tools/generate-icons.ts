@@ -23,7 +23,35 @@ const ACTIONS: Record<string, { glyph: string; danger?: boolean }> = {
 	share: { glyph: "share" },
 	chat: { glyph: "chat" },
 	people: { glyph: "people" },
-	leave: { glyph: "leave", danger: true }
+	leave: { glyph: "leave", danger: true },
+
+	// PowerPoint Live.
+	"ppt-prev": { glyph: "pptPrev" },
+	"ppt-next": { glyph: "pptNext" },
+	"ppt-status": { glyph: "pptSlide" },
+	"ppt-sync": { glyph: "pptSync" },
+	"ppt-grid": { glyph: "pptGrid" },
+	"ppt-zoom-in": { glyph: "pptZoomIn" },
+	"ppt-zoom-out": { glyph: "pptZoomOut" },
+	"ppt-high-contrast": { glyph: "pptContrast" },
+	"ppt-translate": { glyph: "pptTranslate" },
+	"ppt-take-control": { glyph: "pptTakeControl" },
+	"ppt-popout": { glyph: "pptPopout" },
+	"ppt-copilot": { glyph: "pptCopilot" },
+
+	// PowerPoint Live, presenting.
+	"ppt-cursor": { glyph: "pptCursor" },
+	"ppt-laser": { glyph: "pptLaser" },
+	"ppt-pen": { glyph: "pptPen" },
+	"ppt-highlighter": { glyph: "pptHighlighter" },
+	"ppt-eraser": { glyph: "pptEraser" },
+	"ppt-private-view": { glyph: "pptPrivateView" },
+	"ppt-hide-presenter-view": { glyph: "pptHidePresenterView" },
+	"ppt-refresh": { glyph: "pptRefresh" },
+	"ppt-copy-link": { glyph: "pptCopyLink" },
+	"ppt-layout-content": { glyph: "pptLayoutContent" },
+	"ppt-layout-cameo": { glyph: "pptLayoutCameo" },
+	"ppt-stop-presenting": { glyph: "pptStopPresenting", danger: true }
 };
 
 function write(file: string, contents: string): void {

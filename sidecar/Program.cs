@@ -12,7 +12,7 @@ namespace TeamsBridge;
 /// </summary>
 public static class Program
 {
-    private sealed record WorkItem(int Id, string Cmd, string? Target, string? Menu);
+    private sealed record WorkItem(int Id, string Cmd, string? Target, string? Menu, string? Arg = null);
 
     private const int TrimIntervalMs = 60_000;
 
@@ -21,6 +21,14 @@ public static class Program
     /// path because the collection competes with key presses.
     /// </summary>
     private const int MeetingTrimIntervalMs = 300_000;
+
+    /// <summary>
+    /// How long after a press to take a second snapshot. Teams applies a role
+    /// change - attendee to presenter, after "Take control" - noticeably later
+    /// than the press itself returns, and that one press retires half the keys
+    /// and brings up the other half.
+    /// </summary>
+    private const int SettleMs = 1200;
 
     [DllImport("user32.dll")]
     private static extern bool SetProcessDpiAwarenessContext(IntPtr value);
@@ -134,9 +142,10 @@ public static class Program
                 var cmd = root.TryGetProperty("cmd", out var c) ? c.GetString() ?? "" : "";
                 var target = root.TryGetProperty("target", out var t) ? t.GetString() : null;
                 var menu = root.TryGetProperty("menu", out var m) ? m.GetString() : null;
+                var arg = root.TryGetProperty("arg", out var a) ? a.GetString() : null;
 
                 if (cmd == "shutdown") { _running = false; break; }
-                Queue.Add(new WorkItem(id, cmd, target, menu));
+                Queue.Add(new WorkItem(id, cmd, target, menu, arg));
             }
             catch (Exception ex)
             {
@@ -158,6 +167,11 @@ public static class Program
         using var client = new TeamsClient(config, restoreFocus) { DebugEvents = debugEvents, UseEvents = useEvents };
         var lastFingerprint = "";
         var nextPoll = 0L;
+
+        // When to take the follow-up snapshot after a press, for effects that
+        // land asynchronously - chiefly the attendee -> presenter role change
+        // that "Take control" causes.
+        var settleAt = 0L;
 
         // UI Automation events carry the interesting changes - a window opening,
         // and a control's label changing, which is the mute/camera state signal.
@@ -183,7 +197,12 @@ public static class Program
             WorkItem? item = null;
             try
             {
-                var wait = (int)Math.Clamp(nextPoll - Environment.TickCount64, 0, currentPollMs);
+                // Whichever comes first: the scheduled poll, or the settle
+                // re-read owed after a press.
+                var due = nextPoll;
+                if (settleAt != 0 && settleAt < due) due = settleAt;
+
+                var wait = (int)Math.Clamp(due - Environment.TickCount64, 0, currentPollMs);
                 Queue.TryTake(out item, wait);
             }
             catch (InvalidOperationException) { break; }
@@ -203,10 +222,19 @@ public static class Program
                 }
                 // Something just happened; report it promptly.
                 nextPoll = Environment.TickCount64 + 120;
+
+                // ...and again once Teams has settled. Some controls change far
+                // more than themselves: taking control of a deck turns you from
+                // attendee into presenter, which retires "Take control" and
+                // brings up the whole presenter toolbar. That lands well after
+                // the press returns, so a single immediate re-read would report
+                // the old role and leave every key a role behind.
+                settleAt = Environment.TickCount64 + SettleMs;
                 continue;
             }
 
-            if (Environment.TickCount64 < nextPoll) continue;
+            if (Environment.TickCount64 < nextPoll && (settleAt == 0 || Environment.TickCount64 < settleAt)) continue;
+            if (settleAt != 0 && Environment.TickCount64 >= settleAt) settleAt = 0;
 
             try
             {
@@ -279,7 +307,7 @@ public static class Program
 
             case "invoke":
             {
-                var (ok, err) = client.Invoke(item.Target ?? "");
+                var (ok, err) = client.Invoke(item.Target ?? "", item.Arg);
                 Emit(w =>
                 {
                     w.WriteString("type", "result");
@@ -340,6 +368,11 @@ public static class Program
         w.WriteStartObject();
         foreach (var (k, v) in snap.Available) w.WriteBoolean(k, v);
         w.WriteEndObject();
+
+        w.WritePropertyName("context");
+        w.WriteStartObject();
+        foreach (var (k, v) in snap.Context) w.WriteString(k, v);
+        w.WriteEndObject();
     });
 
     private static void Emit(Action<Utf8JsonWriter> body)
@@ -390,6 +423,13 @@ public static class Program
             if (!string.IsNullOrWhiteSpace(overrides.FullToolbarAutomationId))
                 config.FullToolbarAutomationId = overrides.FullToolbarAutomationId;
 
+            // Same reasoning as the control patterns below: reject a bad pattern
+            // here rather than letting it throw on every poll.
+            if (overrides.PowerPointLive.Validate() is { } pptProblem)
+                Console.Error.WriteLine($"ignoring powerPointLive overrides from {path} - {pptProblem}");
+            else
+                config.PowerPointLive = overrides.PowerPointLive;
+
             var applied = 0;
             foreach (var (key, spec) in overrides.Controls)
             {
@@ -430,6 +470,18 @@ public static class Program
         if (root.TryGetProperty("fullToolbarAutomationId", out var ft) && ft.GetString() is { } fts)
             cfg.FullToolbarAutomationId = fts;
 
+        if (root.TryGetProperty("powerPointLive", out var ppt) && ppt.ValueKind == JsonValueKind.Object)
+        {
+            var spec = cfg.PowerPointLive;
+            if (Str(ppt, "rootAutomationId") is { } r) spec.RootAutomationId = r;
+            if (Str(ppt, "toolbarAutomationId") is { } tb) spec.ToolbarAutomationId = tb;
+            if (Str(ppt, "slideContainerAutomationId") is { } sc) spec.SlideContainerAutomationId = sc;
+            if (Str(ppt, "presenterClassPattern") is { } pc) spec.PresenterClassPattern = pc;
+            if (Str(ppt, "attendeeClassPattern") is { } ac) spec.AttendeeClassPattern = ac;
+            if (Str(ppt, "slidePositionPattern") is { } sp) spec.SlidePositionPattern = sp;
+            if (Str(ppt, "deckTitlePattern") is { } dt) spec.DeckTitlePattern = dt;
+        }
+
         if (!root.TryGetProperty("controls", out var controls)) return cfg;
 
         foreach (var prop in controls.EnumerateObject())
@@ -439,11 +491,16 @@ public static class Program
             {
                 AutomationId = Str(o, "automationId") ?? "",
                 Menu = Str(o, "menu"),
+                Submenu = Str(o, "submenu"),
+                RequiresRole = Str(o, "requiresRole"),
                 MenuItemAutomationId = Str(o, "menuItemAutomationId"),
+                MenuItemToggleAutomationId = Str(o, "menuItemToggleAutomationId"),
                 MenuItemName = Str(o, "menuItemName"),
                 MenuItemOffName = Str(o, "menuItemOffName"),
                 ActivePattern = Str(o, "activePattern"),
-                InactivePattern = Str(o, "inactivePattern")
+                InactivePattern = Str(o, "inactivePattern"),
+                StateFromSelection = o.TryGetProperty("stateFromSelection", out var sfs) &&
+                                     sfs.ValueKind == JsonValueKind.True
             };
         }
         return cfg;

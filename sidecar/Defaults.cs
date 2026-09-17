@@ -88,6 +88,155 @@ public static class Defaults
                 Menu = "video-button-configure",
                 MenuItemName = @"^\s*standard\s+blur\s*$",
                 MenuItemOffName = @"^\s*no\s+background\s+effect\s*$"
+            },
+
+            // ---- PowerPoint Live ----
+            // The slide-show surface is an embedded document, not part of the
+            // meeting toolbar, so none of these exist unless a deck is being
+            // presented. That is what makes the keys dim on their own.
+            // Captured from a live meeting on 2026-09-17.
+            ["ppt-prev"] = new() { AutomationId = "prevSlideButton" },
+            ["ppt-next"] = new() { AutomationId = "nextSlideButton" },
+            ["ppt-grid"] = new() { AutomationId = "gridViewToolbarButton" },
+
+            // Only rendered once you have navigated away from the presenter's
+            // slide, so its presence is exactly the "viewing privately" signal.
+            ["ppt-sync"] = new() { AutomationId = "syncToPresenterToolbarButton" },
+
+            ["ppt-copilot"] = new() { AutomationId = "inkToExplainToolbarButton" },
+
+            // Moves the shared content into its own window.
+            ["ppt-popout"] = new() { AutomationId = "popout-content-button" },
+
+            // Requesting control is something only an attendee can do — and it
+            // is the one key that changes your role: a successful press turns
+            // you into the presenter, which retires this key and lights up the
+            // presenter tools below.
+            ["ppt-take-control"] = new()
+            {
+                AutomationId = "takeControlPptBtn",
+                RequiresRole = "attendee"
+            },
+
+            // ---- PowerPoint Live "Change view" flyout ----
+            ["ppt-zoom-in"] = new()
+            {
+                Menu = "toolbarChangeViewButton",
+                MenuItemAutomationId = "toolbarMagnifyZoomOverflowButtonZoomInButton"
+            },
+            ["ppt-zoom-out"] = new()
+            {
+                Menu = "toolbarChangeViewButton",
+                MenuItemAutomationId = "toolbarMagnifyZoomOverflowButtonZoomOutButton"
+            },
+            // A real checkbox, so pressing it toggles rather than needing an
+            // "off" twin the way the background effects do.
+            ["ppt-high-contrast"] = new()
+            {
+                Menu = "toolbarChangeViewButton",
+                MenuItemAutomationId = "toolbarHighContrastOverflowButton"
+            },
+
+            // Slide translation sits one level deeper, behind "Translate
+            // slides". "{arg}" is replaced with the language the key is set to;
+            // the ids are endonyms ("Deutsch", "日本語") and "Original" turns
+            // translation back off, so they are stable across Teams' own
+            // display language.
+            //
+            // Attendee-only: a presenter's "Change view" menu has no translation
+            // entry at all, since translating your own deck for yourself would
+            // mean nothing.
+            ["ppt-translate"] = new()
+            {
+                Menu = "toolbarChangeViewButton",
+                Submenu = "toolbarTranslateSlidesOverflowButton",
+                MenuItemAutomationId = "toolbarTranslateSlidesLanguageMenuItem-{arg}",
+                RequiresRole = "attendee"
+            },
+
+            // ---- PowerPoint Live, presenting ----
+            // Captured while presenting on 2026-09-17. Note that zoom above is
+            // shared: Teams labels it "only for me" for an attendee but
+            // "for all" for the presenter, and drives the same control.
+            ["ppt-stop-presenting"] = new()
+            {
+                AutomationId = "stopPresentingPptBtn",
+                RequiresRole = "presenter"
+            },
+            ["ppt-private-view"] = new()
+            {
+                // An Invoke button whose label stays "Private view" either way,
+                // so there is no state to read — only a press to make.
+                AutomationId = "toggleEnablePrivateViewingButton",
+                RequiresRole = "presenter"
+            },
+            ["ppt-refresh"] = new()
+            {
+                AutomationId = "toolbarRefreshButton",
+                RequiresRole = "presenter"
+            },
+
+            // The drawing tools are one single-select list, so the active tool
+            // is readable from the selection rather than from a label.
+            ["ppt-cursor"] = new()
+            {
+                AutomationId = "ink-tool-4",
+                RequiresRole = "presenter",
+                StateFromSelection = true
+            },
+            ["ppt-laser"] = new()
+            {
+                AutomationId = "ink-tool-3",
+                RequiresRole = "presenter",
+                StateFromSelection = true
+            },
+            ["ppt-pen"] = new()
+            {
+                AutomationId = "ink-tool-0",
+                RequiresRole = "presenter",
+                StateFromSelection = true
+            },
+            ["ppt-highlighter"] = new()
+            {
+                AutomationId = "ink-tool-1",
+                RequiresRole = "presenter",
+                StateFromSelection = true
+            },
+            ["ppt-eraser"] = new()
+            {
+                AutomationId = "ink-tool-2",
+                RequiresRole = "presenter",
+                StateFromSelection = true
+            },
+
+            ["ppt-copy-link"] = new()
+            {
+                Menu = "toolbarShareButton",
+                MenuItemAutomationId = "toolbarShareButtonMenuListCopyLinkItem",
+                RequiresRole = "presenter"
+            },
+            ["ppt-hide-presenter-view"] = new()
+            {
+                Menu = "toolbarChangeViewButton",
+                MenuItemAutomationId = "toolbarPresenterUIHideOverflowButton",
+                // Teams replaces the entry with its opposite rather than
+                // checking it, so both ids are needed for one key to toggle.
+                MenuItemToggleAutomationId = "toolbarPresenterUIShowOverflowButton",
+                RequiresRole = "presenter"
+            },
+            ["ppt-layout-content"] = new()
+            {
+                Menu = "ppt-sharing-layout-toolbar",
+                MenuItemAutomationId = "pptContentOnlyButton",
+                RequiresRole = "presenter"
+            },
+            // Teams disables Cameo until your camera is on, which the sidecar
+            // reports as unavailable without needing to know why.
+            ["ppt-layout-cameo"] = new()
+            {
+                Menu = "ppt-sharing-layout-toolbar",
+                MenuItemAutomationId = "pptCameoButton",
+                RequiresRole = "presenter"
             }
         }
     };

@@ -40,6 +40,40 @@ const CONTROLS: Record<string, string> = {
 	people: "people_28_filled",
 	leave: "call_end_28_filled",
 	emoji: "emoji_28_filled",
+
+	// PowerPoint Live. Slide navigation uses chevrons rather than the media-style
+	// arrows so it does not read as a recording transport.
+	pptPrev: "chevron_left_28_filled",
+	pptNext: "chevron_right_28_filled",
+	pptGrid: "grid_28_filled",
+	pptSync: "arrow_sync_24_filled",
+	pptZoomIn: "zoom_in_28_filled",
+	pptZoomOut: "zoom_out_28_filled",
+	// Fluent's system set carries no contrast glyph at any size; the half-filled
+	// circle is the same idea and is what Fluent uses for theme switching.
+	pptContrast: "circle_half_fill_24_filled",
+	pptTranslate: "translate_28_filled",
+	pptTakeControl: "hand_point_28_filled",
+	pptPopout: "window_new_28_filled",
+	pptCopilot: "slide_text_sparkle_28_filled",
+	pptSlide: "slide_text_28_filled",
+	pptPresenter: "presenter_28_filled",
+
+	// Presenter tools. Fluent has no laser-pointer glyph, so the target
+	// reticle stands in — it is the same "pointing at a thing" idea and reads
+	// clearly at key size, which a small dot would not.
+	pptCursor: "cursor_28_filled",
+	pptLaser: "target_24_filled",
+	pptPen: "pen_28_filled",
+	pptHighlighter: "highlight_24_filled",
+	pptEraser: "eraser_24_filled",
+	pptStopPresenting: "presenter_off_24_filled",
+	pptPrivateView: "eye_24_filled",
+	pptHidePresenterView: "eye_off_24_filled",
+	pptRefresh: "arrow_clockwise_28_filled",
+	pptCopyLink: "link_28_filled",
+	pptLayoutContent: "slide_layout_24_filled",
+	pptLayoutCameo: "video_person_28_filled",
 	// Category icon. Stream Deck requires this to be monochrome white on
 	// transparent, and the Microsoft Teams logo is Microsoft's trademark, so a
 	// neutral "team" glyph stands in for it.

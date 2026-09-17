@@ -124,6 +124,48 @@ export function renderSimple(key: string, available: boolean, tone: Tone = "on")
 	return renderGlyph(key, available ? tone : "unavailable");
 }
 
+/** Fraction of the key the artwork fills when a label sits beneath it. */
+const LABELLED_FILL = 0.56;
+/** How far the artwork lifts to make room for the label. */
+const LABELLED_LIFT = 16;
+
+function escapeText(value: string): string {
+	return value
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;");
+}
+
+/**
+ * Renders a glyph with a short label beneath it.
+ *
+ * Used for the slide counter, where the useful information is a value rather
+ * than a state. Stream Deck's own title field is deliberately not used: it
+ * cannot be driven from plugin state without fighting whatever the user typed,
+ * and it renders under, not inside, the image.
+ */
+export function renderLabelled(key: string, label: string, tone: Tone): string {
+	const def = CONTROL_GLYPHS[key];
+	if (!def) return wrap("");
+
+	const art =
+		`<g transform="translate(0 ${-LABELLED_LIFT}) ${transformFor(def, LABELLED_FILL)}" ` +
+		`fill="${COLORS[tone]}">${def.body}</g>`;
+
+	if (!label) return wrap(art);
+
+	// Long labels would otherwise run off the key, so the glyph's own font size
+	// steps down once there are more than five characters ("12/199").
+	const text = escapeText(label);
+	const fontSize = text.length > 5 ? 28 : 34;
+
+	return wrap(
+		`${art}<text x="${SIZE / 2}" y="${SIZE - 22}" text-anchor="middle" ` +
+			`font-family="Segoe UI, system-ui, sans-serif" font-size="${fontSize}" ` +
+			`font-weight="600" fill="${COLORS[tone]}">${text}</text>`
+	);
+}
+
 /** Renders a full-colour reaction, dimmed when the control is unavailable. */
 export function renderReaction(key: string, available: boolean): string {
 	return renderEmojiGlyph(REACTION_GLYPHS[key] ?? REACTION_GLYPHS["react-like"], available);

@@ -53,7 +53,8 @@ describe("toState", () => {
 			inMeeting: true,
 			windowTitle: "Meeting | Microsoft Teams",
 			states: { mute: true, camera: false },
-			available: { mute: true, camera: true }
+			available: { mute: true, camera: true },
+			context: { "ppt.role": "attendee", "ppt.slide": "3", "ppt.slides": "19" }
 		});
 
 		expect(state).toEqual({
@@ -61,7 +62,8 @@ describe("toState", () => {
 			inMeeting: true,
 			windowTitle: "Meeting | Microsoft Teams",
 			states: { mute: true, camera: false },
-			available: { mute: true, camera: true }
+			available: { mute: true, camera: true },
+			context: { "ppt.role": "attendee", "ppt.slide": "3", "ppt.slides": "19" }
 		});
 	});
 
@@ -94,5 +96,32 @@ describe("toState", () => {
 		state.states["mute"] = true;
 
 		expect(EMPTY_STATE.states).toEqual({});
+	});
+
+	it("defaults context to an empty map for a sidecar that predates it", () => {
+		expect(toState({ type: "state", states: { mute: true } }).context).toEqual({});
+	});
+
+	it("keeps only real strings in context", () => {
+		// A number here would render as-is on a key; an object would arrive as
+		// "[object Object]". Neither is worth showing, so both are dropped.
+		const state = toState({
+			context: { "ppt.slide": "3", "ppt.slides": 19, "ppt.deck": null, "ppt.role": "presenter" }
+		});
+
+		expect(state.context).toEqual({ "ppt.slide": "3", "ppt.role": "presenter" });
+	});
+
+	it("survives context arriving as the wrong shape", () => {
+		expect(toState({ context: "nonsense" }).context).toEqual({});
+		expect(toState({ context: ["wrong"] }).context).toEqual({});
+		expect(toState({ context: null }).context).toEqual({});
+	});
+
+	it("does not alias EMPTY_STATE.context either", () => {
+		const state = toState({ type: "state" });
+		state.context["ppt.slide"] = "7";
+
+		expect(EMPTY_STATE.context).toEqual({});
 	});
 });

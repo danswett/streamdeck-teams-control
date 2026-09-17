@@ -1,9 +1,9 @@
 {
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
 	"Name": "Teams Meeting Controls",
-	"Version": "1.5.0.0",
+	"Version": "1.6.0.0",
 	"Author": "Bad Duck Software",
-	"Description": "Control Microsoft Teams meetings from your Stream Deck. Mute, camera, raise hand, reactions, background blur and more — with live state on every key. Works while Teams is in the background; never sends keystrokes.",
+	"Description": "Control Microsoft Teams meetings from your Stream Deck. Mute, camera, raise hand, reactions, background blur and more â€” with live state on every key. Works while Teams is in the background; never sends keystrokes.",
 	"Category": "Teams Meeting Controls",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"Icon": "imgs/plugin/marketplace",
@@ -30,6 +30,14 @@
 			"ms-teams.exe"
 		]
 	},
+	"Profiles": [
+		{
+			"Name": "profiles/PowerPoint Live",
+			"DeviceType": 0,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		}
+	],
 	"Actions": [
 		{
 			"Name": "Mute",
@@ -249,6 +257,438 @@
 			"States": [
 				{
 					"Image": "imgs/actions/leave/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Previous Slide",
+			"UUID": "com.bad-duck.teamscontrol.ppt-prev",
+			"Icon": "imgs/actions/ppt-prev/icon",
+			"Tooltip": "Go back one slide in PowerPoint Live",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-prev/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Next Slide",
+			"UUID": "com.bad-duck.teamscontrol.ppt-next",
+			"Icon": "imgs/actions/ppt-next/icon",
+			"Tooltip": "Advance one slide in PowerPoint Live",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-next/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Slide Counter",
+			"UUID": "com.bad-duck.teamscontrol.ppt-status",
+			"Icon": "imgs/actions/ppt-status/icon",
+			"Tooltip": "Shows the current slide and deck length. Not pressable.",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": false,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-status/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Sync to Presenter",
+			"UUID": "com.bad-duck.teamscontrol.ppt-sync",
+			"Icon": "imgs/actions/ppt-sync/icon",
+			"Tooltip": "Return to the presenter's slide. Lights up while you are viewing privately.",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-sync/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Grid View",
+			"UUID": "com.bad-duck.teamscontrol.ppt-grid",
+			"Icon": "imgs/actions/ppt-grid/icon",
+			"Tooltip": "Show all slides as thumbnails",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-grid/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Zoom In",
+			"UUID": "com.bad-duck.teamscontrol.ppt-zoom-in",
+			"Icon": "imgs/actions/ppt-zoom-in/icon",
+			"Tooltip": "Magnify the slide. As an attendee this is only for you; while presenting it zooms for everyone.",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-zoom-in/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Zoom Out",
+			"UUID": "com.bad-duck.teamscontrol.ppt-zoom-out",
+			"Icon": "imgs/actions/ppt-zoom-out/icon",
+			"Tooltip": "Shrink the slide back down. As an attendee this is only for you; while presenting it zooms for everyone.",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-zoom-out/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: High Contrast",
+			"UUID": "com.bad-duck.teamscontrol.ppt-high-contrast",
+			"Icon": "imgs/actions/ppt-high-contrast/icon",
+			"Tooltip": "View the slides in high contrast, only for you",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-high-contrast/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Translate Slides",
+			"UUID": "com.bad-duck.teamscontrol.ppt-translate",
+			"Icon": "imgs/actions/ppt-translate/icon",
+			"Tooltip": "Translate the slides into a chosen language, only for you",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt-translate.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-translate/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Take Control",
+			"UUID": "com.bad-duck.teamscontrol.ppt-take-control",
+			"Icon": "imgs/actions/ppt-take-control/icon",
+			"Tooltip": "Take control of the deck someone else is presenting. This makes you the presenter: this key then dims and the presenter keys light up.",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-take-control/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Pop Out",
+			"UUID": "com.bad-duck.teamscontrol.ppt-popout",
+			"Icon": "imgs/actions/ppt-popout/icon",
+			"Tooltip": "Move the shared content into its own window",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-popout/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Ask Copilot",
+			"UUID": "com.bad-duck.teamscontrol.ppt-copilot",
+			"Icon": "imgs/actions/ppt-copilot/icon",
+			"Tooltip": "Select and drag text on the slide to ask Copilot about it",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-copilot/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Laser Pointer",
+			"UUID": "com.bad-duck.teamscontrol.ppt-laser",
+			"Icon": "imgs/actions/ppt-laser/icon",
+			"Tooltip": "Use the laser pointer on your slides",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-laser/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Pen",
+			"UUID": "com.bad-duck.teamscontrol.ppt-pen",
+			"Icon": "imgs/actions/ppt-pen/icon",
+			"Tooltip": "Draw on your slides with the pen",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-pen/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Highlighter",
+			"UUID": "com.bad-duck.teamscontrol.ppt-highlighter",
+			"Icon": "imgs/actions/ppt-highlighter/icon",
+			"Tooltip": "Highlight part of your slide",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-highlighter/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Eraser",
+			"UUID": "com.bad-duck.teamscontrol.ppt-eraser",
+			"Icon": "imgs/actions/ppt-eraser/icon",
+			"Tooltip": "Erase your annotations",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-eraser/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Cursor",
+			"UUID": "com.bad-duck.teamscontrol.ppt-cursor",
+			"Icon": "imgs/actions/ppt-cursor/icon",
+			"Tooltip": "Put the drawing tools away and go back to the cursor",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-cursor/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Private View",
+			"UUID": "com.bad-duck.teamscontrol.ppt-private-view",
+			"Icon": "imgs/actions/ppt-private-view/icon",
+			"Tooltip": "Let attendees move through the deck on their own, or stop them",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-private-view/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Presenter View",
+			"UUID": "com.bad-duck.teamscontrol.ppt-hide-presenter-view",
+			"Icon": "imgs/actions/ppt-hide-presenter-view/icon",
+			"Tooltip": "Show or hide your notes and thumbnails. Only affects your own screen.",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-hide-presenter-view/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Present Latest",
+			"UUID": "com.bad-duck.teamscontrol.ppt-refresh",
+			"Icon": "imgs/actions/ppt-refresh/icon",
+			"Tooltip": "Reload the deck to present the latest saved version",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-refresh/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Copy Link",
+			"UUID": "com.bad-duck.teamscontrol.ppt-copy-link",
+			"Icon": "imgs/actions/ppt-copy-link/icon",
+			"Tooltip": "Copy a link to the deck you are presenting",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-copy-link/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Layout Content Only",
+			"UUID": "com.bad-duck.teamscontrol.ppt-layout-content",
+			"Icon": "imgs/actions/ppt-layout-content/icon",
+			"Tooltip": "Show the slides on their own",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-layout-content/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Layout Cameo",
+			"UUID": "com.bad-duck.teamscontrol.ppt-layout-cameo",
+			"Icon": "imgs/actions/ppt-layout-cameo/icon",
+			"Tooltip": "Place your camera feed onto the slide. Needs your camera on.",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-layout-cameo/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Live: Stop Presenting",
+			"UUID": "com.bad-duck.teamscontrol.ppt-stop-presenting",
+			"Icon": "imgs/actions/ppt-stop-presenting/icon",
+			"Tooltip": "Stop sharing the deck",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt-stop.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-stop-presenting/key",
 					"TitleAlignment": "bottom"
 				}
 			]

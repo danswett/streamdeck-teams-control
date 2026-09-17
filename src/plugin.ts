@@ -15,7 +15,34 @@ import {
 	ReactWowAction,
 	ShareAction
 } from "./actions/controls";
+import {
+	PptCopilotAction,
+	PptCopyLinkAction,
+	PptCursorAction,
+	PptEraserAction,
+	PptGridAction,
+	PptHidePresenterViewAction,
+	PptHighContrastAction,
+	PptHighlighterAction,
+	PptLaserAction,
+	PptLayoutCameoAction,
+	PptLayoutContentAction,
+	PptNextAction,
+	PptPenAction,
+	PptPopoutAction,
+	PptPrevAction,
+	PptPrivateViewAction,
+	PptRefreshAction,
+	PptStatusAction,
+	PptStopPresentingAction,
+	PptSyncAction,
+	PptTakeControlAction,
+	PptTranslateAction,
+	PptZoomInAction,
+	PptZoomOutAction
+} from "./actions/powerpoint";
 import { bridge } from "./bridge";
+import { profileSwitcher } from "./profiles";
 
 streamDeck.logger.setLevel("info");
 
@@ -33,6 +60,34 @@ streamDeck.actions.registerAction(new ChatAction());
 streamDeck.actions.registerAction(new PeopleAction());
 streamDeck.actions.registerAction(new LeaveAction());
 
+// PowerPoint Live. These dim themselves whenever no deck is being presented.
+streamDeck.actions.registerAction(new PptPrevAction());
+streamDeck.actions.registerAction(new PptNextAction());
+streamDeck.actions.registerAction(new PptStatusAction());
+streamDeck.actions.registerAction(new PptSyncAction());
+streamDeck.actions.registerAction(new PptGridAction());
+streamDeck.actions.registerAction(new PptZoomInAction());
+streamDeck.actions.registerAction(new PptZoomOutAction());
+streamDeck.actions.registerAction(new PptHighContrastAction());
+streamDeck.actions.registerAction(new PptTranslateAction());
+streamDeck.actions.registerAction(new PptTakeControlAction());
+streamDeck.actions.registerAction(new PptPopoutAction());
+streamDeck.actions.registerAction(new PptCopilotAction());
+
+// PowerPoint Live, presenting. Unavailable unless you are the one sharing.
+streamDeck.actions.registerAction(new PptCursorAction());
+streamDeck.actions.registerAction(new PptLaserAction());
+streamDeck.actions.registerAction(new PptPenAction());
+streamDeck.actions.registerAction(new PptHighlighterAction());
+streamDeck.actions.registerAction(new PptEraserAction());
+streamDeck.actions.registerAction(new PptPrivateViewAction());
+streamDeck.actions.registerAction(new PptHidePresenterViewAction());
+streamDeck.actions.registerAction(new PptRefreshAction());
+streamDeck.actions.registerAction(new PptCopyLinkAction());
+streamDeck.actions.registerAction(new PptLayoutContentAction());
+streamDeck.actions.registerAction(new PptLayoutCameoAction());
+streamDeck.actions.registerAction(new PptStopPresentingAction());
+
 /**
  * Diagnostics hook. The property inspector can ask the sidecar to dump a Teams
  * flyout into the plugin log, which is how the selector map gets re-derived if
@@ -46,6 +101,7 @@ streamDeck.ui.onSendToPlugin((ev) => {
 });
 
 bridge.start();
+profileSwitcher.start();
 
 // Connect last, once every action is registered.
 await streamDeck.connect();

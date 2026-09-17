@@ -42,6 +42,8 @@ carry the requirements and the differentiator rather than a preamble.
 ```
 Control Microsoft Teams meetings from your Stream Deck: mute, camera, raise hand, the five reactions, background blur, screen share, chat, people and leave. Every key shows the real state of the meeting, so a muted mic looks muted before you press it.
 
+Full PowerPoint Live control too. Watching a deck? Move through slides at your own pace, jump back in sync with the presenter, open grid view, zoom, or translate the slides into 20 languages — all without touching anyone else's view. Presenting? Slide navigation, laser pointer, pen, highlighter and eraser, presenter view, private view, layout and stop sharing, with a live slide counter on the key. Keys follow your role, so taking control mid-meeting re-lights the deck for presenting.
+
 Teams does not need to be in focus and is never pulled to the front, so you can keep working while you mute, react or raise your hand. No keystrokes are sent, so nothing leaks into the window you are actually typing in, and no global hotkeys are taken.
 
 Keys dim when no meeting is running, so there is nothing to press by mistake, and light up the moment a call starts.
@@ -49,14 +51,15 @@ Keys dim when no meeting is running, so there is nothing to press by mistake, an
 Requires Windows 10 or later, Stream Deck 7.1 or later, and the Microsoft Teams desktop app. Windows only — macOS is not supported. Not affiliated with or endorsed by Microsoft.
 ```
 
-808 characters, within the 1,500 limit and above the 250 minimum. The opening
+1,294 characters, within the 1,500 limit and above the 250 minimum. The opening
 two sentences run to 252 characters, so the search-engine snippet reads as
 complete sentences rather than breaking mid-clause.
 
 ## Tags
 
 `teams`, `microsoft teams`, `meetings`, `mute`, `camera`, `video call`,
-`conferencing`, `work from home`, `productivity`, `windows`
+`conferencing`, `work from home`, `productivity`, `windows`, `powerpoint`,
+`presentation`, `slides`
 
 ## Identity
 

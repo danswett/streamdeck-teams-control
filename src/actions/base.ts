@@ -1,6 +1,7 @@
 import {
 	type KeyAction,
 	type KeyDownEvent,
+	type KeyUpEvent,
 	SingletonAction,
 	type WillAppearEvent,
 	type WillDisappearEvent
@@ -12,6 +13,11 @@ import { bridge, type TeamsState } from "../bridge";
 import { toDataUri } from "../icons";
 
 const logger = streamDeck.logger.createScope("Action");
+
+/** True when Teams is in a meeting and the control is present and enabled. */
+export function usable(state: TeamsState, key: string): boolean {
+	return state.inMeeting && (state.available[key] ?? false);
+}
 
 /**
  * Shared behaviour for every Teams key.
@@ -31,6 +37,15 @@ export abstract class TeamsAction<T extends JsonObject = JsonObject> extends Sin
 
 	/** Sidecar control key this action presses, or undefined if it never presses one. */
 	protected abstract targetFor(settings: T): string | undefined;
+
+	/**
+	 * Value substituted into the control's selector, for controls that stand in
+	 * for a whole menu — the slide-translation languages are one control with a
+	 * different argument per key.
+	 */
+	protected argFor(_settings: T): string | undefined {
+		return undefined;
+	}
 
 	/** Produces the SVG for the current Teams state. */
 	protected abstract draw(state: TeamsState): string;
@@ -92,7 +107,7 @@ export abstract class TeamsAction<T extends JsonObject = JsonObject> extends Sin
 		const target = this.targetFor(ev.payload.settings);
 		if (!target) return;
 
-		const result = await bridge.invoke(target);
+		const result = await bridge.invoke(target, this.argFor(ev.payload.settings));
 		if (!result.ok) {
 			logger.warn(`invoke(${target}) failed: ${result.error ?? "unknown"}`);
 			await ev.action.showAlert();
@@ -120,6 +135,64 @@ export abstract class TeamsAction<T extends JsonObject = JsonObject> extends Sin
 		} catch (err) {
 			this.#painted.delete(action.id);
 			logger.debug(`setImage failed: ${String(err)}`);
+		}
+	}
+}
+
+export type HoldSettings = {
+	requireHold?: boolean;
+};
+
+const HOLD_MS = 700;
+
+/**
+ * A key whose action cannot be undone, guarded by an optional press-and-hold.
+ *
+ * Leaving a meeting and stopping a presentation are both one-way doors that sit
+ * next to keys pressed constantly, so both offer the same guard. Without it
+ * enabled the key fires immediately.
+ */
+export abstract class GuardedAction<
+	T extends HoldSettings & JsonObject = HoldSettings & JsonObject
+> extends TeamsAction<T> {
+	#holds = new Map<string, NodeJS.Timeout>();
+
+	override async onKeyDown(ev: KeyDownEvent<T>): Promise<void> {
+		if (!ev.payload.settings.requireHold) {
+			await super.onKeyDown(ev);
+			return;
+		}
+
+		const id = ev.action.id;
+		this.#clear(id);
+		this.#holds.set(
+			id,
+			setTimeout(() => {
+				this.#holds.delete(id);
+				void super.onKeyDown(ev);
+			}, HOLD_MS)
+		);
+	}
+
+	override async onKeyUp(ev: KeyUpEvent<T>): Promise<void> {
+		if (!ev.payload.settings.requireHold) return;
+		if (this.#holds.has(ev.action.id)) {
+			// Released before the hold completed: cancel and tell the user.
+			this.#clear(ev.action.id);
+			await ev.action.showAlert();
+		}
+	}
+
+	override onWillDisappear(ev: WillDisappearEvent<T>): void {
+		this.#clear(ev.action.id);
+		super.onWillDisappear(ev);
+	}
+
+	#clear(id: string): void {
+		const t = this.#holds.get(id);
+		if (t) {
+			clearTimeout(t);
+			this.#holds.delete(id);
 		}
 	}
 }

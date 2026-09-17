@@ -16,8 +16,34 @@ public sealed class ControlSpec
 {
     public string AutomationId { get; set; } = "";
     public string? Menu { get; set; }
+
+    /// <summary>
+    /// Trigger for a nested menu inside <see cref="Menu"/>, opened before the
+    /// item is looked for. PowerPoint Live's slide translation lives two levels
+    /// down — "Change view" then "Translate slides" — which no meeting-toolbar
+    /// control needed.
+    /// </summary>
+    public string? Submenu { get; set; }
+
     public string? MenuItemAutomationId { get; set; }
+
+    /// <summary>
+    /// Id the same menu item takes in its opposite state, for entries Teams
+    /// swaps rather than checks. "Hide presenter view" is replaced outright by
+    /// "Show presenter view", so a key that only knew one id would work once
+    /// and then fail.
+    /// </summary>
+    public string? MenuItemToggleAutomationId { get; set; }
+
     public string? MenuItemName { get; set; }
+
+    /// <summary>
+    /// Restricts a control to one PowerPoint Live role, "presenter" or
+    /// "attendee". "Take control" only exists for an attendee and the
+    /// annotation tools only for a presenter, so a key for the wrong role is
+    /// reported unavailable rather than left looking live.
+    /// </summary>
+    public string? RequiresRole { get; set; }
     /// <summary>
     /// Item to click when the primary menu item is already checked. Background
     /// effects are a radio group rather than a toggle: clicking "Standard blur"
@@ -27,6 +53,14 @@ public sealed class ControlSpec
     public string? MenuItemOffName { get; set; }
     public string? ActivePattern { get; set; }
     public string? InactivePattern { get; set; }
+
+    /// <summary>
+    /// Reads state from the element's UI Automation selection instead of its
+    /// name. The PowerPoint Live drawing tools are a single-select list, so
+    /// "which tool is active" is exposed properly — and, unlike a name pattern,
+    /// locale-independently.
+    /// </summary>
+    public bool StateFromSelection { get; set; }
 
     private Regex? _active;
     private Regex? _inactive;
@@ -84,7 +118,81 @@ public sealed class SelectorConfig
     /// </summary>
     public string FullToolbarAutomationId { get; set; } = "callingButtons-showMoreBtn";
 
+    /// <summary>
+    /// How to recognise a PowerPoint Live presentation and read what it is
+    /// showing. Separate from <see cref="Controls"/> because this is context
+    /// rather than something that can be pressed.
+    /// </summary>
+    public PowerPointLiveSpec PowerPointLive { get; set; } = new();
+
     public Dictionary<string, ControlSpec> Controls { get; set; } = new();
+}
+
+/// <summary>
+/// Locates the PowerPoint Live surface inside a meeting window and reads the
+/// context the keys need: which role the user has, which slide is showing, and
+/// which deck is being presented.
+///
+/// PowerPoint Live renders as an embedded document rather than part of the
+/// meeting toolbar, so none of the meeting-control selectors reach it.
+/// </summary>
+public sealed class PowerPointLiveSpec
+{
+    /// <summary>Root of the embedded slide-show app; its presence is the signal.</summary>
+    public string RootAutomationId { get; set; } = "ppt-previewer-root";
+
+    /// <summary>Toolbar holding slide navigation and the view options.</summary>
+    public string ToolbarAutomationId { get; set; } = "slideShowToolbarId";
+
+    /// <summary>Carries the current slide in its accessible name.</summary>
+    public string SlideContainerAutomationId { get; set; } = "slideshow-app-container";
+
+    /// <summary>
+    /// The role is published as a CSS class on the root rather than as an
+    /// accessible property, so it is matched out of the class name. This is
+    /// locale-independent.
+    /// </summary>
+    public string PresenterClassPattern { get; set; } = @"slideshow-app-presenter-role";
+    public string AttendeeClassPattern { get; set; } = @"slideshow-app-attendee-role";
+
+    /// <summary>Matches the "3 of 19" counter in the toolbar. Group 1 is the slide, group 2 the total.</summary>
+    public string SlidePositionPattern { get; set; } = @"^\s*(\d+)\s*(?:of|/)\s*(\d+)\s*$";
+
+    /// <summary>Strips Teams' wrapper off the document title to leave the file name.</summary>
+    public string DeckTitlePattern { get; set; } = @"^\s*SlideShow\s*[-–]\s*(.+?)\s*$";
+
+    private Regex? _presenter;
+    private Regex? _attendee;
+    private Regex? _position;
+    private Regex? _deck;
+
+    public Regex? PresenterRegex => _presenter ??= Compile(PresenterClassPattern);
+    public Regex? AttendeeRegex => _attendee ??= Compile(AttendeeClassPattern);
+    public Regex? SlidePositionRegex => _position ??= Compile(SlidePositionPattern);
+    public Regex? DeckTitleRegex => _deck ??= Compile(DeckTitlePattern);
+
+    private static Regex? Compile(string? p) =>
+        string.IsNullOrWhiteSpace(p)
+            ? null
+            : new Regex(p, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, ControlSpec.MatchTimeout);
+
+    /// <summary>Compiles every pattern up front, matching <see cref="ControlSpec.Validate"/>.</summary>
+    public string? Validate()
+    {
+        foreach (var (label, pattern) in new[]
+                 {
+                     ("presenterClassPattern", PresenterClassPattern),
+                     ("attendeeClassPattern", AttendeeClassPattern),
+                     ("slidePositionPattern", SlidePositionPattern),
+                     ("deckTitlePattern", DeckTitlePattern)
+                 })
+        {
+            if (string.IsNullOrWhiteSpace(pattern)) continue;
+            try { _ = new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, ControlSpec.MatchTimeout); }
+            catch (ArgumentException ex) { return $"{label}: {ex.Message}"; }
+        }
+        return null;
+    }
 }
 
 /// <summary>
@@ -160,6 +268,13 @@ public sealed class TeamsClient : IDisposable
 
     /// <summary>Last known control states, carried forward across transient tree changes.</summary>
     private readonly Dictionary<string, bool> _lastStates = new();
+
+    /// <summary>
+    /// Last known availability, carried forward while a flyout hides the
+    /// toolbar. Without it every key would be reported available during a
+    /// flyout, including keys whose control is not present at all.
+    /// </summary>
+    private readonly Dictionary<string, bool> _lastAvailable = new();
 
     /// <summary>When a meeting marker was last seen, used to ride out flyouts.</summary>
     private long _markersSeenAt;
@@ -605,7 +720,8 @@ public sealed class TeamsClient : IDisposable
         _cache[key] = el;
 
         // The label is the state, so a change to it is the event worth waking for.
-        if (spec.ActiveRegex is not null || spec.InactiveRegex is not null) WatchControl(el);
+        if (spec.ActiveRegex is not null || spec.InactiveRegex is not null || spec.StateFromSelection)
+            WatchControl(el);
         return el;
     }
 
@@ -631,6 +747,17 @@ public sealed class TeamsClient : IDisposable
     /// </summary>
     private static bool? ReadState(AutomationElement el, ControlSpec spec)
     {
+        if (spec.StateFromSelection)
+        {
+            try
+            {
+                var sel = el.Patterns.SelectionItem.PatternOrDefault;
+                if (sel is not null) return sel.IsSelected.ValueOrDefault;
+            }
+            catch { }
+            return null;
+        }
+
         var name = NameOf(el);
         if (name.Length == 0) return null;
 
@@ -655,6 +782,135 @@ public sealed class TeamsClient : IDisposable
         }
     }
 
+    /// <summary>
+    /// Reads the PowerPoint Live surface, if one is being presented.
+    ///
+    /// Returns the role ("presenter" or "attendee") or null when no
+    /// presentation is up. Slide position and deck name are written into
+    /// <paramref name="context"/> so keys can label themselves.
+    ///
+    /// Searched across every Teams window rather than just the meeting one,
+    /// because "Pop out" moves the shared content into a window of its own.
+    /// </summary>
+    private string? ReadPowerPointLive(AutomationElement win, Dictionary<string, string> context)
+    {
+        var ppt = _config.PowerPointLive;
+
+        var root = ResolveCached($"ppt:{ppt.RootAutomationId}", () =>
+        {
+            foreach (var scope in SearchScopes(win))
+            {
+                var found = FindById(scope, ppt.RootAutomationId);
+                if (found is not null) return found;
+            }
+            return null;
+        });
+
+        if (root is null) return null;
+
+        string className;
+        try { className = root.Properties.ClassName.ValueOrDefault ?? ""; }
+        catch { return null; }
+
+        // Teams keeps the root mounted with an empty class between decks, so the
+        // role marker — not the element — is what proves a live presentation.
+        var role = SafeMatch(ppt.PresenterRegex, className) ? "presenter"
+            : SafeMatch(ppt.AttendeeRegex, className) ? "attendee"
+            : null;
+        if (role is null) return null;
+
+        context["ppt.role"] = role;
+
+        // "Current slide: Slide 3" — the authoritative position, and the one
+        // that keeps working when the toolbar auto-hides.
+        var container = ResolveCached($"ppt:{ppt.SlideContainerAutomationId}",
+            () => FindById(root, ppt.SlideContainerAutomationId));
+        if (container is not null)
+        {
+            var digits = FirstNumber(NameOf(container));
+            if (digits is not null) context["ppt.slide"] = digits;
+        }
+
+        // The toolbar's "3 of 19" counter is the only source for the deck length.
+        var toolbar = ResolveCached($"ppt:{ppt.ToolbarAutomationId}",
+            () => FindById(root, ppt.ToolbarAutomationId));
+        if (toolbar is not null && ppt.SlidePositionRegex is not null)
+        {
+            try
+            {
+                foreach (var t in toolbar.FindAllDescendants(cf => cf.ByControlType(ControlType.Text)))
+                {
+                    Match m;
+                    try { m = ppt.SlidePositionRegex.Match(NameOf(t)); }
+                    catch (RegexMatchTimeoutException) { continue; }
+                    if (!m.Success) continue;
+
+                    context["ppt.slide"] = m.Groups[1].Value;
+                    context["ppt.slides"] = m.Groups[2].Value;
+                    break;
+                }
+            }
+            catch { }
+        }
+
+        var deck = DeckNameFrom(root, ppt);
+        if (deck is not null) context["ppt.deck"] = deck;
+
+        return role;
+    }
+
+    /// <summary>
+    /// The deck's file name, taken from the embedded document's title
+    /// ("SlideShow - deck.pptx").
+    /// </summary>
+    private static string? DeckNameFrom(AutomationElement root, PowerPointLiveSpec ppt)
+    {
+        try
+        {
+            var doc = SafeParent(root);
+            for (var i = 0; i < 3 && doc is not null; i++)
+            {
+                var name = NameOf(doc);
+                if (ppt.DeckTitleRegex is not null && name.Length > 0)
+                {
+                    Match m;
+                    try { m = ppt.DeckTitleRegex.Match(name); }
+                    catch (RegexMatchTimeoutException) { return null; }
+                    if (m.Success) return m.Groups[1].Value;
+                }
+                doc = SafeParent(doc);
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    /// <summary>First run of digits in a string, e.g. "Current slide: Slide 3" -> "3".</summary>
+    private static string? FirstNumber(string value)
+    {
+        var start = -1;
+        for (var i = 0; i < value.Length; i++)
+        {
+            if (!char.IsAsciiDigit(value[i])) continue;
+            start = i;
+            var end = i;
+            while (end + 1 < value.Length && char.IsAsciiDigit(value[end + 1])) end++;
+            return value[start..(end + 1)];
+        }
+        return null;
+    }
+
+    /// <summary>Caches a looked-up element under a key, re-finding it once it dies.</summary>
+    private AutomationElement? ResolveCached(string key, Func<AutomationElement?> find)
+    {
+        if (_cache.TryGetValue(key, out var cached) && IsAlive(cached)) return cached;
+        _cache.Remove(key);
+
+        var el = find();
+        if (el is not null) _cache[key] = el;
+        return el;
+    }
+
     public MeetingSnapshot GetSnapshot()
     {
         var snap = new MeetingSnapshot
@@ -668,11 +924,21 @@ public sealed class TeamsClient : IDisposable
 
         snap.WindowTitle = NameOf(win);
 
+        // Read before the toolbar check: PowerPoint Live lives outside the
+        // meeting toolbar, so it stays readable while a flyout covers it.
+        var role = ReadPowerPointLive(win, snap.Context);
+        snap.States["ppt-live"] = role is not null;
+        snap.States["ppt-presenting"] = role == "presenter";
+
         if (!IsToolbarVisible(win))
         {
             // A flyout is covering the toolbar. Report the meeting as live with
-            // the last known state rather than blanking every key.
-            foreach (var key in _config.Controls.Keys) snap.Available[key] = true;
+            // the last known state rather than blanking every key. Availability
+            // is carried forward rather than forced true, so a key for a control
+            // that genuinely is not there — a PowerPoint Live key with no deck
+            // up — does not flicker to life whenever a menu opens.
+            foreach (var key in _config.Controls.Keys)
+                snap.Available[key] = !_lastAvailable.TryGetValue(key, out var was) || was;
             foreach (var (k, v) in _lastStates) snap.States[k] = v;
             return snap;
         }
@@ -684,6 +950,17 @@ public sealed class TeamsClient : IDisposable
 
         foreach (var (key, spec) in _config.Controls)
         {
+            // A control scoped to a PowerPoint Live role is only offered in that
+            // role: "Take control" exists for an attendee, the presenter tools
+            // for a presenter.
+            if (!string.IsNullOrEmpty(spec.RequiresRole) &&
+                !string.Equals(spec.RequiresRole, role, StringComparison.OrdinalIgnoreCase))
+            {
+                snap.Available[key] = false;
+                _lastAvailable[key] = false;
+                continue;
+            }
+
             // Menu-nested controls (reactions, hand, blur) are not readable
             // without opening their flyout, so only report availability.
             if (!string.IsNullOrEmpty(spec.Menu))
@@ -695,6 +972,7 @@ public sealed class TeamsClient : IDisposable
                     menuAvailable[spec.Menu!] = menuOk;
                 }
                 snap.Available[key] = menuOk;
+                _lastAvailable[key] = menuOk;
                 continue;
             }
 
@@ -702,11 +980,15 @@ public sealed class TeamsClient : IDisposable
             if (el is null)
             {
                 snap.Available[key] = false;
+                _lastAvailable[key] = false;
                 if (_lastStates.TryGetValue(key, out var carried)) snap.States[key] = carried;
                 continue;
             }
 
-            snap.Available[key] = SafeEnabled(el);
+            var available = SafeEnabled(el);
+            snap.Available[key] = available;
+            _lastAvailable[key] = available;
+
             var st = ReadState(el, spec);
             if (st.HasValue)
             {
@@ -1062,8 +1344,12 @@ public sealed class TeamsClient : IDisposable
 
     /// <summary>
     /// Finds an element inside a just-opened flyout, polling until it appears.
+    ///
+    /// Several ids may be given for one item: Teams swaps some entries for
+    /// their opposite rather than checking them, so only one of the pair is
+    /// ever present.
     /// </summary>
-    private AutomationElement? FindInPopup(AutomationElement win, string? autoId, Regex? nameRx, int timeoutMs)
+    private AutomationElement? FindInPopup(AutomationElement win, string?[] autoIds, Regex? nameRx, int timeoutMs)
     {
         var deadline = Environment.TickCount64 + timeoutMs;
         var scopes = SearchScopes(win);
@@ -1074,8 +1360,9 @@ public sealed class TeamsClient : IDisposable
             {
                 try
                 {
-                    if (!string.IsNullOrEmpty(autoId))
+                    foreach (var autoId in autoIds)
                     {
+                        if (string.IsNullOrEmpty(autoId)) continue;
                         var byId = FindById(scope, autoId!);
                         if (byId is not null && SafeEnabled(byId)) return byId;
                     }
@@ -1103,7 +1390,7 @@ public sealed class TeamsClient : IDisposable
         }
     }
 
-    public (bool ok, string? error) Invoke(string target)
+    public (bool ok, string? error) Invoke(string target, string? arg = null)
     {
         if (!_config.Controls.TryGetValue(target, out var spec))
             return (false, $"unknown target '{target}'");
@@ -1113,7 +1400,7 @@ public sealed class TeamsClient : IDisposable
         var previousFocus = _restoreFocus ? FocusGuard.Capture() : IntPtr.Zero;
         try
         {
-            return InvokeCore(target, spec);
+            return InvokeCore(target, spec, arg);
         }
         finally
         {
@@ -1121,10 +1408,49 @@ public sealed class TeamsClient : IDisposable
         }
     }
 
-    private (bool ok, string? error) InvokeCore(string target, ControlSpec spec)
+    /// <summary>
+    /// Substitutes a key's configured argument into a selector.
+    ///
+    /// One control can then cover a whole menu of variants — every slide
+    /// translation language is the same flyout walk with a different item id —
+    /// instead of needing an entry, and an action, per language.
+    /// </summary>
+    private static string? Fill(string? template, string? arg, bool forRegex)
+    {
+        if (string.IsNullOrEmpty(template) || !template!.Contains("{arg}", StringComparison.Ordinal))
+            return template;
+
+        var value = arg ?? "";
+        return template.Replace("{arg}", forRegex ? Regex.Escape(value) : value, StringComparison.Ordinal);
+    }
+
+    private (bool ok, string? error) InvokeCore(string target, ControlSpec spec, string? arg = null)
     {
         var win = ResolveMeetingWindow();
         if (win is null) return (false, "not in a meeting");
+
+        var itemId = Fill(spec.MenuItemAutomationId, arg, forRegex: false);
+        var itemToggleId = Fill(spec.MenuItemToggleAutomationId, arg, forRegex: false);
+        var itemIds = new[] { itemId, itemToggleId };
+        var itemNamePattern = Fill(spec.MenuItemName, arg, forRegex: true);
+        Regex? itemNameRx;
+        if (ReferenceEquals(itemNamePattern, spec.MenuItemName))
+        {
+            itemNameRx = spec.MenuItemRegex;
+        }
+        else
+        {
+            try
+            {
+                itemNameRx = string.IsNullOrWhiteSpace(itemNamePattern)
+                    ? null
+                    : new Regex(itemNamePattern!, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, ControlSpec.MatchTimeout);
+            }
+            catch (ArgumentException ex) { return (false, $"bad item pattern for '{target}': {ex.Message}"); }
+        }
+
+        if (!string.IsNullOrEmpty(spec.MenuItemAutomationId) && string.IsNullOrEmpty(itemId))
+            return (false, $"'{target}' needs a value but none was set");
 
         // A flyout left open by a previous action, or by the user, hides the
         // toolbar. Clear it first so a key press is never a no-op.
@@ -1153,9 +1479,19 @@ public sealed class TeamsClient : IDisposable
         AutomationElement? item = null;
         try
         {
+            // A nested menu has to be opened before its items exist. Opened the
+            // same way as the parent, so it also avoids activating the window.
+            if (!string.IsNullOrEmpty(spec.Submenu))
+            {
+                var sub = FindInPopup(win, new[] { spec.Submenu }, null, 2000);
+                if (sub is null) return (false, $"submenu '{spec.Submenu}' not found");
+                if (!ExpandMenu(sub)) return (false, $"could not open submenu '{spec.Submenu}'");
+                Thread.Sleep(250);
+            }
+
             // Background-effect menus are large and populate lazily, so allow
             // a little longer than a simple reaction flyout.
-            item = FindInPopup(win, spec.MenuItemAutomationId, spec.MenuItemRegex, 2500);
+            item = FindInPopup(win, itemIds, itemNameRx, 2500);
 
             // If the toolbar is still showing, the menu never opened. Teams
             // swallows exactly one click on the trigger after a previous
@@ -1167,7 +1503,12 @@ public sealed class TeamsClient : IDisposable
                 Thread.Sleep(200);
                 if (ExpandMenu(host))
                 {
-                    item = FindInPopup(win, spec.MenuItemAutomationId, spec.MenuItemRegex, 2000);
+                    if (!string.IsNullOrEmpty(spec.Submenu))
+                    {
+                        var sub = FindInPopup(win, new[] { spec.Submenu }, null, 1500);
+                        if (sub is not null) { ExpandMenu(sub); Thread.Sleep(250); }
+                    }
+                    item = FindInPopup(win, itemIds, itemNameRx, 2000);
                 }
             }
 
@@ -1182,7 +1523,7 @@ public sealed class TeamsClient : IDisposable
             // Radio-style menus need the "off" entry to undo the selection.
             if (spec.MenuItemOffRegex is not null && IsChecked(item) == true)
             {
-                var offItem = FindInPopup(win, null, spec.MenuItemOffRegex, 800);
+                var offItem = FindInPopup(win, Array.Empty<string?>(), spec.MenuItemOffRegex, 800);
                 if (offItem is not null) item = offItem;
             }
 
@@ -1311,6 +1652,13 @@ public sealed class MeetingSnapshot
     public Dictionary<string, bool> States { get; set; } = new();
     public Dictionary<string, bool> Available { get; set; } = new();
 
+    /// <summary>
+    /// Free-form context that is not a control: the PowerPoint Live role, slide
+    /// position and deck name. Kept apart from States because these are strings
+    /// and a key renders them rather than toggling on them.
+    /// </summary>
+    public Dictionary<string, string> Context { get; set; } = new();
+
     public string Fingerprint()
     {
         var sb = new System.Text.StringBuilder();
@@ -1318,6 +1666,11 @@ public sealed class MeetingSnapshot
         foreach (var k in States.Keys.Order()) sb.Append(k).Append('=').Append(States[k]).Append(';');
         sb.Append('|');
         foreach (var k in Available.Keys.Order()) sb.Append(k).Append('=').Append(Available[k]).Append(';');
+        sb.Append('|');
+        // Advancing a slide changes nothing else, so without this the state
+        // message would be suppressed as unchanged and a slide-counter key
+        // would never update.
+        foreach (var k in Context.Keys.Order()) sb.Append(k).Append('=').Append(Context[k]).Append(';');
         return sb.ToString();
     }
 }

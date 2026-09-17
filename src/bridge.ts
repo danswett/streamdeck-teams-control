@@ -184,9 +184,9 @@ class Bridge {
 	}
 
 	/** Presses a Teams control. Resolves with the outcome so keys can show feedback. */
-	invoke(target: string): Promise<{ ok: boolean; error?: string }> {
+	invoke(target: string, arg?: string): Promise<{ ok: boolean; error?: string }> {
 		const id = this.#nextId++;
-		if (!this.#send({ id, cmd: "invoke", target })) {
+		if (!this.#send({ id, cmd: "invoke", target, arg: arg ?? "" })) {
 			return Promise.resolve({ ok: false, error: "sidecar not running" });
 		}
 

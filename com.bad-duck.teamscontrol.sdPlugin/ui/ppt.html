@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+	<head lang="en">
+		<meta charset="utf-8" />
+		<script src="sdpi-components.js"></script>
+	</head>
+	<body>
+		<sdpi-item label="Profile">
+			<sdpi-checkbox
+				global
+				setting="pptAutoProfile"
+				label="Switch profile during PowerPoint Live"
+			></sdpi-checkbox>
+		</sdpi-item>
+		<p style="color: #999; font-size: 11px; padding: 0 8px">
+			Switches to the bundled "PowerPoint Live" profile as soon as a deck starts
+			being presented, and back to whatever you were on when it stops. Applies to
+			15-key Stream Decks. This is a shared setting — every PowerPoint Live key
+			uses it.
+		</p>
+
+		<details>
+			<summary style="cursor: pointer; margin: 8px 0; color: #999">Diagnostics</summary>
+			<sdpi-item label="Map Teams UI">
+				<button id="discover-toolbar">Dump toolbar</button>
+			</sdpi-item>
+			<sdpi-item label="Slide view menu">
+				<button id="discover-changeview">Dump slide view menu</button>
+			</sdpi-item>
+			<p style="color: #999; font-size: 11px; padding: 0 8px">
+				Join a meeting where a deck is being presented first. Results are
+				written to the plugin log.
+			</p>
+		</details>
+
+		<script>
+			const { streamDeckClient } = SDPIComponents;
+			const dump = (id, menu) =>
+				document.getElementById(id).addEventListener("click", () => {
+					streamDeckClient.send("sendToPlugin", { command: "discover", menu });
+				});
+
+			dump("discover-toolbar", "");
+			dump("discover-changeview", "toolbarChangeViewButton");
+		</script>
+	</body>
+</html>

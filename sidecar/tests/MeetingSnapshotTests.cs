@@ -16,7 +16,8 @@ public class MeetingSnapshotTests
         InMeeting = true,
         WindowTitle = "Meeting with Someone | Microsoft Teams",
         States = new() { ["mute"] = true, ["camera"] = false },
-        Available = new() { ["mute"] = true, ["camera"] = true }
+        Available = new() { ["mute"] = true, ["camera"] = true },
+        Context = new() { ["ppt.role"] = "attendee", ["ppt.slide"] = "3", ["ppt.slides"] = "19" }
     };
 
     [Fact]
@@ -94,6 +95,45 @@ public class MeetingSnapshotTests
         var a = Sample();
         var b = Sample();
         b.WindowTitle = "Meeting with Someone Else | Microsoft Teams";
+
+        Assert.Equal(a.Fingerprint(), b.Fingerprint());
+    }
+
+    [Fact]
+    public void Advancing_a_slide_changes_the_fingerprint()
+    {
+        // Nothing else moves when the presenter advances, so without the context
+        // in the fingerprint the state message would be suppressed as unchanged
+        // and the slide counter would never update.
+        var a = Sample();
+        var b = Sample();
+        b.Context["ppt.slide"] = "4";
+
+        Assert.NotEqual(a.Fingerprint(), b.Fingerprint());
+    }
+
+    [Fact]
+    public void Starting_a_presentation_changes_the_fingerprint()
+    {
+        var a = new MeetingSnapshot { TeamsRunning = true, InMeeting = true };
+        var b = new MeetingSnapshot { TeamsRunning = true, InMeeting = true };
+        b.States["ppt-live"] = true;
+        b.Context["ppt.role"] = "presenter";
+
+        Assert.NotEqual(a.Fingerprint(), b.Fingerprint());
+    }
+
+    [Fact]
+    public void Context_insertion_order_does_not_change_the_fingerprint()
+    {
+        var a = new MeetingSnapshot
+        {
+            Context = new() { ["ppt.slide"] = "3", ["ppt.role"] = "attendee" }
+        };
+        var b = new MeetingSnapshot
+        {
+            Context = new() { ["ppt.role"] = "attendee", ["ppt.slide"] = "3" }
+        };
 
         Assert.Equal(a.Fingerprint(), b.Fingerprint());
     }

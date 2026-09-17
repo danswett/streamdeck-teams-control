@@ -15,12 +15,50 @@
 		"button's name describes the action it performs, so it is the inverse of the",
 		"current state: 'Unmute mic' means you are currently muted.",
 		"",
-		"Captured from Teams 26255.500.5120.7530 on 2026-09-14. After a Teams update,",
-		"use the Diagnostics panel in any action's property inspector to dump the live",
-		"UI tree to the plugin log, then correct the ids below and restart the plugin."
+		"'menu' opens a flyout before looking for the item; 'submenu' opens one more",
+		"level inside it. '{arg}' in a menu item selector is replaced by the value the",
+		"key is configured with, which is how one translate control covers every",
+		"language.",
+		"",
+		"'requiresRole' limits a control to a PowerPoint Live role, 'presenter' or",
+		"'attendee', so a key for the wrong role reports itself unavailable.",
+		"",
+		"'stateFromSelection' reads state from UI Automation's selection rather than",
+		"from a label, which the drawing tools expose and which needs no translating.",
+		"",
+		"'menuItemToggleAutomationId' is the id the same entry takes in its opposite",
+		"state, for menus Teams swaps rather than checks (Hide/Show presenter view).",
+		"",
+		"NOTE: 'ppt-take-control' changes your ROLE. A successful press turns an",
+		"attendee into the presenter, so that key retires and every 'presenter' key",
+		"below becomes available. The sidecar re-reads state shortly after any press",
+		"so the keys follow the change.",
+		"",
+		"NOTE: the zoom controls are shared but not symmetric - Teams labels them",
+		"'Magnify slide only for me' for an attendee and 'Magnify slide for all' for",
+		"the presenter. Zooming while presenting changes what everyone sees.",
+		"",
+		"Captured from Teams 26255.500.5120.7530 on 2026-09-14, PowerPoint Live added",
+		"2026-09-17. After a Teams update, use the Diagnostics panel in any action's",
+		"property inspector to dump the live UI tree to the plugin log, then correct",
+		"the ids below and restart the plugin."
 	],
 	"version": 2,
 	"meetingProbeAutomationId": "microphone-button",
+	"powerPointLive": {
+		"$comment": [
+			"How a shared deck is recognised. The role is only exposed as a CSS class",
+			"on the slide-show root, so it is matched out of the class name - which",
+			"has the happy side effect of being locale-independent."
+		],
+		"rootAutomationId": "ppt-previewer-root",
+		"toolbarAutomationId": "slideShowToolbarId",
+		"slideContainerAutomationId": "slideshow-app-container",
+		"presenterClassPattern": "slideshow-app-presenter-role",
+		"attendeeClassPattern": "slideshow-app-attendee-role",
+		"slidePositionPattern": "^\\s*(\\d+)\\s*(?:of|/)\\s*(\\d+)\\s*$",
+		"deckTitlePattern": "^\\s*SlideShow\\s*[-\u2013]\\s*(.+?)\\s*$"
+	},
 	"controls": {
 		"mute": {
 			"automationId": "microphone-button",
@@ -76,6 +114,97 @@
 			"menu": "video-button-configure",
 			"menuItemName": "^\\s*standard\\s+blur\\s*$",
 			"menuItemOffName": "^\\s*no\\s+background\\s+effect\\s*$"
+		},
+
+		"ppt-prev": { "automationId": "prevSlideButton" },
+		"ppt-next": { "automationId": "nextSlideButton" },
+		"ppt-grid": { "automationId": "gridViewToolbarButton" },
+		"ppt-sync": { "automationId": "syncToPresenterToolbarButton" },
+		"ppt-copilot": { "automationId": "inkToExplainToolbarButton" },
+		"ppt-popout": { "automationId": "popout-content-button" },
+		"ppt-take-control": {
+			"automationId": "takeControlPptBtn",
+			"requiresRole": "attendee"
+		},
+
+		"ppt-zoom-in": {
+			"menu": "toolbarChangeViewButton",
+			"menuItemAutomationId": "toolbarMagnifyZoomOverflowButtonZoomInButton"
+		},
+		"ppt-zoom-out": {
+			"menu": "toolbarChangeViewButton",
+			"menuItemAutomationId": "toolbarMagnifyZoomOverflowButtonZoomOutButton"
+		},
+		"ppt-high-contrast": {
+			"menu": "toolbarChangeViewButton",
+			"menuItemAutomationId": "toolbarHighContrastOverflowButton"
+		},
+		"ppt-translate": {
+			"menu": "toolbarChangeViewButton",
+			"submenu": "toolbarTranslateSlidesOverflowButton",
+			"menuItemAutomationId": "toolbarTranslateSlidesLanguageMenuItem-{arg}",
+			"requiresRole": "attendee"
+		},
+
+		"ppt-stop-presenting": {
+			"automationId": "stopPresentingPptBtn",
+			"requiresRole": "presenter"
+		},
+		"ppt-private-view": {
+			"automationId": "toggleEnablePrivateViewingButton",
+			"requiresRole": "presenter"
+		},
+		"ppt-refresh": {
+			"automationId": "toolbarRefreshButton",
+			"requiresRole": "presenter"
+		},
+
+		"ppt-cursor": {
+			"automationId": "ink-tool-4",
+			"requiresRole": "presenter",
+			"stateFromSelection": true
+		},
+		"ppt-laser": {
+			"automationId": "ink-tool-3",
+			"requiresRole": "presenter",
+			"stateFromSelection": true
+		},
+		"ppt-pen": {
+			"automationId": "ink-tool-0",
+			"requiresRole": "presenter",
+			"stateFromSelection": true
+		},
+		"ppt-highlighter": {
+			"automationId": "ink-tool-1",
+			"requiresRole": "presenter",
+			"stateFromSelection": true
+		},
+		"ppt-eraser": {
+			"automationId": "ink-tool-2",
+			"requiresRole": "presenter",
+			"stateFromSelection": true
+		},
+
+		"ppt-copy-link": {
+			"menu": "toolbarShareButton",
+			"menuItemAutomationId": "toolbarShareButtonMenuListCopyLinkItem",
+			"requiresRole": "presenter"
+		},
+		"ppt-hide-presenter-view": {
+			"menu": "toolbarChangeViewButton",
+			"menuItemAutomationId": "toolbarPresenterUIHideOverflowButton",
+			"menuItemToggleAutomationId": "toolbarPresenterUIShowOverflowButton",
+			"requiresRole": "presenter"
+		},
+		"ppt-layout-content": {
+			"menu": "ppt-sharing-layout-toolbar",
+			"menuItemAutomationId": "pptContentOnlyButton",
+			"requiresRole": "presenter"
+		},
+		"ppt-layout-cameo": {
+			"menu": "ppt-sharing-layout-toolbar",
+			"menuItemAutomationId": "pptCameoButton",
+			"requiresRole": "presenter"
 		}
 	}
 }

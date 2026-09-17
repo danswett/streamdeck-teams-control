@@ -166,6 +166,228 @@ public class SelectorConfigTests : IDisposable
         Assert.NotEmpty(parsed!.Controls);
         foreach (var (key, spec) in parsed.Controls)
             Assert.True(spec.Validate() is null, $"{key}: {spec.Validate()}");
+
+        Assert.Null(parsed.PowerPointLive.Validate());
+    }
+
+    [Fact]
+    public void ParseConfig_reads_the_two_level_menu_fields_slide_translation_needs()
+    {
+        var cfg = Program.ParseConfig("""
+            {
+              "controls": {
+                "ppt-translate": {
+                  "menu": "toolbarChangeViewButton",
+                  "submenu": "toolbarTranslateSlidesOverflowButton",
+                  "menuItemAutomationId": "toolbarTranslateSlidesLanguageMenuItem-{arg}"
+                }
+              }
+            }
+            """);
+
+        var spec = cfg!.Controls["ppt-translate"];
+        Assert.Equal("toolbarChangeViewButton", spec.Menu);
+        Assert.Equal("toolbarTranslateSlidesOverflowButton", spec.Submenu);
+        Assert.Equal("toolbarTranslateSlidesLanguageMenuItem-{arg}", spec.MenuItemAutomationId);
+    }
+
+    [Fact]
+    public void ParseConfig_reads_the_role_a_control_is_limited_to()
+    {
+        var cfg = Program.ParseConfig("""
+            {
+              "controls": {
+                "ppt-take-control": {
+                  "automationId": "takeControlPptBtn",
+                  "requiresRole": "attendee"
+                }
+              }
+            }
+            """);
+
+        Assert.Equal("attendee", cfg!.Controls["ppt-take-control"].RequiresRole);
+    }
+
+    [Fact]
+    public void A_control_with_no_role_is_offered_in_both_roles()
+    {
+        var cfg = Program.ParseConfig("""
+            { "controls": { "ppt-next": { "automationId": "nextSlideButton" } } }
+            """);
+
+        Assert.Null(cfg!.Controls["ppt-next"].RequiresRole);
+    }
+
+    [Fact]
+    public void ParseConfig_reads_the_PowerPoint_Live_section()
+    {
+        var cfg = Program.ParseConfig("""
+            {
+              "powerPointLive": {
+                "rootAutomationId": "custom-root",
+                "presenterClassPattern": "is-presenting",
+                "slidePositionPattern": "^(\\d+) / (\\d+)$"
+              }
+            }
+            """);
+
+        Assert.Equal("custom-root", cfg!.PowerPointLive.RootAutomationId);
+        Assert.Equal("is-presenting", cfg.PowerPointLive.PresenterClassPattern);
+        Assert.Equal(@"^(\d+) / (\d+)$", cfg.PowerPointLive.SlidePositionPattern);
+
+        // Untouched fields keep the built-in value rather than blanking.
+        Assert.Equal("slideShowToolbarId", cfg.PowerPointLive.ToolbarAutomationId);
+        Assert.Equal("slideshow-app-attendee-role", cfg.PowerPointLive.AttendeeClassPattern);
+    }
+
+    [Fact]
+    public void A_config_with_no_PowerPoint_Live_section_keeps_the_defaults()
+    {
+        var path = WriteTemp("""{ "controls": {} }""");
+        var config = Program.LoadConfig(path);
+
+        Assert.Equal("ppt-previewer-root", config.PowerPointLive.RootAutomationId);
+        Assert.Null(config.PowerPointLive.Validate());
+    }
+
+    [Fact]
+    public void A_broken_PowerPoint_Live_pattern_is_rejected_and_the_default_kept()
+    {
+        var path = WriteTemp("""
+            {
+              "powerPointLive": { "slidePositionPattern": "^(\\d+" },
+              "controls": { "mute": { "automationId": "custom-mic" } }
+            }
+            """);
+
+        var config = Program.LoadConfig(path);
+
+        // The bad section is dropped whole, and the valid control beside it still lands.
+        Assert.Equal(@"^\s*(\d+)\s*(?:of|/)\s*(\d+)\s*$", config.PowerPointLive.SlidePositionPattern);
+        Assert.Equal("custom-mic", config.Controls["mute"].AutomationId);
+    }
+
+    [Fact]
+    public void PowerPointLive_Validate_names_the_field_that_is_wrong()
+    {
+        var spec = new PowerPointLiveSpec { DeckTitlePattern = "(unclosed" };
+
+        Assert.Contains("deckTitlePattern", spec.Validate());
+    }
+
+    [Fact]
+    public void The_slide_counter_pattern_reads_the_position_Teams_renders()
+    {
+        var rx = new PowerPointLiveSpec().SlidePositionRegex!;
+
+        var m = rx.Match("3 of 19");
+        Assert.True(m.Success);
+        Assert.Equal("3", m.Groups[1].Value);
+        Assert.Equal("19", m.Groups[2].Value);
+
+        // Must not match the other numbers that share the slide-show tree.
+        Assert.False(rx.IsMatch("Slide 3"));
+        Assert.False(rx.IsMatch("Elapsed time 15:18"));
+    }
+
+    [Fact]
+    public void The_deck_title_pattern_strips_the_wrapper_Teams_adds()
+    {
+        var rx = new PowerPointLiveSpec().DeckTitleRegex!;
+
+        var m = rx.Match("SlideShow - 2026_09_17_Windows+M365_PSM_Exec_Check-in_Sep.pptx");
+        Assert.True(m.Success);
+        Assert.Equal("2026_09_17_Windows+M365_PSM_Exec_Check-in_Sep.pptx", m.Groups[1].Value);
+    }
+
+    [Fact]
+    public void The_role_patterns_tell_the_two_slide_show_roles_apart()
+    {
+        var spec = new PowerPointLiveSpec();
+        const string attendee = "slideshow-app-transparent ppt-root-reflow slideshow-app-attendee-role";
+
+        Assert.True(spec.AttendeeRegex!.IsMatch(attendee));
+        Assert.False(spec.PresenterRegex!.IsMatch(attendee));
+    }
+
+    [Fact]
+    public void ParseConfig_reads_the_swapped_menu_item_id_a_one_key_toggle_needs()
+    {
+        // Teams replaces "Hide presenter view" with "Show presenter view"
+        // rather than checking it, so one key has to know both ids.
+        var cfg = Program.ParseConfig("""
+            {
+              "controls": {
+                "ppt-hide-presenter-view": {
+                  "menu": "toolbarChangeViewButton",
+                  "menuItemAutomationId": "toolbarPresenterUIHideOverflowButton",
+                  "menuItemToggleAutomationId": "toolbarPresenterUIShowOverflowButton"
+                }
+              }
+            }
+            """);
+
+        var spec = cfg!.Controls["ppt-hide-presenter-view"];
+        Assert.Equal("toolbarPresenterUIHideOverflowButton", spec.MenuItemAutomationId);
+        Assert.Equal("toolbarPresenterUIShowOverflowButton", spec.MenuItemToggleAutomationId);
+    }
+
+    [Fact]
+    public void ParseConfig_reads_selection_based_state()
+    {
+        var cfg = Program.ParseConfig("""
+            {
+              "controls": {
+                "ppt-laser": { "automationId": "ink-tool-3", "stateFromSelection": true },
+                "ppt-next": { "automationId": "nextSlideButton" }
+              }
+            }
+            """);
+
+        Assert.True(cfg!.Controls["ppt-laser"].StateFromSelection);
+        Assert.False(cfg.Controls["ppt-next"].StateFromSelection);
+    }
+
+    [Fact]
+    public void Taking_control_and_stopping_a_presentation_are_opposite_roles()
+    {
+        // Pressing "Take control" turns an attendee into the presenter, so the
+        // two keys must never be offered together - one retiring is what makes
+        // the other appear.
+        var config = Program.LoadConfig("nope");
+
+        Assert.Equal("attendee", config.Controls["ppt-take-control"].RequiresRole);
+        Assert.Equal("presenter", config.Controls["ppt-stop-presenting"].RequiresRole);
+    }
+
+    [Fact]
+    public void Every_drawing_tool_is_presenter_only_and_reads_its_own_selection()
+    {
+        var config = Program.LoadConfig("nope");
+
+        foreach (var key in new[] { "ppt-cursor", "ppt-laser", "ppt-pen", "ppt-highlighter", "ppt-eraser" })
+        {
+            var spec = config.Controls[key];
+            Assert.Equal("presenter", spec.RequiresRole);
+            Assert.True(spec.StateFromSelection, $"{key} should read state from its selection");
+            Assert.False(string.IsNullOrWhiteSpace(spec.AutomationId));
+        }
+    }
+
+    [Fact]
+    public void The_shipped_manifest_and_selectors_carry_no_byte_order_mark()
+    {
+        // Node's JSON.parse rejects a BOM outright, so a tool that rewrites
+        // either file with one would break the plugin at load with no other
+        // symptom.
+        var repo = FindRepoRoot();
+        foreach (var name in new[] { "manifest.json", "selectors.json" })
+        {
+            var path = Path.Combine(repo, "com.bad-duck.teamscontrol.sdPlugin", name);
+            var bytes = File.ReadAllBytes(path);
+            var hasBom = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
+            Assert.False(hasBom, $"{name} starts with a UTF-8 BOM");
+        }
     }
 
     private static string FindRepoRoot()

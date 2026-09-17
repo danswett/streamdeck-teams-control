@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+	<head lang="en">
+		<meta charset="utf-8" />
+		<script src="sdpi-components.js"></script>
+	</head>
+	<body>
+		<sdpi-item label="Language">
+			<sdpi-select setting="language" default="Original">
+				<option value="Original">Original (turn translation off)</option>
+				<option value="العربية">العربية — Arabic</option>
+				<option value="简体中文">简体中文 — Chinese, Simplified</option>
+				<option value="繁體中文">繁體中文 — Chinese, Traditional</option>
+				<option value="Nederlands">Nederlands — Dutch</option>
+				<option value="English">English</option>
+				<option value="Français">Français — French</option>
+				<option value="Deutsch">Deutsch — German</option>
+				<option value="Ελληνική">Ελληνική — Greek</option>
+				<option value="עברית">עברית — Hebrew</option>
+				<option value="हिन्दी">हिन्दी — Hindi</option>
+				<option value="Gaeilge">Gaeilge — Irish</option>
+				<option value="Italiano">Italiano — Italian</option>
+				<option value="日本語">日本語 — Japanese</option>
+				<option value="한국어">한국어 — Korean</option>
+				<option value="Português">Português — Portuguese</option>
+				<option value="Русский">Русский — Russian</option>
+				<option value="Español">Español — Spanish</option>
+				<option value="ไทย">ไทย — Thai</option>
+				<option value="Türkçe">Türkçe — Turkish</option>
+			</sdpi-select>
+		</sdpi-item>
+		<p style="color: #999; font-size: 11px; padding: 0 8px">
+			Translation is applied to your view only — the presenter and everyone else
+			keep seeing the original slides. Set a second key to "Original" to switch
+			back.
+		</p>
+
+		<sdpi-item label="Profile">
+			<sdpi-checkbox
+				global
+				setting="pptAutoProfile"
+				label="Switch profile during PowerPoint Live"
+			></sdpi-checkbox>
+		</sdpi-item>
+		<p style="color: #999; font-size: 11px; padding: 0 8px">
+			Shared with every PowerPoint Live key. Switches to the bundled "PowerPoint
+			Live" profile while a deck is being presented, and back afterwards.
+		</p>
+
+		<details>
+			<summary style="cursor: pointer; margin: 8px 0; color: #999">Diagnostics</summary>
+			<sdpi-item label="Map Teams UI">
+				<button id="discover-changeview">Dump slide view menu</button>
+			</sdpi-item>
+			<p style="color: #999; font-size: 11px; padding: 0 8px">
+				Join a meeting where a deck is being presented first. Results are
+				written to the plugin log. Teams only offers the languages above once
+				the presenter's deck has been processed, so an unavailable language is
+				reported as a failed press.
+			</p>
+		</details>
+
+		<script>
+			const { streamDeckClient } = SDPIComponents;
+			document.getElementById("discover-changeview").addEventListener("click", () => {
+				streamDeckClient.send("sendToPlugin", {
+					command: "discover",
+					menu: "toolbarChangeViewButton"
+				});
+			});
+		</script>
+	</body>
+</html>
