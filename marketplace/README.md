@@ -139,25 +139,28 @@ someone who has the plugin installed but has never read a commit.
 PowerPoint Live control, and profiles that follow the meeting.
 
 POWERPOINT LIVE
-Twenty new actions.
+Twenty new keys for a shared deck, and they follow whichever role you are in.
 
-Watching a deck: move through slides at your own pace, jump back in sync with the presenter, grid view, high contrast, pop out, and take control.
+Watching someone present: move through the slides at your own pace without touching anyone else's view, jump back to the presenter whenever you want, open grid view, switch to high contrast, pop the deck into its own window, or take control of it.
 
-Presenting: laser pointer, pen, highlighter, eraser, cursor, presenter view, private viewing, present the latest version, copy link, layout, and stop sharing, with a live slide counter on the key. Ink keys show the colour you picked in Teams.
+Presenting: previous and next, laser pointer, pen, highlighter, eraser and cursor, presenter view, private viewing, present the latest saved version, copy a link to the deck, change layout, and stop sharing. A live slide counter sits on its own key, and the ink keys show the colour you picked in Teams.
 
-Keys follow your role, so an attendee never sees presenter tools that cannot light up, and taking control mid-meeting re-lights the deck for presenting.
+Take control mid-meeting and the deck re-lights itself for presenting.
 
-PROFILES
-Three bundled profiles can move the deck on their own: meeting controls when you join, attendee or presenter tools when a deck goes up, back to meeting controls when it ends, and back to your own profile when you leave. Turn it on with "Follow the meeting between profiles" on any PowerPoint Live key. 15-key decks.
+PROFILES THAT FOLLOW THE MEETING
+Three bundled profiles move the deck for you: meeting controls when you join, attendee or presenter tools the moment a deck goes up, back to meeting controls when it ends, and back to your own profile when you leave. Nothing to press.
 
-FIXES
-Stop sharing now answers the confirmation Teams shows, instead of leaving it on screen. A key pressed during a presentation no longer reports a timeout. Leave no longer shows a warning when tapped. Take control and Sync to presenter are drawn the way Teams draws them.
+Turn it on with "Follow the meeting between profiles" on any PowerPoint Live key. 15-key Stream Decks.
+
+The thirteen meeting keys are unchanged.
 
 REQUIREMENTS
 Windows 10 or later, Stream Deck 7.1 or later, and the Microsoft Teams desktop app. Windows only.
 ```
 
-1,358 characters, within the 1,500 limit.
+1,310 characters, within the 1,500 limit. It covers only what is new to
+someone upgrading: the thirteen meeting keys have not changed since the
+published version, so there are no fixes to report to a Marketplace user.
 
 ### First-release notes — reference only
 
