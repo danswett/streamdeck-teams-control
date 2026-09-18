@@ -130,7 +130,7 @@ The first-release notes are kept further down for reference only — they descri
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
 
-### Version 1.8.1 — the notes for this submission
+### Version 1.8.2 — the notes for this submission
 
 Marketplace shows plain text, so this is the GitHub release rewritten for
 someone who has the plugin installed but has never read a commit.
@@ -143,7 +143,7 @@ Twenty new actions.
 
 Watching a deck: move through slides at your own pace, jump back in sync with the presenter, grid view, high contrast, pop out, and take control.
 
-Presenting: laser pointer, pen, highlighter, eraser, cursor, presenter view, private view, present the latest version, copy link, layout, and stop sharing, with a live slide counter on the key. Ink keys show the colour you picked in Teams.
+Presenting: laser pointer, pen, highlighter, eraser, cursor, presenter view, private viewing, present the latest version, copy link, layout, and stop sharing, with a live slide counter on the key. Ink keys show the colour you picked in Teams.
 
 Keys follow your role, so an attendee never sees presenter tools that cannot light up, and taking control mid-meeting re-lights the deck for presenting.
 
@@ -151,13 +151,13 @@ PROFILES
 Three bundled profiles can move the deck on their own: meeting controls when you join, attendee or presenter tools when a deck goes up, back to meeting controls when it ends, and back to your own profile when you leave. Turn it on with "Follow the meeting between profiles" on any PowerPoint Live key. 15-key decks.
 
 FIXES
-Stop sharing now answers the confirmation Teams shows, instead of leaving it on screen. A key pressed during a presentation no longer reports a timeout. Leave no longer shows a warning when tapped.
+Stop sharing now answers the confirmation Teams shows, instead of leaving it on screen. A key pressed during a presentation no longer reports a timeout. Leave no longer shows a warning when tapped. Take control and Sync to presenter are drawn the way Teams draws them.
 
 REQUIREMENTS
 Windows 10 or later, Stream Deck 7.1 or later, and the Microsoft Teams desktop app. Windows only.
 ```
 
-1,284 characters, within the 1,500 limit.
+1,358 characters, within the 1,500 limit.
 
 ### First-release notes — reference only
 
