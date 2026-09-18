@@ -54,7 +54,17 @@ if (Test-Path $live) {
 $src = Join-Path $tmp "$Uuid.sdPlugin"
 # /R and /W are essential: robocopy's defaults are a million retries 30s apart,
 # so a single locked file hangs the install indefinitely instead of failing.
-robocopy $src $dest /E /R:2 /W:1 /NFL /NDL /NJH /NJS /NC /NS | Out-Null
+#
+# /PURGE makes this a mirror rather than an overlay. Without it a file the
+# plugin no longer ships stays behind forever: the manifest references artwork
+# without an extension, so a stale icon.svg left beside a new icon.png kept
+# winning, and the action list went on showing icons that had been deleted from
+# the repo rounds earlier.
+#
+# logs/ is Stream Deck's, written inside the plugin folder, so it is excluded
+# rather than wiped on every install. The renamed running binary is excluded
+# too: it is still locked, and failing to delete it would fail the install.
+robocopy $src $dest /E /PURGE /XD logs /XF 'TeamsBridge.old*.exe' /R:2 /W:1 /NFL /NDL /NJH /NJS /NC /NS | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "copy failed (robocopy $LASTEXITCODE)" }
 
 $version = (Get-Content (Join-Path $dest 'manifest.json') -Raw | ConvertFrom-Json).Version
