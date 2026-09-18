@@ -243,24 +243,27 @@ public class SelectorConfigTests : IDisposable
     }
 
     [Fact]
-    public void ParseConfig_reads_the_two_level_menu_fields_slide_translation_needs()
+    public void ParseConfig_reads_the_two_level_menu_fields_a_nested_item_needs()
     {
+        // No shipped control is nested two levels deep now that slide
+        // translation has been withdrawn, but the parser still supports it and
+        // a selectors.json is user-editable, so the fields stay covered.
         var cfg = Program.ParseConfig("""
             {
               "controls": {
-                "ppt-translate": {
+                "nested-example": {
                   "menu": "toolbarChangeViewButton",
-                  "submenu": "toolbarTranslateSlidesOverflowButton",
-                  "menuItemAutomationId": "toolbarTranslateSlidesLanguageMenuItem-{arg}"
+                  "submenu": "someOverflowButton",
+                  "menuItemAutomationId": "someLanguageMenuItem-{arg}"
                 }
               }
             }
             """);
 
-        var spec = cfg!.Controls["ppt-translate"];
+        var spec = cfg!.Controls["nested-example"];
         Assert.Equal("toolbarChangeViewButton", spec.Menu);
-        Assert.Equal("toolbarTranslateSlidesOverflowButton", spec.Submenu);
-        Assert.Equal("toolbarTranslateSlidesLanguageMenuItem-{arg}", spec.MenuItemAutomationId);
+        Assert.Equal("someOverflowButton", spec.Submenu);
+        Assert.Equal("someLanguageMenuItem-{arg}", spec.MenuItemAutomationId);
     }
 
     [Fact]
@@ -588,8 +591,8 @@ public class SelectorConfigTests : IDisposable
 
         var hosted = new[]
         {
-            "ppt-prev", "ppt-next", "ppt-grid", "ppt-sync", "ppt-copilot",
-            "ppt-high-contrast", "ppt-translate", "ppt-hide-presenter-view",
+            "ppt-prev", "ppt-next", "ppt-grid", "ppt-sync",
+            "ppt-high-contrast", "ppt-hide-presenter-view",
             "ppt-refresh", "ppt-copy-link",
             "ppt-cursor", "ppt-laser", "ppt-pen", "ppt-highlighter", "ppt-eraser"
         };

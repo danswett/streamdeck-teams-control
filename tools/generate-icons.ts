@@ -33,10 +33,8 @@ const ACTIONS: Record<string, { glyph: string; danger?: boolean }> = {
 	"ppt-sync": { glyph: "pptSync" },
 	"ppt-grid": { glyph: "pptGrid" },
 	"ppt-high-contrast": { glyph: "pptContrast" },
-	"ppt-translate": { glyph: "pptTranslate" },
 	"ppt-take-control": { glyph: "pptTakeControl" },
 	"ppt-popout": { glyph: "pptPopout" },
-	"ppt-copilot": { glyph: "pptCopilot" },
 
 	// PowerPoint Live, presenting. The five drawing tools are handled separately
 	// below: they ship Teams' own artwork rather than a Fluent stand-in.

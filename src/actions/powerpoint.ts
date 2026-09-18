@@ -107,12 +107,6 @@ export class PptPopoutAction extends PptAction {
 	protected override readonly glyph = "pptPopout";
 }
 
-@action({ UUID: "com.bad-duck.teamscontrol.ppt-copilot" })
-export class PptCopilotAction extends PptAction {
-	protected override readonly control = "ppt-copilot";
-	protected override readonly glyph = "pptCopilot";
-}
-
 /**
  * Views the slides in high contrast, for you only.
  *
@@ -167,40 +161,7 @@ export class PptSyncAction extends TeamsAction {
 	}
 
 	protected override draw(state: TeamsState): string {
-		// Gold rather than white: this key lighting up means you are out of step
-		// with the presenter, not merely that a control is available.
 		return renderLive(usable(state, "ppt-sync"));
-	}
-}
-
-type TranslateSettings = {
-	/**
-	 * Teams' own id for the language, which is the endonym ("Deutsch",
-	 * "日本語"), plus "Original" to turn translation back off. Stored rather
-	 * than a locale code because the id is what the menu item carries.
-	 */
-	language?: string;
-};
-
-const DEFAULT_LANGUAGE = "Original";
-
-/**
- * Translates the shared slides. One action covers every language: the sidecar
- * substitutes the chosen value into the menu-item selector, so adding a
- * language Teams later ships needs no plugin change.
- */
-@action({ UUID: "com.bad-duck.teamscontrol.ppt-translate" })
-export class PptTranslateAction extends TeamsAction<TranslateSettings> {
-	protected override targetFor(): string {
-		return "ppt-translate";
-	}
-
-	protected override argFor(settings: TranslateSettings): string {
-		return settings.language || DEFAULT_LANGUAGE;
-	}
-
-	protected override draw(state: TeamsState): string {
-		return renderSimple("pptTranslate", usable(state, "ppt-translate"));
 	}
 }
 

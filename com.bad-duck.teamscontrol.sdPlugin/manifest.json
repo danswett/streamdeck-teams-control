@@ -3,7 +3,7 @@
 	"Name": "Teams Meeting Controls",
 	"Version": "1.8.1.0",
 	"Author": "Bad Duck Software",
-	"Description": "Control Microsoft Teams meetings from your Stream Deck. Mute, camera, raise hand, reactions, background blur and more â€” with live state on every key. Works while Teams is in the background; never sends keystrokes.",
+	"Description": "Control Microsoft Teams meetings from your Stream Deck. Mute, camera, raise hand, reactions, background blur and more, with live state on every key. Works while Teams is in the background; never sends keystrokes.",
 	"Category": "Teams Meeting Controls",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"Icon": "imgs/plugin/marketplace",
@@ -400,24 +400,6 @@
 			]
 		},
 		{
-			"Name": "PPT Attendee: Translate Slides",
-			"UUID": "com.bad-duck.teamscontrol.ppt-translate",
-			"Icon": "imgs/actions/ppt-translate/icon",
-			"Tooltip": "Translate the slides into a chosen language, only for you",
-			"Controllers": [
-				"Keypad"
-			],
-			"SupportedInMultiActions": true,
-			"UserTitleEnabled": false,
-			"PropertyInspectorPath": "ui/ppt-translate.html",
-			"States": [
-				{
-					"Image": "imgs/actions/ppt-translate/key",
-					"TitleAlignment": "bottom"
-				}
-			]
-		},
-		{
 			"Name": "PPT Attendee: Take Control",
 			"UUID": "com.bad-duck.teamscontrol.ppt-take-control",
 			"Icon": "imgs/actions/ppt-take-control/icon",
@@ -431,24 +413,6 @@
 			"States": [
 				{
 					"Image": "imgs/actions/ppt-take-control/key",
-					"TitleAlignment": "bottom"
-				}
-			]
-		},
-		{
-			"Name": "PPT Attendee: Ask Copilot",
-			"UUID": "com.bad-duck.teamscontrol.ppt-copilot",
-			"Icon": "imgs/actions/ppt-copilot/icon",
-			"Tooltip": "Select and drag text on the slide to ask Copilot about it",
-			"Controllers": [
-				"Keypad"
-			],
-			"SupportedInMultiActions": true,
-			"UserTitleEnabled": false,
-			"PropertyInspectorPath": "ui/ppt.html",
-			"States": [
-				{
-					"Image": "imgs/actions/ppt-copilot/key",
 					"TitleAlignment": "bottom"
 				}
 			]

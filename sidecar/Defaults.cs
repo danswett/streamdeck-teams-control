@@ -114,7 +114,6 @@ public static class Defaults
             // slide, so its presence is exactly the "viewing privately" signal.
             ["ppt-sync"] = new() { AutomationId = "syncToPresenterToolbarButton", Surface = "slideShow" },
 
-            ["ppt-copilot"] = new() { AutomationId = "inkToExplainToolbarButton", Surface = "slideShow" },
 
             // Moves the shared content into its own window.
             ["ppt-popout"] = new() { AutomationId = "popout-content-button" },
@@ -139,23 +138,6 @@ public static class Defaults
                 MenuItemAutomationId = "toolbarHighContrastOverflowButton"
             },
 
-            // Slide translation sits one level deeper, behind "Translate
-            // slides". "{arg}" is replaced with the language the key is set to;
-            // the ids are endonyms ("Deutsch", "日本語") and "Original" turns
-            // translation back off, so they are stable across Teams' own
-            // display language.
-            //
-            // Attendee-only: a presenter's "Change view" menu has no translation
-            // entry at all, since translating your own deck for yourself would
-            // mean nothing.
-            ["ppt-translate"] = new()
-            {
-                Surface = "slideShow",
-                Menu = "toolbarChangeViewButton",
-                Submenu = "toolbarTranslateSlidesOverflowButton",
-                MenuItemAutomationId = "toolbarTranslateSlidesLanguageMenuItem-{arg}",
-                RequiresRole = "attendee"
-            },
 
             // ---- PowerPoint Live, presenting ----
             // Captured while presenting on 2026-09-17. Note that zoom above is

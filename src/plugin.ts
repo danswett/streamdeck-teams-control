@@ -16,7 +16,6 @@ import {
 	ShareAction
 } from "./actions/controls";
 import {
-	PptCopilotAction,
 	PptCopyLinkAction,
 	PptCursorAction,
 	PptEraserAction,
@@ -36,8 +35,7 @@ import {
 	PptStatusAction,
 	PptStopPresentingAction,
 	PptSyncAction,
-	PptTakeControlAction,
-	PptTranslateAction
+	PptTakeControlAction
 } from "./actions/powerpoint";
 import { bridge } from "./bridge";
 import { profileSwitcher } from "./profiles";
@@ -65,10 +63,8 @@ streamDeck.actions.registerAction(new PptStatusAction());
 streamDeck.actions.registerAction(new PptSyncAction());
 streamDeck.actions.registerAction(new PptGridAction());
 streamDeck.actions.registerAction(new PptHighContrastAction());
-streamDeck.actions.registerAction(new PptTranslateAction());
 streamDeck.actions.registerAction(new PptTakeControlAction());
 streamDeck.actions.registerAction(new PptPopoutAction());
-streamDeck.actions.registerAction(new PptCopilotAction());
 
 // PowerPoint Live, presenting. Unavailable unless you are the one sharing.
 streamDeck.actions.registerAction(new PptCursorAction());

@@ -164,7 +164,6 @@
 			"offName": "^\\s*close\\s+grid\\s+view\\s*$"
 		},
 		"ppt-sync": { "automationId": "syncToPresenterToolbarButton", "surface": "slideShow" },
-		"ppt-copilot": { "automationId": "inkToExplainToolbarButton", "surface": "slideShow" },
 		"ppt-popout": { "automationId": "popout-content-button" },
 		"ppt-take-control": {
 			"automationId": "takeControlPptBtn",
@@ -175,13 +174,6 @@
 			"surface": "slideShow",
 			"menu": "toolbarChangeViewButton",
 			"menuItemAutomationId": "toolbarHighContrastOverflowButton"
-		},
-		"ppt-translate": {
-			"surface": "slideShow",
-			"menu": "toolbarChangeViewButton",
-			"submenu": "toolbarTranslateSlidesOverflowButton",
-			"menuItemAutomationId": "toolbarTranslateSlidesLanguageMenuItem-{arg}",
-			"requiresRole": "attendee"
 		},
 
 		"ppt-stop-presenting": {

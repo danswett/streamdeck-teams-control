@@ -62,7 +62,6 @@ const CONTROLS: Record<string, string> = {
 	// fills the left half, which is why the earlier stand-in needed rotating and
 	// this does not.
 	pptContrast: "dark_theme_20_filled",
-	pptTranslate: "translate_28_filled",
 	// Captured from the live attendee toolbar on 2026-09-18: Teams draws a
 	// monitor with a cursor, not a pointing hand. Outline rather than filled,
 	// matching the toolbar's resting state. Teams ships this icon re-minified -
@@ -71,7 +70,6 @@ const CONTROLS: Record<string, string> = {
 	// at the shape calls it what it is.
 	pptTakeControl: "desktop_cursor_20_regular",
 	pptPopout: "window_new_28_filled",
-	pptCopilot: "slide_text_sparkle_28_filled",
 	pptSlide: "slide_text_28_filled",
 
 	// Presenter tools, drawn in PowerPoint Live's own colours (see TOOL_COLORS).

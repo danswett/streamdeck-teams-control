@@ -82,12 +82,12 @@ const PROFILES: Profile[] = [
 			"4,0": { action: "ppt-high-contrast", name: "PPT Live: High Contrast" },
 
 			"0,1": { action: "ppt-sync", name: "PPT Attendee: Sync" },
-			"1,1": { action: "ppt-translate", name: "PPT Attendee: Translate Slides" },
-			"2,1": { action: "ppt-copilot", name: "PPT Attendee: Ask Copilot" },
-			"3,1": { action: "ppt-popout", name: "PPT Live: Pop Out" },
+			"1,1": { action: "ppt-popout", name: "PPT Live: Pop Out" },
 			// Taking control makes you the presenter, which swaps this whole
 			// profile out for the presenter one.
-			"4,1": { action: "ppt-take-control", name: "PPT Attendee: Take Control" },
+			"2,1": { action: "ppt-take-control", name: "PPT Attendee: Take Control" },
+			"3,1": { action: "share", name: "Share Screen" },
+			"4,1": { action: "blur", name: "Background Blur" },
 
 			// The meeting basics stay reachable, so being moved onto a
 			// presentation layout never costs you the mute key.

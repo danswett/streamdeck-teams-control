@@ -49,7 +49,7 @@ carry the requirements and the differentiator rather than a preamble.
 ```
 Control Microsoft Teams meetings from your Stream Deck: mute, camera, raise hand, the five reactions, background blur, screen share, chat, people and leave. Every key shows the real state of the meeting, so a muted mic looks muted before you press it.
 
-Full PowerPoint Live control too. Watching a deck? Move through slides at your own pace, jump back in sync with the presenter, open grid view, ask Copilot, or translate the slides into 19 languages, all without touching anyone else's view. Presenting? Slide navigation, laser pointer, pen, highlighter and eraser, presenter view, private view, layout and stop sharing, with a live slide counter on the key. Keys follow your role, so taking control mid-meeting re-lights the deck for presenting.
+Full PowerPoint Live control too. Watching a deck? Move through slides at your own pace, jump back in sync with the presenter, open grid view, or pop the deck into its own window, all without touching anyone else's view. Presenting? Slide navigation, laser pointer, pen, highlighter and eraser, presenter view, private view, layout and stop sharing, with a live slide counter on the key. Keys follow your role, so taking control mid-meeting re-lights the deck for presenting.
 
 Three bundled profiles can follow the meeting on their own: meeting controls when you join, attendee or presenter tools when a deck goes up, and back again when it ends.
 
@@ -60,7 +60,7 @@ Keys dim when no meeting is running, so there is nothing to press by mistake.
 Requires Windows 10 or later, Stream Deck 7.1 or later, and the Microsoft Teams desktop app. Windows only. Not affiliated with or endorsed by Microsoft.
 ```
 
-1,405 characters, within the 1,500 limit and above the 250 minimum. The opening
+1,386 characters, within the 1,500 limit and above the 250 minimum. The opening
 two sentences run to 251 characters, so the search-engine snippet reads as
 complete sentences rather than breaking mid-clause.
 
@@ -139,9 +139,9 @@ someone who has the plugin installed but has never read a commit.
 PowerPoint Live control, and profiles that follow the meeting.
 
 POWERPOINT LIVE
-Twenty-two new actions.
+Twenty new actions.
 
-Watching a deck: move through slides at your own pace, jump back in sync with the presenter, grid view, high contrast, pop out, ask Copilot, translate into 19 languages, and take control.
+Watching a deck: move through slides at your own pace, jump back in sync with the presenter, grid view, high contrast, pop out, and take control.
 
 Presenting: laser pointer, pen, highlighter, eraser, cursor, presenter view, private view, present the latest version, copy link, layout, and stop sharing, with a live slide counter on the key. Ink keys show the colour you picked in Teams.
 
@@ -157,7 +157,7 @@ REQUIREMENTS
 Windows 10 or later, Stream Deck 7.1 or later, and the Microsoft Teams desktop app. Windows only.
 ```
 
-1,330 characters, within the 1,500 limit.
+1,284 characters, within the 1,500 limit.
 
 ### First-release notes — reference only
 
@@ -173,7 +173,7 @@ MEETINGS
 Mute, camera, raise hand, five reactions (like, love, applause, laugh, wow), background blur, screen share, chat, people, and leave.
 
 POWERPOINT LIVE
-Watching a deck: move through slides at your own pace, jump back in sync with the presenter, grid view, high contrast, pop out, ask Copilot, translate into 19 languages, and take control.
+Watching a deck: move through slides at your own pace, jump back in sync with the presenter, grid view, high contrast, pop out, and take control.
 
 Presenting: laser pointer, pen, highlighter, eraser, cursor, presenter view, private view, present the latest version, copy link, layout, and stop sharing, with a live slide counter on the key.
 
@@ -194,7 +194,7 @@ Windows 10 or later, Stream Deck 7.1 or later, and the Microsoft Teams desktop a
 Not affiliated with or endorsed by Microsoft.
 ```
 
-1,491 characters, within the 1,500 limit. It describes the plugin as it stands
+1,449 characters, within the 1,500 limit. It describes the plugin as it stands
 rather than what changed, because a first-time reader has no previous build to
 compare against.
 

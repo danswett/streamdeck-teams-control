@@ -297,9 +297,8 @@ function galleryWatching(): string {
 
 	body += row(
 		[
-			{ svg: renderSimple("pptTranslate", true), caption: "Translate" },
 			{ svg: renderSimple("pptContrast", true), caption: "High contrast" },
-			{ svg: renderSimple("pptCopilot", true), caption: "Ask Copilot" },
+			{ svg: renderSimple("pptPopout", true), caption: "Pop out" },
 			{ svg: renderSimple("pptTakeControl", true), caption: "Take control" }
 		],
 		560,

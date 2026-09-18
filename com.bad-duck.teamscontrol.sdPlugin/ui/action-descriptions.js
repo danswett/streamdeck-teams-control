@@ -62,8 +62,6 @@ globalThis.ACTION_DESCRIPTIONS = {
 	"com.bad-duck.teamscontrol.ppt-high-contrast":
 		"Switches the slides to high contrast for you only - the presenter and everyone else see them unchanged. A toggle, so the key shows whether it is on.",
 
-	"com.bad-duck.teamscontrol.ppt-translate":
-		"Translates the slides into the language chosen below, for your view only. Attendee only. Teams offers a language only once the presenter's deck has been processed, so one it is not ready for is reported as a failed press.",
 
 	"com.bad-duck.teamscontrol.ppt-take-control":
 		"Takes control of a deck someone else is presenting. Attendee only, and the one key that changes your role: a successful press makes you the presenter, which dims this key and lights up the presenter keys.",
@@ -71,8 +69,6 @@ globalThis.ACTION_DESCRIPTIONS = {
 	"com.bad-duck.teamscontrol.ppt-popout":
 		"Moves the shared content into its own window, so you can put it on another screen.",
 
-	"com.bad-duck.teamscontrol.ppt-copilot":
-		"Opens Copilot for the deck, so you can select and drag text on a slide to ask about it. Attendee only.",
 
 	"com.bad-duck.teamscontrol.ppt-laser":
 		"Selects the laser pointer. The drawing tools are a single-select group, so the key lights while this is the active tool and follows the tool you pick in Teams' own toolbar. The key is drawn in the colour the pointer will actually use. Presenter only.",

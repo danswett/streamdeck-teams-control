@@ -84,8 +84,6 @@ reports itself unavailable in the other one.
 |---|---|---|
 | **PPT Live: Sync to Presenter** | ✅ lights up when out of sync | Teams only shows this button once you have browsed away, so the key being lit *is* the "you are viewing privately" signal |
 | **PPT Live: Take Control** | availability only | ⚠️ Makes you the presenter — see below |
-| **PPT Live: Translate Slides** | availability only | 20 languages, chosen per key. Your screen only |
-| **PPT Live: Ask Copilot** | availability only | Select and drag slide text to ask Copilot about it |
 
 **Driving (presenter)**
 
@@ -103,7 +101,7 @@ reports itself unavailable in the other one.
 
 **Take control** is the one key that changes which set you get. Press it as an
 attendee and Teams makes you the presenter: that key retires, *Sync to
-presenter*, *Translate* and *Ask Copilot* go with it, and the drawing tools,
+presenter* goes with it, and the drawing tools,
 *Private view* and *Stop presenting* light up in their place.
 
 That switch lands a moment after the press returns, so the sidecar takes a
@@ -122,7 +120,7 @@ meeting goes:
 | when | profile |
 |---|---|
 | You join a meeting | **Teams Meeting** — mute, camera, reactions, chat, leave |
-| A deck starts, and you are watching | **PowerPoint Live (Attendee)** — navigation, sync, translate, take control |
+| A deck starts, and you are watching | **PowerPoint Live (Attendee)** — navigation, sync, take control |
 | A deck starts, and you are presenting | **PowerPoint Live (Presenter)** — navigation, drawing tools, presenter view, stop presenting |
 | The deck stops | back to **Teams Meeting** |
 | You leave the meeting | back to whichever profile you were on before |
