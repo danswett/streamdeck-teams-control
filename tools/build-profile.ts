@@ -55,7 +55,7 @@ const PROFILES: Profile[] = [
 			"1,0": { action: "camera", name: "Camera" },
 			"2,0": { action: "blur", name: "Background Blur" },
 			"3,0": { action: "share", name: "Share Screen" },
-			"4,0": { action: "leave", name: "Leave", settings: { requireHold: true } },
+			"4,0": { action: "leave", name: "Leave" },
 
 			"0,1": { action: "hand", name: "Raise Hand" },
 			"1,1": { action: "chat", name: "Chat" },
@@ -95,7 +95,7 @@ const PROFILES: Profile[] = [
 			"1,2": { action: "camera", name: "Camera" },
 			"2,2": { action: "hand", name: "Raise Hand" },
 			"3,2": { action: "chat", name: "Chat" },
-			"4,2": { action: "leave", name: "Leave", settings: { requireHold: true } }
+			"4,2": { action: "leave", name: "Leave" }
 		}
 	},
 	{
@@ -123,8 +123,7 @@ const PROFILES: Profile[] = [
 			"3,2": { action: "ppt-private-view", name: "PPT Presenter: Private View" },
 			"4,2": {
 				action: "ppt-stop-presenting",
-				name: "PPT Presenter: Stop Presenting",
-				settings: { requireHold: true }
+				name: "PPT Presenter: Stop Presenting"
 			}
 		}
 	}

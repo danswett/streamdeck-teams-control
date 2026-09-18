@@ -118,6 +118,33 @@ describe("the bundled profiles", () => {
 		}
 	});
 
+	it.each(names)("%s ships no key that ignores a normal press", (name) => {
+		// requireHold makes a tap do nothing. That is a reasonable thing to opt
+		// into, but a bundled profile is what someone meets first, and a key
+		// that appears dead reads as a broken plugin rather than as a guard -
+		// which is exactly how it was reported. Opting in stays a choice made in
+		// the inspector, never one made for them.
+		const zip = new AdmZip(path.join(PLUGIN, `${name}.streamDeckProfile`));
+		const page = zip
+			.getEntries()
+			.find(
+				(e) => e.entryName.includes("/Profiles/") && e.entryName.endsWith("manifest.json") &&
+					e.getData().toString("utf8").includes("teamscontrol")
+			);
+
+		const actions = JSON.parse(page!.getData().toString("utf8")).Controllers[0].Actions as Record<
+			string,
+			{ UUID: string; Settings?: Record<string, unknown> }
+		>;
+
+		for (const [pos, action] of Object.entries(actions)) {
+			expect(
+				action.Settings?.requireHold,
+				`${pos} (${action.UUID}) ships with requireHold on`
+			).toBeFalsy();
+		}
+	});
+
 	it("puts mute on every profile, so it is never more than one press away", () => {
 		for (const name of names) {
 			const zip = new AdmZip(path.join(PLUGIN, `${name}.streamDeckProfile`));

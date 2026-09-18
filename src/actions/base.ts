@@ -200,11 +200,12 @@ export abstract class GuardedAction<
 
 	override async onKeyUp(ev: KeyUpEvent<T>): Promise<void> {
 		if (!ev.payload.settings.requireHold) return;
-		if (this.#holds.has(ev.action.id)) {
-			// Released before the hold completed: cancel and tell the user.
-			this.#clear(ev.action.id);
-			await ev.action.showAlert();
-		}
+
+		// Deliberately silent. showAlert is Stream Deck's failure indicator - the
+		// same warning a press that genuinely broke would raise - so using it for
+		// "not held long enough" makes a working guard look like a broken key.
+		// A tap being ignored is the guard doing its job, not an error.
+		this.#clear(ev.action.id);
 	}
 
 	override onWillDisappear(ev: WillDisappearEvent<T>): void {
