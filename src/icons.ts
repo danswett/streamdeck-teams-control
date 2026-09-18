@@ -303,6 +303,38 @@ function escapeText(value: string): string {
  * cannot be driven from plugin state without fighting whatever the user typed,
  * and it renders under, not inside, the image.
  */
+/** Teams' live red, sampled from the "Sync to presenter" pill on 2026-09-18. */
+const LIVE_RED = "#C50F1F";
+
+/**
+ * The "Sync to presenter" key.
+ *
+ * Teams gives this control no icon at all: it is a red LIVE pill beside the
+ * words "Sync to presenter", and a capture of the button returns zero SVGs. So
+ * there is no Fluent glyph to match and nothing to copy - the key reproduces
+ * the pill, which is the part that is recognisable at a glance and the reason
+ * the control reads as "you are behind" in the first place.
+ *
+ * Teams only renders the button once you have navigated away on your own, so an
+ * unavailable key means you are already watching live.
+ */
+export function renderLive(available: boolean): string {
+	const fill = available ? LIVE_RED : COLORS.unavailable;
+	const ink = available ? "#FFFFFF" : "#1A1A1D";
+
+	const w = 112;
+	const h = 46;
+	const x = (SIZE - w) / 2;
+	const y = (SIZE - h) / 2;
+
+	return wrap(
+		`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}" fill="${fill}"/>` +
+			`<text x="${SIZE / 2}" y="${SIZE / 2 + 11}" text-anchor="middle" ` +
+			`font-family="Segoe UI, system-ui, sans-serif" font-size="30" font-weight="700" ` +
+			`letter-spacing="1.5" fill="${ink}">LIVE</text>`
+	);
+}
+
 export function renderLabelled(key: string, label: string, tone: Tone): string {
 	const def = CONTROL_GLYPHS[key];
 	if (!def) return wrap("");

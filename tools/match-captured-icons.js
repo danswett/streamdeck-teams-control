@@ -38,11 +38,62 @@ for (const name of readdirSync(ICONS)) {
 console.log(`  ${index.size} distinct paths\n`);
 
 const captured = JSON.parse(readFileSync(file, "utf8"));
-for (const icon of captured.icons) {
-	const hit = index.get(norm(icon.d));
-	const where = hit ? hit.join(", ") : "NO MATCH (Teams-specific artwork)";
-	console.log(`${icon.id}`);
-	console.log(`  label   ${icon.label}`);
-	console.log(`  drawn   ${icon.viewBox.split(" ")[2]}px ${icon.variant}`);
-	console.log(`  fluent  ${where}\n`);
+
+/**
+ * Accepts either shape the capture snippets produce: the older
+ * `{ icons: [{ d, viewBox, variant }] }`, or a bare array of controls each
+ * carrying raw `svg` markup. The two drifted apart, and a capture that cannot
+ * be matched is a capture wasted - the window to take it is a live meeting.
+ */
+function* controls() {
+	if (Array.isArray(captured?.icons)) {
+		for (const icon of captured.icons) {
+			yield {
+				id: icon.id,
+				label: icon.label,
+				size: icon.viewBox ? icon.viewBox.split(" ")[2] : "?",
+				variant: icon.variant ?? "",
+				paths: [icon.d]
+			};
+		}
+		return;
+	}
+
+	const list = Array.isArray(captured) ? captured : [];
+	for (const c of list) {
+		const markup = [].concat(c.svg ?? []).filter(Boolean);
+		const paths = [];
+		let size = "?";
+		let variant = "";
+
+		for (const svg of markup) {
+			const vb = / viewBox="([^"]+)"/.exec(svg);
+			if (vb) size = vb[1].split(" ")[2];
+			if (/fui-Icon-filled/.test(svg)) variant = "filled";
+			else if (/fui-Icon-regular/.test(svg)) variant = "regular";
+			for (const m of svg.matchAll(/ d="([^"]+)"/g)) paths.push(m[1]);
+		}
+		yield { id: c.id ?? "(no id)", label: c.label, size, variant, paths };
+	}
+}
+
+for (const c of controls()) {
+	console.log(`${c.id}`);
+	console.log(`  label   ${c.label}`);
+
+	if (c.paths.length === 0) {
+		// Worth stating rather than skipping: a control with no glyph cannot be
+		// matched to Fluent at all, so its key has to be designed from what
+		// Teams actually draws instead of copied.
+		console.log(`  drawn   no SVG - text or styled markup only`);
+		console.log(`  fluent  NONE - nothing to match\n`);
+		continue;
+	}
+
+	console.log(`  drawn   ${c.size}px ${c.variant}`.trimEnd());
+	for (const d of c.paths) {
+		const hit = index.get(norm(d));
+		console.log(`  fluent  ${hit ? hit.join(", ") : "NO MATCH (Teams-specific artwork)"}`);
+	}
+	console.log();
 }

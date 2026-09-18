@@ -56,14 +56,19 @@ const CONTROLS: Record<string, string> = {
 	// of the bundle and fills the squares on hover.
 	pptGrid: "grid_20_regular",
 	pptGridOn: "grid_20_filled",
-	pptSync: "arrow_sync_24_filled",
+	pptSync: "arrow_sync_20_filled",
 	// Teams uses Fluent's dark-theme glyph here, not a contrast one - confirmed
 	// by matching the path captured from the live Change view flyout. It already
 	// fills the left half, which is why the earlier stand-in needed rotating and
 	// this does not.
 	pptContrast: "dark_theme_20_filled",
 	pptTranslate: "translate_28_filled",
-	pptTakeControl: "hand_point_28_filled",
+	// Captured from the live attendee toolbar on 2026-09-18: Teams draws a
+	// monitor with a cursor, not a pointing hand. The path it ships is this
+	// Fluent icon re-minified - identical geometry, cubic where Fluent uses a
+	// quadratic - so a string comparison calls it "Teams-specific" and a glance
+	// at the shape calls it what it is.
+	pptTakeControl: "desktop_cursor_20_filled",
 	pptPopout: "window_new_28_filled",
 	pptCopilot: "slide_text_sparkle_28_filled",
 	pptSlide: "slide_text_28_filled",

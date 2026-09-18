@@ -10,6 +10,7 @@ import {
 	renderEmojiFrame,
 	renderGlyph,
 	renderHandFrame,
+	renderLive,
 	renderReaction,
 	renderReactionFrame,
 	renderSimple,
@@ -359,5 +360,40 @@ describe("private view key", () => {
 
 		expect(ink("pptPrivateViewOff")).toBeGreaterThan(200);
 		expect(ink("pptPrivateView")).toBeLessThan(60);
+	});
+});
+/**
+ * "Sync to presenter" is the one key drawn from scratch rather than from
+ * Fluent. Teams gives the control no icon at all - a capture of the button
+ * returns zero SVGs, because it is a red LIVE pill beside the words - so there
+ * is nothing to path-match and nothing upstream to keep it honest.
+ */
+describe("the live pill", () => {
+	// Sampled from the live attendee toolbar on 2026-09-18, 691 pixels of it.
+	const TEAMS_LIVE_RED = "#C50F1F";
+
+	it("uses the red Teams actually draws", () => {
+		expect(renderLive(true).toUpperCase()).toContain(TEAMS_LIVE_RED);
+	});
+
+	it("says LIVE", () => {
+		expect(renderLive(true)).toContain(">LIVE<");
+	});
+
+	it("drops the red when the control is unavailable", () => {
+		// The button only exists once you have navigated away on your own, so a
+		// dimmed key means you are already watching live. Showing the live red
+		// there would say the opposite of what is true.
+		expect(renderLive(false).toUpperCase()).not.toContain(TEAMS_LIVE_RED);
+	});
+
+	it("is a pill rather than a square", () => {
+		const rx = /<rect[^>]*\brx="([\d.]+)"[^>]*height="(\d+)"/.exec(renderLive(true))
+			?? /<rect[^>]*height="(\d+)"[^>]*\brx="([\d.]+)"/.exec(renderLive(true));
+		expect(rx, "no rounded rect found").toBeTruthy();
+		const svg = renderLive(true);
+		const height = Number(/height="(\d+)"[^>]*rx=/.exec(svg)?.[1] ?? /rx="[\d.]+"[^>]*height="(\d+)"/.exec(svg)?.[1]);
+		const radius = Number(/rx="([\d.]+)"/.exec(svg)?.[1]);
+		expect(radius).toBeCloseTo(height / 2, 1);
 	});
 });

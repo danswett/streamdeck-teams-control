@@ -23,6 +23,7 @@ import {
 	presenterViewGlyph,
 	privateViewGlyph,
 	renderGlyph,
+	renderLive,
 	renderLabelled,
 	renderSimple,
 	renderTool,
@@ -168,7 +169,7 @@ export class PptSyncAction extends TeamsAction {
 	protected override draw(state: TeamsState): string {
 		// Gold rather than white: this key lighting up means you are out of step
 		// with the presenter, not merely that a control is available.
-		return renderGlyph("pptSync", usable(state, "ppt-sync") ? "accent" : "unavailable");
+		return renderLive(usable(state, "ppt-sync"));
 	}
 }
 

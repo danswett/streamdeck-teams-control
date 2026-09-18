@@ -20,6 +20,7 @@ import {
 	renderEmoji,
 	renderGlyph,
 	renderLabelled,
+	renderLive,
 	renderReaction,
 	renderSimple,
 	renderToggle,
@@ -285,7 +286,7 @@ function galleryWatching(): string {
 		[
 			{ svg: renderSimple("pptPrev", true), caption: "Previous" },
 			{ svg: renderSimple("pptNext", true), caption: "Next" },
-			{ svg: renderSimple("pptSync", true), caption: "Back in sync" },
+			{ svg: renderLive(true), caption: "Back in sync" },
 			{ svg: renderSimple("pptGrid", true), caption: "Grid view" }
 		],
 		270,
@@ -344,6 +345,7 @@ function galleryProfiles(): string {
 			else if (k === "hand") svg = renderEmoji("hand", true);
 			else if (k === "pptPen") svg = tool("ppt-pen", true);
 			else if (k === "pptSlide") svg = renderLabelled("pptSlide", "12/40", "on");
+			else if (k === "pptSync") svg = renderLive(true);
 			else svg = renderSimple(k, true, k === "pptStopPresenting" ? "danger" : "on");
 			body += key(x, 400, size, svg);
 		});
