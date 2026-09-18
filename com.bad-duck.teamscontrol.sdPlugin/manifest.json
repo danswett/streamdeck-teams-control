@@ -3,7 +3,7 @@
 	"Name": "Teams Meeting Controls",
 	"Version": "1.8.2.0",
 	"Author": "Bad Duck Software",
-	"Description": "Control Microsoft Teams meetings from your Stream Deck. Mute, camera, raise hand, reactions, background blur and more, with live state on every key. Works while Teams is in the background; never sends keystrokes.",
+	"Description": "Control Microsoft Teams meetings and PowerPoint Live from your Stream Deck: mute, camera, raise hand, reactions, blur, slide navigation and drawing tools. Every key shows the real state. Teams never needs focus, and no keystrokes are sent.",
 	"Category": "Teams Meeting Controls",
 	"CategoryIcon": "imgs/plugin/category-icon",
 	"Icon": "imgs/plugin/marketplace",
