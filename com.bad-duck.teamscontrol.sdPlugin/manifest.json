@@ -1,7 +1,7 @@
 {
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
 	"Name": "Teams Meeting Controls",
-	"Version": "1.7.1.0",
+	"Version": "1.8.0.0",
 	"Author": "Bad Duck Software",
 	"Description": "Control Microsoft Teams meetings from your Stream Deck. Mute, camera, raise hand, reactions, background blur and more â€” with live state on every key. Works while Teams is in the background; never sends keystrokes.",
 	"Category": "Teams Meeting Controls",
@@ -32,7 +32,19 @@
 	},
 	"Profiles": [
 		{
-			"Name": "profiles/PowerPoint Live",
+			"Name": "profiles/Teams Meeting",
+			"DeviceType": 0,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Attendee)",
+			"DeviceType": 0,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Presenter)",
 			"DeviceType": 0,
 			"Readonly": false,
 			"DontAutoSwitchWhenInstalled": true
