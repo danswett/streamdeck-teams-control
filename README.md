@@ -274,6 +274,15 @@ npx streamdeck link com.bad-duck.teamscontrol.sdPlugin
 Then **restart the Stream Deck app** — it only discovers newly added plugins at
 start-up; `streamdeck restart` alone is not enough the first time.
 
+Copying files in this way deliberately skips Stream Deck's own installer, which
+is fast but has one consequence worth knowing: **bundled profiles are only
+registered when Stream Deck installs the packaged plugin itself.** A file copy
+leaves `switchToProfile` calls silently ignored, because the profile was never
+offered for installation. To exercise the profiles, open the packed
+`dist/*.streamDeckPlugin` so Stream Deck runs its install flow, then accept the
+"contains a/some preconfigured profile(s)" prompt. Each profile is installed the
+first time the plugin asks to switch to it, so expect one prompt per profile.
+
 ---
 
 ## Development
