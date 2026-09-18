@@ -143,14 +143,14 @@ export class PptHighContrastAction extends TeamsAction {
  * appear — so the key dims itself immediately afterwards and the drawing tools,
  * private view and stop-presenting keys light up in its place.
  *
- * Drawn in gold rather than white because it acts on everyone's view, not just
- * your own.
+ * Drawn in white, like the toolbar draws it. Gold would single it out as
+ * something to be careful of, but Teams presents it as an ordinary control and
+ * the key should not disagree with the application it mirrors.
  */
 @action({ UUID: "com.bad-duck.teamscontrol.ppt-take-control" })
 export class PptTakeControlAction extends PptAction {
 	protected override readonly control = "ppt-take-control";
 	protected override readonly glyph = "pptTakeControl";
-	protected override readonly tone: Tone = "accent";
 }
 
 /**

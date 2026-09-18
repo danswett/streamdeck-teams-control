@@ -300,7 +300,7 @@ function galleryWatching(): string {
 			{ svg: renderSimple("pptTranslate", true), caption: "Translate" },
 			{ svg: renderSimple("pptContrast", true), caption: "High contrast" },
 			{ svg: renderSimple("pptCopilot", true), caption: "Ask Copilot" },
-			{ svg: renderSimple("pptTakeControl", true, "accent"), caption: "Take control" }
+			{ svg: renderSimple("pptTakeControl", true), caption: "Take control" }
 		],
 		560,
 		150,

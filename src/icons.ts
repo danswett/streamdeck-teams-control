@@ -312,26 +312,37 @@ const LIVE_RED = "#C50F1F";
  * Teams gives this control no icon at all: it is a red LIVE pill beside the
  * words "Sync to presenter", and a capture of the button returns zero SVGs. So
  * there is no Fluent glyph to match and nothing to copy - the key reproduces
- * the pill, which is the part that is recognisable at a glance and the reason
- * the control reads as "you are behind" in the first place.
+ * the pill, which is the part that is recognisable at a glance.
  *
- * Teams only renders the button once you have navigated away on your own, so an
- * unavailable key means you are already watching live.
+ * Teams only renders the button once you have navigated away on your own, so
+ * the two states are not "can press" and "cannot press" but two different
+ * facts: you are behind and can jump forward, or you are already watching live.
+ * They are worded that way rather than leaving a dimmed pill to be interpreted.
  */
 export function renderLive(available: boolean): string {
-	const fill = available ? LIVE_RED : COLORS.unavailable;
-	const ink = available ? "#FFFFFF" : "#1A1A1D";
+	if (!available) {
+		return wrap(
+			`<text x="${SIZE / 2}" y="${SIZE / 2 + 10}" text-anchor="middle" ` +
+				`font-family="Segoe UI, system-ui, sans-serif" font-size="28" font-weight="600" ` +
+				`fill="${COLORS.unavailable}">In sync</text>`
+		);
+	}
 
 	const w = 112;
-	const h = 46;
+	const h = 44;
 	const x = (SIZE - w) / 2;
-	const y = (SIZE - h) / 2;
+	const y = 66;
 
-	return wrap(
-		`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}" fill="${fill}"/>` +
-			`<text x="${SIZE / 2}" y="${SIZE / 2 + 11}" text-anchor="middle" ` +
-			`font-family="Segoe UI, system-ui, sans-serif" font-size="30" font-weight="700" ` +
-			`letter-spacing="1.5" fill="${ink}">LIVE</text>`
+	return (
+		wrap(
+			`<text x="${SIZE / 2}" y="52" text-anchor="middle" ` +
+				`font-family="Segoe UI, system-ui, sans-serif" font-size="26" font-weight="600" ` +
+				`fill="${COLORS.on}">Sync to</text>` +
+				`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h / 2}" fill="${LIVE_RED}"/>` +
+				`<text x="${SIZE / 2}" y="${y + h / 2 + 11}" text-anchor="middle" ` +
+				`font-family="Segoe UI, system-ui, sans-serif" font-size="30" font-weight="700" ` +
+				`letter-spacing="1.5" fill="#FFFFFF">LIVE</text>`
+		)
 	);
 }
 

@@ -64,11 +64,12 @@ const CONTROLS: Record<string, string> = {
 	pptContrast: "dark_theme_20_filled",
 	pptTranslate: "translate_28_filled",
 	// Captured from the live attendee toolbar on 2026-09-18: Teams draws a
-	// monitor with a cursor, not a pointing hand. The path it ships is this
-	// Fluent icon re-minified - identical geometry, cubic where Fluent uses a
-	// quadratic - so a string comparison calls it "Teams-specific" and a glance
+	// monitor with a cursor, not a pointing hand. Outline rather than filled,
+	// matching the toolbar's resting state. Teams ships this icon re-minified -
+	// a cubic where Fluent writes a quadratic, an explicit close where Fluent
+	// implies one - so a string comparison calls it "Teams-specific" and a look
 	// at the shape calls it what it is.
-	pptTakeControl: "desktop_cursor_20_filled",
+	pptTakeControl: "desktop_cursor_20_regular",
 	pptPopout: "window_new_28_filled",
 	pptCopilot: "slide_text_sparkle_28_filled",
 	pptSlide: "slide_text_28_filled",

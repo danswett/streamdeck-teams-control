@@ -376,15 +376,21 @@ describe("the live pill", () => {
 		expect(renderLive(true).toUpperCase()).toContain(TEAMS_LIVE_RED);
 	});
 
-	it("says LIVE", () => {
+	it("says what to do, not just LIVE", () => {
+		// "LIVE" alone names the state rather than the action. The key says both:
+		// what pressing it does, and the badge Teams shows for being behind.
+		expect(renderLive(true)).toContain(">Sync to<");
 		expect(renderLive(true)).toContain(">LIVE<");
 	});
 
-	it("drops the red when the control is unavailable", () => {
-		// The button only exists once you have navigated away on your own, so a
-		// dimmed key means you are already watching live. Showing the live red
-		// there would say the opposite of what is true.
-		expect(renderLive(false).toUpperCase()).not.toContain(TEAMS_LIVE_RED);
+	it("says you are already live instead of dimming the pill", () => {
+		// The button only exists once you have navigated away on your own, so the
+		// two states are different facts, not enabled and disabled. A greyed-out
+		// pill would leave that to be interpreted; the words do not.
+		const dim = renderLive(false);
+		expect(dim).toContain(">In sync<");
+		expect(dim).not.toContain(">LIVE<");
+		expect(dim.toUpperCase()).not.toContain(TEAMS_LIVE_RED);
 	});
 
 	it("is a pill rather than a square", () => {
