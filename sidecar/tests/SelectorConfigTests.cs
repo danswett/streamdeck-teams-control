@@ -286,8 +286,8 @@ public class SelectorConfigTests : IDisposable
         Assert.Equal("19", m.Groups[2].Value);
 
         // Must not match the other numbers that share the slide-show tree.
-        Assert.False(rx.IsMatch("Slide 3"));
-        Assert.False(rx.IsMatch("Elapsed time 15:18"));
+        Assert.DoesNotMatch(rx, "Slide 3");
+        Assert.DoesNotMatch(rx, "Elapsed time 15:18");
     }
 
     [Fact]
@@ -306,8 +306,8 @@ public class SelectorConfigTests : IDisposable
         var spec = new PowerPointLiveSpec();
         const string attendee = "slideshow-app-transparent ppt-root-reflow slideshow-app-attendee-role";
 
-        Assert.True(spec.AttendeeRegex!.IsMatch(attendee));
-        Assert.False(spec.PresenterRegex!.IsMatch(attendee));
+        Assert.Matches(spec.AttendeeRegex!, attendee);
+        Assert.DoesNotMatch(spec.PresenterRegex!, attendee);
     }
 
     [Fact]
@@ -411,16 +411,16 @@ public class SelectorConfigTests : IDisposable
 
         // Captured live: the description states the action, so "Prevent" means
         // private viewing is currently on.
-        Assert.True(spec.ActiveRegex!.IsMatch(
-            "Prevent participants from moving through shared presentation on their own. Has context menu"));
-        Assert.True(spec.InactiveRegex!.IsMatch(
-            "Allow participants to move through shared presentation on their own. Has context menu"));
+        Assert.Matches(spec.ActiveRegex!,
+            "Prevent participants from moving through shared presentation on their own. Has context menu");
+        Assert.Matches(spec.InactiveRegex!,
+            "Allow participants to move through shared presentation on their own. Has context menu");
 
         // And they must not both match the same text, or the key would latch.
-        Assert.False(spec.ActiveRegex.IsMatch(
-            "Allow participants to move through shared presentation on their own. Has context menu"));
-        Assert.False(spec.InactiveRegex.IsMatch(
-            "Prevent participants from moving through shared presentation on their own. Has context menu"));
+        Assert.DoesNotMatch(spec.ActiveRegex,
+            "Allow participants to move through shared presentation on their own. Has context menu");
+        Assert.DoesNotMatch(spec.InactiveRegex,
+            "Prevent participants from moving through shared presentation on their own. Has context menu");
     }
 
     [Fact]
@@ -546,8 +546,8 @@ public class SelectorConfigTests : IDisposable
         Assert.Equal("Pink", rx.Match("Highlighter: Pink, Thickness 3").Groups[1].Value);
 
         // Tools with no ink colour say nothing extra.
-        Assert.False(rx.IsMatch("Cursor"));
-        Assert.False(rx.IsMatch("Eraser"));
+        Assert.DoesNotMatch(rx, "Cursor");
+        Assert.DoesNotMatch(rx, "Eraser");
     }
 
     [Fact]
