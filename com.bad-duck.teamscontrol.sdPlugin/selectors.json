@@ -188,6 +188,23 @@
 			"automationId": "stopPresentingPptBtn",
 			"requiresRole": "presenter"
 		},
+		"ppt-stop-presenting-confirm": {
+			"$comment": [
+				"Teams asks 'Stop presenting?' before ending a presentation, and",
+				"the key answers that dialog when it is held down. The dialog's",
+				"buttons carry no automationId, so this is the one control matched",
+				"by name - which means it is the one control that needs editing if",
+				"Teams is not in English. Set 'name' to whatever the confirming",
+				"button reads; 'withinClass' keeps the match inside the dialog so",
+				"it cannot pick up a toolbar button with the same label.",
+				"Captured live 2026-09-18: [Window] 'Stop presenting?'",
+				"class='ui-dialog ...' containing [Button] 'Cancel' and",
+				"[Button] 'Stop presenting'."
+			],
+			"name": "Stop presenting",
+			"withinClass": "ui-dialog",
+			"requiresRole": "presenter"
+		},
 		"ppt-private-view": {
 			"$comment": [
 				"The label is 'Private view' whichever way it is set, and the button",

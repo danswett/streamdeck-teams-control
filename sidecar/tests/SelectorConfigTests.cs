@@ -138,6 +138,52 @@ public class SelectorConfigTests : IDisposable
     }
 
     [Fact]
+    public void ParseConfig_reads_the_name_fields_a_dialog_button_needs()
+    {
+        // These are parsed field by field, so a property added to ControlSpec
+        // is silently dropped from selectors.json until it is added here too.
+        // That failure is invisible - the override loads, the field is just
+        // empty - so it is worth pinning down.
+        var cfg = Program.ParseConfig("""
+            {
+              "controls": {
+                "ppt-stop-presenting-confirm": {
+                  "name": "Stop presenting",
+                  "withinClass": "ui-dialog",
+                  "requiresRole": "presenter"
+                }
+              }
+            }
+            """);
+
+        var spec = cfg!.Controls["ppt-stop-presenting-confirm"];
+        Assert.Equal("Stop presenting", spec.Name);
+        Assert.Equal("ui-dialog", spec.WithinClass);
+        Assert.Equal("presenter", spec.RequiresRole);
+        Assert.True(spec.IsPressOnly);
+    }
+
+    [Fact]
+    public void A_spec_naming_nothing_findable_is_not_press_only()
+    {
+        // An empty automationId used to match the first element without one,
+        // which is most of the tree, so a mistyped override could press an
+        // unrelated control. Nothing findable must mean nothing pressed.
+        var cfg = Program.ParseConfig("""
+            {
+              "controls": {
+                "typo": { "automationd": "oops" }
+              }
+            }
+            """);
+
+        var spec = cfg!.Controls["typo"];
+        Assert.Equal("", spec.AutomationId);
+        Assert.Null(spec.Name);
+        Assert.False(spec.IsPressOnly);
+    }
+
+    [Fact]
     public void Every_built_in_default_has_a_usable_selector()
     {
         var config = Program.LoadConfig("nope");
@@ -145,9 +191,35 @@ public class SelectorConfigTests : IDisposable
         foreach (var (key, spec) in config.Controls)
         {
             Assert.True(
-                !string.IsNullOrWhiteSpace(spec.AutomationId) || !string.IsNullOrWhiteSpace(spec.Menu),
-                $"control '{key}' can neither be found directly nor through a menu");
+                !string.IsNullOrWhiteSpace(spec.AutomationId) ||
+                !string.IsNullOrWhiteSpace(spec.Menu) ||
+                !string.IsNullOrWhiteSpace(spec.Name),
+                $"control '{key}' can neither be found directly, through a menu, nor by name");
             Assert.Null(spec.Validate());
+        }
+    }
+
+    [Fact]
+    public void A_name_only_control_is_press_only_and_scoped()
+    {
+        // Matching on a name is a last resort - it is localised, and a bare name
+        // could collide with a toolbar button. Anything driven that way must be
+        // confined to the dialog it belongs to, and must stay out of snapshots,
+        // where finding it would cost a scan of every popup window on each poll.
+        var config = Program.LoadConfig("nope");
+
+        foreach (var (key, spec) in config.Controls)
+        {
+            if (string.IsNullOrWhiteSpace(spec.Name) || !string.IsNullOrWhiteSpace(spec.AutomationId))
+            {
+                Assert.False(spec.IsPressOnly, $"'{key}' should not be press-only");
+                continue;
+            }
+
+            Assert.True(spec.IsPressOnly, $"'{key}' is name-only so it must be press-only");
+            Assert.False(
+                string.IsNullOrWhiteSpace(spec.WithinClass),
+                $"'{key}' matches by name and must be scoped with withinClass");
         }
     }
 

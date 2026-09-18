@@ -108,5 +108,5 @@ globalThis.ACTION_DESCRIPTIONS = {
 		"Places your camera feed onto the slide. Presenter only, and needs your camera on: Teams still lists the option with the camera off but disables it, so the key dims.",
 
 	"com.bad-duck.teamscontrol.ppt-stop-presenting":
-		"Stops sharing the deck, which ends the presentation for everyone. The key offers a press-and-hold guard below. Presenter only."
+		"Stops sharing the deck, which ends the presentation for everyone. A press opens the \"Stop presenting?\" dialog Teams shows; keep the key held to answer it, or release and answer on screen. Presenter only."
 };

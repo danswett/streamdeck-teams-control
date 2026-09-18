@@ -166,6 +166,21 @@ public static class Defaults
                 AutomationId = "stopPresentingPptBtn",
                 RequiresRole = "presenter"
             },
+            // Teams confirms before ending a presentation for everyone. The
+            // dialog is titled "Stop presenting?" and its buttons carry no
+            // AutomationId, so the confirm is matched by name inside that
+            // dialog. Captured live on 2026-09-18:
+            //   [Window] name='Stop presenting?' class='ui-dialog ...'
+            //     [Button] name='Cancel'
+            //     [Button] name='Stop presenting'
+            // The toolbar stays visible while it is up, so flyout recovery does
+            // not fire and the dialog survives until answered.
+            ["ppt-stop-presenting-confirm"] = new()
+            {
+                Name = "Stop presenting",
+                WithinClass = "ui-dialog",
+                RequiresRole = "presenter"
+            },
             ["ppt-private-view"] = new()
             {
                 AutomationId = "toggleEnablePrivateViewingButton",

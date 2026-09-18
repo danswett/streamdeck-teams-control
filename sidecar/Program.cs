@@ -595,6 +595,8 @@ public static class Program
             cfg.Controls[prop.Name] = new ControlSpec
             {
                 AutomationId = Str(o, "automationId") ?? "",
+                Name = Str(o, "name"),
+                WithinClass = Str(o, "withinClass"),
                 Menu = Str(o, "menu"),
                 Submenu = Str(o, "submenu"),
                 RequiresRole = Str(o, "requiresRole"),

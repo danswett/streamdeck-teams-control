@@ -9,9 +9,16 @@
  *
  * Selectors captured from a live meeting on 2026-09-17, Teams 26255.500.5120.7530.
  */
-import { action } from "@elgato/streamdeck";
+import {
+	action,
+	type KeyDownEvent,
+	type KeyUpEvent,
+	type WillDisappearEvent
+} from "@elgato/streamdeck";
+import streamDeck from "@elgato/streamdeck";
+import type { JsonObject } from "@elgato/utils";
 
-import type { TeamsState } from "../bridge";
+import { bridge, type TeamsState } from "../bridge";
 import {
 	presenterViewGlyph,
 	privateViewGlyph,
@@ -21,7 +28,15 @@ import {
 	renderTool,
 	type Tone
 } from "../icons";
-import { GuardedAction, TeamsAction, usable } from "./base";
+import { TeamsAction, usable } from "./base";
+
+const logger = streamDeck.logger.createScope("PptStop");
+
+/** How long "Stop sharing" must be held before the confirmation is answered. */
+const CONFIRM_HOLD_MS = 700;
+
+/** Gap before the single retry, for a dialog that has not rendered yet. */
+const CONFIRM_RETRY_MS = 300;
 
 /** True while a deck is actually being presented, in either role. */
 export function pptLive(state: TeamsState): boolean {
@@ -340,17 +355,73 @@ export class PptLayoutCameoAction extends PptAction {
 }
 
 /**
- * Ends the presentation for everyone. Offers the same press-and-hold guard as
- * Leave, for the same reason: it sits beside keys pressed constantly and cannot
- * be taken back.
+ * Ends the presentation for everyone.
+ *
+ * Teams guards this itself: pressing "Stop sharing" opens a "Stop presenting?"
+ * dialog rather than acting. So the key mirrors that - a press opens the
+ * dialog, and keeping the key held answers it. Releasing early leaves the
+ * dialog up to be answered on screen, which is exactly what a confirmation is
+ * for. No press-and-hold setting, because Teams already asks.
  */
 @action({ UUID: "com.bad-duck.teamscontrol.ppt-stop-presenting" })
-export class PptStopPresentingAction extends GuardedAction {
+export class PptStopPresentingAction extends TeamsAction {
+	#holds = new Map<string, NodeJS.Timeout>();
+
 	protected override targetFor(): string {
 		return "ppt-stop-presenting";
 	}
 
 	protected override draw(state: TeamsState): string {
 		return renderSimple("pptStopPresenting", usable(state, "ppt-stop-presenting"), "danger");
+	}
+
+	override async onKeyDown(ev: KeyDownEvent<JsonObject>): Promise<void> {
+		// Armed before the press, not after: the press has to round-trip to
+		// Teams, and starting the clock afterwards would make the hold longer
+		// than it looks.
+		const id = ev.action.id;
+		this.#clear(id);
+		this.#holds.set(
+			id,
+			setTimeout(() => {
+				this.#holds.delete(id);
+				void this.#confirm(ev);
+			}, CONFIRM_HOLD_MS)
+		);
+
+		await super.onKeyDown(ev);
+	}
+
+	override async onKeyUp(ev: KeyUpEvent<JsonObject>): Promise<void> {
+		this.#clear(ev.action.id);
+	}
+
+	override onWillDisappear(ev: WillDisappearEvent<JsonObject>): void {
+		this.#clear(ev.action.id);
+		super.onWillDisappear(ev);
+	}
+
+	async #confirm(ev: KeyDownEvent<JsonObject>): Promise<void> {
+		// The dialog is rendered after the press returns, so the first attempt
+		// can arrive before its buttons exist. One retry covers that without
+		// making a genuinely missing dialog wait.
+		for (let attempt = 0; attempt < 2; attempt++) {
+			const result = await bridge.invoke("ppt-stop-presenting-confirm");
+			if (result.ok) {
+				await ev.action.showOk();
+				return;
+			}
+			if (attempt === 0) await new Promise((r) => setTimeout(r, CONFIRM_RETRY_MS));
+			else logger.warn(`confirming stop-presenting failed: ${result.error ?? "unknown"}`);
+		}
+		await ev.action.showAlert();
+	}
+
+	#clear(id: string): void {
+		const t = this.#holds.get(id);
+		if (t) {
+			clearTimeout(t);
+			this.#holds.delete(id);
+		}
 	}
 }

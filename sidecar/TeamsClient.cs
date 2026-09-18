@@ -15,6 +15,28 @@ namespace TeamsBridge;
 public sealed class ControlSpec
 {
     public string AutomationId { get; set; } = "";
+
+    /// <summary>
+    /// Accessible name, for the rare control Teams ships without an
+    /// AutomationId. Only the confirmation dialog's buttons are like this, and
+    /// they exist solely while that dialog is up, so a name is all there is to
+    /// match on. Localised, like <see cref="OffName"/> and the state patterns.
+    /// </summary>
+    public string? Name { get; set; }
+
+    /// <summary>
+    /// Restricts a <see cref="Name"/> lookup to inside a popup window whose
+    /// class contains this, so "Stop presenting" cannot match a toolbar button
+    /// that happens to share the label.
+    /// </summary>
+    public string? WithinClass { get; set; }
+
+    /// <summary>
+    /// True for a control that can only be pressed, never reported on: it has
+    /// no AutomationId and is found by name inside a transient dialog.
+    /// </summary>
+    public bool IsPressOnly => string.IsNullOrEmpty(AutomationId) && !string.IsNullOrEmpty(Name);
+
     public string? Menu { get; set; }
 
     /// <summary>
@@ -668,6 +690,35 @@ public sealed class TeamsClient : IDisposable
         catch { return null; }
     }
 
+    private static string ClassOf(AutomationElement el)
+    {
+        try { return el.Properties.ClassName.ValueOrDefault ?? ""; }
+        catch { return ""; }
+    }
+
+    /// <summary>
+    /// Finds a control by accessible name, optionally only inside a popup
+    /// window of a given class. Used for the confirmation dialog, whose buttons
+    /// carry no AutomationId.
+    /// </summary>
+    private static AutomationElement? FindByName(AutomationElement scope, string name, string? withinClass)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(withinClass))
+                return scope.FindFirstDescendant(cf => cf.ByName(name));
+
+            foreach (var w in scope.FindAllDescendants(cf => cf.ByControlType(ControlType.Window)))
+            {
+                if (ClassOf(w).IndexOf(withinClass, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                var hit = w.FindFirstDescendant(cf => cf.ByName(name));
+                if (hit is not null) return hit;
+            }
+            return null;
+        }
+        catch { return null; }
+    }
+
     private static bool IsAlive(AutomationElement? el)
     {
         if (el is null) return false;
@@ -879,6 +930,15 @@ public sealed class TeamsClient : IDisposable
 
     private AutomationElement? ResolveControl(string key, ControlSpec spec)
     {
+        // A name-only control is transient - it exists just while its dialog is
+        // up - so it is neither indexed nor cached, and is looked up fresh every
+        // time it is asked for.
+        if (string.IsNullOrEmpty(spec.AutomationId) && !string.IsNullOrEmpty(spec.Name))
+        {
+            var dlgWin = ResolveMeetingWindow();
+            return dlgWin is null ? null : FindByName(dlgWin, spec.Name!, spec.WithinClass);
+        }
+
         // During a snapshot the index has already answered this in one pass.
         if (_index is not null)
         {
@@ -895,6 +955,12 @@ public sealed class TeamsClient : IDisposable
 
         var win = ResolveMeetingWindow();
         if (win is null) return null;
+
+        // An empty AutomationId matches the first element that has none, which
+        // is almost everything. A spec that names nothing findable must resolve
+        // to nothing, not to whatever the tree happens to offer - otherwise a
+        // mistyped override quietly clicks an unrelated control.
+        if (string.IsNullOrEmpty(spec.AutomationId)) return null;
 
         var el = FindById(win, spec.AutomationId);
         if (el is null) return null;
@@ -1568,6 +1634,11 @@ public sealed class TeamsClient : IDisposable
 
         foreach (var (key, spec) in _config.Controls)
         {
+            // Press-only: it lives inside a dialog that is open for a moment,
+            // and searching for it costs a scan of every popup window. Nothing
+            // draws it, so a snapshot has no reason to look.
+            if (spec.IsPressOnly) continue;
+
             // A control scoped to a PowerPoint Live role is only offered in that
             // role: "Take control" exists for an attendee, the presenter tools
             // for a presenter.
@@ -2102,7 +2173,15 @@ public sealed class TeamsClient : IDisposable
         {
             try
             {
-                if (node.Properties.ControlType.ValueOrDefault == ControlType.Window) return true;
+                if (node.Properties.ControlType.ValueOrDefault == ControlType.Window)
+                {
+                    // A modal confirmation is not a stray flyout. Teams asks
+                    // before ending a presentation for everyone, and dismissing
+                    // that on the user's behalf both throws away the answer and
+                    // makes the key look broken. Only menus and palettes are
+                    // safe to clear.
+                    return ClassOf(node).IndexOf("ui-dialog", StringComparison.OrdinalIgnoreCase) < 0;
+                }
             }
             catch { return false; }
             node = SafeParent(node);
@@ -2358,6 +2437,22 @@ public sealed class TeamsClient : IDisposable
             var el = ResolveControl(target, spec);
             if (el is null) return (false, $"control '{target}' not found");
             if (!SafeEnabled(el)) return (false, $"control '{target}' is disabled");
+
+            // A dialog button is invoked rather than clicked. Press posts a
+            // synthetic click into the render widget, which is right for the
+            // toolbar - it avoids stealing focus - but a posted click only
+            // reports that it was posted, not that it landed, and this dialog
+            // is a separate popup layer from that widget. Ending a presentation
+            // is one-way and silently doing nothing is the worst outcome, so it
+            // uses the deterministic path. Verified live on 2026-09-18: Invoke
+            // on this button stops the presentation.
+            if (spec.IsPressOnly)
+            {
+                var invoked = TryInvoke(el);
+                Console.Error.WriteLine($"dialog button '{target}' ({NameOf(el)}): invoked={invoked}");
+                return invoked ? (true, null) : (false, $"could not invoke '{target}'");
+            }
+
             return Press(el) ? (true, null) : (false, $"could not invoke '{target}'");
         }
 
