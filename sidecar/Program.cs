@@ -47,6 +47,19 @@ public static class Program
     /// </summary>
     private const int StaleInvokeMs = 9_000;
 
+    /// <summary>
+    /// A snapshot slower than this is worth complaining about. The worker runs
+    /// one thing at a time, so a snapshot this long is long enough to eat most
+    /// of the plugin's patience with a press that arrives during it.
+    /// </summary>
+    private const int SlowSnapshotMs = 2_000;
+
+    /// <summary>
+    /// Whether a poll is already queued. Teams raises bursts of property events
+    /// for one visible change, and every extra poll only delays real work.
+    /// </summary>
+    private static int _pollPending;
+
     [DllImport("user32.dll")]
     private static extern bool SetProcessDpiAwarenessContext(IntPtr value);
 
@@ -208,10 +221,16 @@ public static class Program
         var lastTrim = Environment.TickCount64 - TrimIntervalMs + 5_000;
 
         // Fired from UIA threads; only ever enqueues, never touches UIA.
+        //
+        // Coalesced: a poll already waiting says everything a second one would,
+        // and Teams can raise a burst of property events for a single visible
+        // change. Without this the queue grows with work that is already
+        // covered, and a press lands behind all of it.
         client.Hint += () =>
         {
+            if (Interlocked.Exchange(ref _pollPending, 1) == 1) return;
             try { if (!Queue.IsAddingCompleted) Queue.Add(new WorkItem(0, "poll", null, null)); }
-            catch { }
+            catch { Interlocked.Exchange(ref _pollPending, 0); }
         };
 
         while (_running)
@@ -231,6 +250,24 @@ public static class Program
 
             if (item is not null)
             {
+                if (item.Cmd == "poll")
+                {
+                    Interlocked.Exchange(ref _pollPending, 0);
+
+                    // The queue is FIFO, so a press that arrived while this poll
+                    // was waiting sits behind it. A poll is only a backstop read
+                    // and says the same thing a moment later; a press is what the
+                    // user is waiting on, and has 10s before the key reports
+                    // failure. Let the press through and poll straight after -
+                    // the post-press re-read covers what this poll would have
+                    // seen anyway.
+                    if (Queue.Count > 0)
+                    {
+                        nextPoll = Environment.TickCount64;
+                        continue;
+                    }
+                }
+
                 try { Handle(client, item); }
                 catch (Exception ex)
                 {
@@ -260,7 +297,17 @@ public static class Program
 
             try
             {
+                // Timed because this is the only thing on the worker that can
+                // run long, and while it does, a press waits: the plugin gives
+                // up after 10s and tells the key it failed. A slow snapshot is
+                // therefore the explanation for a key that "did nothing", so it
+                // says so rather than leaving it to be guessed at.
+                var started = Environment.TickCount64;
                 var snap = client.GetSnapshot();
+                var took = Environment.TickCount64 - started;
+                if (took > SlowSnapshotMs)
+                    Console.Error.WriteLine($"slow snapshot: {took}ms (a press during this would have waited)");
+
                 currentPollMs = snap.InkFlyoutOpen ? inkFlyoutPollMs
                     : snap.InMeeting ? meetingPollMs
                     : idlePollMs;

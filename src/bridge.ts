@@ -92,7 +92,12 @@ class Bridge {
 		proc.stdout.setEncoding("utf8");
 		proc.stdout.on("data", (chunk: string) => this.#onData(chunk));
 		proc.stderr.setEncoding("utf8");
-		proc.stderr.on("data", (chunk: string) => logger.debug(`sidecar: ${chunk.trim()}`));
+		// Logged at info, not debug: the log level is fixed at info, so debug
+		// went nowhere and the sidecar's own diagnostics — a slow snapshot, a
+		// selector pattern that timed out — were invisible exactly when someone
+		// was trying to work out why a key did nothing. It is low volume, and
+		// carries no meeting content by design.
+		proc.stderr.on("data", (chunk: string) => logger.info(`sidecar: ${chunk.trim()}`));
 
 		proc.on("exit", (code, signal) => {
 			logger.warn(`Sidecar exited (code=${code}, signal=${signal})`);
