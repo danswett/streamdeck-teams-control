@@ -417,9 +417,9 @@ public class SelectorConfigTests : IDisposable
             "Allow participants to move through shared presentation on their own. Has context menu");
 
         // And they must not both match the same text, or the key would latch.
-        Assert.DoesNotMatch(spec.ActiveRegex,
+        Assert.DoesNotMatch(spec.ActiveRegex!,
             "Allow participants to move through shared presentation on their own. Has context menu");
-        Assert.DoesNotMatch(spec.InactiveRegex,
+        Assert.DoesNotMatch(spec.InactiveRegex!,
             "Prevent participants from moving through shared presentation on their own. Has context menu");
     }
 
