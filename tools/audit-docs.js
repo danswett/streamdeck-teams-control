@@ -240,6 +240,20 @@ for (const f of readdirSync(MARKET)) {
 }
 for (const f of listed) if (!existsSync(path.join(MARKET, f))) fail("marketplace", `${f} is listed but missing`);
 
+// The gallery video. Checked without ffprobe so the audit still runs on a
+// machine that has no encoder, which is every CI runner here.
+const video = path.join(MARKET, "demo.mp4");
+if (marketReadme.includes("`demo.mp4`")) {
+	if (!existsSync(video)) fail("marketplace", "demo.mp4 is listed but missing");
+	else {
+		const b = readFileSync(video);
+		const mb = b.length / (1024 * 1024);
+		if (b.subarray(4, 8).toString("ascii") !== "ftyp") fail("marketplace", "demo.mp4 is not an MP4");
+		if (mb > 250) fail("marketplace", `demo.mp4 is ${mb.toFixed(0)} MB, Elgato's limit is 250 MB`);
+		note("marketplace", `demo.mp4 is ${mb.toFixed(2)} MB`);
+	}
+}
+
 // ------------------------------------------------------------------- report
 console.log(`${problems.length} problem(s)\n`);
 for (const p of problems) console.log(`  FAIL  ${p}`);

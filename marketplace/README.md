@@ -22,10 +22,17 @@ shows the artwork that actually ships.
 | `gallery-4-watching.png` | Gallery 4 of 6 | 1920 × 960 PNG |
 | `gallery-5-profiles.png` | Gallery 5 of 6 | 1920 × 960 PNG |
 | `gallery-6-no-meeting.png` | Gallery 6 of 6 | 1920 × 960 PNG |
+| `demo.mp4` | Gallery video | 1920 × 1080 MP4, under 250 MB |
 
 Elgato requires three gallery items and allows up to ten. Six is the point at
 which the two halves of the plugin — meetings and PowerPoint Live — are both
 shown in both roles, without repeating a layout.
+
+The video is generated too, by `node tools/build-demo-frames.ts` followed by
+the ffmpeg line it prints. Every key in it is drawn by the same functions the
+plugin uses, so it cannot show artwork the product does not ship. It contains
+no Teams interface on purpose: that artwork is Microsoft's, and a mock-up of it
+would go stale on their release schedule rather than ours.
 
 Product file: `dist/com.bad-duck.teamscontrol.streamDeckPlugin`, built by
 `npm run pack` and attached to every GitHub release by the release workflow.

@@ -16,6 +16,7 @@
 		"test:cs": "dotnet test sidecar/tests/TeamsBridge.Tests.csproj --nologo",
 		"audit": "node tools/audit-docs.js",
 		"marketplace": "node tools/generate-marketplace.ts",
+		"demo": "node tools/build-demo-frames.ts",
 		"pack": "npm run build && streamdeck pack com.bad-duck.teamscontrol.sdPlugin --output dist --no-update-check"
 	},
 	"devDependencies": {
