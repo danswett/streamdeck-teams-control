@@ -35,6 +35,17 @@ export abstract class TeamsAction<T extends JsonObject = JsonObject> extends Sin
 	/** Keys currently playing an animation; state repaints must not interrupt them. */
 	readonly #animating = new Set<string>();
 
+	/**
+	 * Keys with a press still in flight.
+	 *
+	 * Opening a Teams flyout and finding an item in it takes seconds, so
+	 * without this a few impatient presses queue up behind one another and then
+	 * all fire in a burst once the first finishes — driving the meeting long
+	 * after the user stopped asking. A press while one is outstanding is
+	 * refused outright, which is both predictable and visible.
+	 */
+	readonly #inFlight = new Set<string>();
+
 	/** Sidecar control key this action presses, or undefined if it never presses one. */
 	protected abstract targetFor(settings: T): string | undefined;
 
@@ -96,6 +107,7 @@ export abstract class TeamsAction<T extends JsonObject = JsonObject> extends Sin
 	override onWillDisappear(ev: WillDisappearEvent<T>): void {
 		this.#painted.delete(ev.action.id);
 		this.#animating.delete(ev.action.id);
+		this.#inFlight.delete(ev.action.id);
 		this.#visible = Math.max(0, this.#visible - 1);
 		if (this.#visible === 0 && this.#unsubscribe) {
 			this.#unsubscribe();
@@ -107,10 +119,22 @@ export abstract class TeamsAction<T extends JsonObject = JsonObject> extends Sin
 		const target = this.targetFor(ev.payload.settings);
 		if (!target) return;
 
-		const result = await bridge.invoke(target, this.argFor(ev.payload.settings));
-		if (!result.ok) {
-			logger.warn(`invoke(${target}) failed: ${result.error ?? "unknown"}`);
+		const id = ev.action.id;
+		if (this.#inFlight.has(id)) {
+			logger.debug(`ignoring press on ${target}: one is already in flight`);
 			await ev.action.showAlert();
+			return;
+		}
+
+		this.#inFlight.add(id);
+		try {
+			const result = await bridge.invoke(target, this.argFor(ev.payload.settings));
+			if (!result.ok) {
+				logger.warn(`invoke(${target}) failed: ${result.error ?? "unknown"}`);
+				await ev.action.showAlert();
+			}
+		} finally {
+			this.#inFlight.delete(id);
 		}
 	}
 
