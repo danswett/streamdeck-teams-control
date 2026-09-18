@@ -10,6 +10,7 @@
  * match the app without copying any proprietary artwork.
  */
 import glyphs from "./glyphs.generated.json" with { type: "json" };
+import toolImages from "./tool-images.generated.json" with { type: "json" };
 
 /** Source viewBox plus inner SVG markup for one piece of artwork. */
 export type GlyphDef = {
@@ -21,6 +22,8 @@ const CONTROL_GLYPHS = glyphs.controls as Record<string, GlyphDef>;
 const REACTION_GLYPHS = glyphs.reactions as Record<string, GlyphDef>;
 const EMOJI_GLYPHS = glyphs.emoji as Record<string, GlyphDef>;
 
+/** Pre-rendered tool artwork, keyed '<control>|<ink hex>|<on|off>'. */
+const TOOL_IMAGES = toolImages.images as Record<string, string>;
 /** Stream Deck key canvas. 144px is the high-DPI size; it scales down cleanly. */
 const SIZE = 144;
 
@@ -34,6 +37,19 @@ const COLORS: Record<Tone, string> = {
 	unavailable: "#4A4A4A"
 };
 
+/** Exported so the image pre-render uses exactly the same grey. */
+export const UNAVAILABLE_COLOR = COLORS.unavailable;
+
+/**
+ * Colours PowerPoint Live gives its drawing tools.
+ *
+ * Teams shows these in colour rather than monochrome, and the colour is the
+ * identity of the tool — a red pen is a different thing from a yellow
+ * highlighter. Matching them means colour can no longer also mean "active", so
+ * the active tool is marked with the same bar Teams draws beneath it.
+ *
+ * The artwork and the colour table live in src/tool-art.ts.
+ */
 /** Fraction of the key the artwork fills. */
 const CONTROL_FILL = 0.80;
 /** Left a little headroom so the press animation can grow without clipping. */
@@ -73,8 +89,11 @@ function wrap(inner: string): string {
 	);
 }
 
-/** Encodes an SVG for `setImage`. */
+/** Encodes an SVG for `setImage`, passing through anything already encoded. */
 export function toDataUri(svg: string): string {
+	// The drawing tools ship as pre-rendered PNG data URIs; everything else is
+	// SVG built here.
+	if (svg.startsWith("data:")) return svg;
 	return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
@@ -122,6 +141,146 @@ export function renderToggle(opts: ToggleOptions): string {
 /** Renders a single-glyph control such as chat, people or leave. */
 export function renderSimple(key: string, available: boolean, tone: Tone = "on"): string {
 	return renderGlyph(key, available ? tone : "unavailable");
+}
+
+
+
+/**
+ * Colour each tool falls back to when Teams has not said which it is using —
+ * before the first state arrives, or in a language whose colour names are not
+ * in the table.
+ */
+export const TOOL_DEFAULT_COLOR: Record<string, string> = {
+	"ppt-cursor": "#FFFFFF",
+	"ppt-laser": "#FF3B30",
+	"ppt-pen": "#FF3B30",
+	"ppt-highlighter": "#FFC000",
+	"ppt-eraser": "#F2A3A3"
+};
+
+/**
+ * Ink colours PowerPoint Live offers, keyed by the words Teams puts in the
+ * control's accessible name ("Pen: Light blue, Thickness 3").
+ *
+ * The names were captured from a live pen palette on 2026-09-17. Only two hex
+ * values are confirmed — Red and Yellow, read out of the artwork Teams itself
+ * rendered — and they are marked below. The rest are Office's usual values and
+ * may be slightly off until the same trick is repeated with each colour
+ * selected; an unrecognised name falls back to the tool's default rather than
+ * guessing.
+ */
+export const INK_COLORS: Record<string, string> = {
+	red: "#E3182D", // confirmed: pen and laser, captured from the DOM
+	yellow: "#FFFC00", // confirmed: highlighter, captured from the DOM
+
+	black: "#2B2B2B",
+	gray: "#7F7F7F",
+	grey: "#7F7F7F",
+	"light gray": "#BFBFBF",
+	"light grey": "#BFBFBF",
+	"dark red": "#C00000",
+	orange: "#E36C0A",
+	"light orange": "#FFC000",
+	"dark yellow": "#BF8F00",
+	green: "#00B050",
+	"light green": "#92D050",
+	blue: "#0070C0",
+	"light blue": "#00B0F0",
+	purple: "#7030A0",
+	"dark purple": "#5B2D8E",
+	magenta: "#E3008C",
+	pink: "#FF64B5",
+
+	// Highlighter-only. Teams renders these as translucent washes rather than
+	// solid ink, so they are approximated as pale tints here - a key drawn at
+	// 50% alpha would just look unlit.
+	"faded red": "#F1A7A7",
+	"faded green": "#A8D8A8",
+	"faded blue": "#A7C7E7",
+
+	turquoise: "#00CFC8",
+	aqua: "#00CFC8",
+	lime: "#BAD80A",
+	white: "#FFFFFF"
+};
+
+/**
+ * Resolves the colour Teams reported for a tool.
+ *
+ * Black is nudged off true black: the keys are dark, and a genuinely black pen
+ * tip on them is invisible rather than subtle.
+ */
+export function toolColor(control: string, reported: string | undefined): string {
+	const fallback = TOOL_DEFAULT_COLOR[control] ?? "#FFFFFF";
+	if (!reported) return fallback;
+
+	// hasOwn, because the lookup key is an accessible name read out of the Teams
+	// window: a plain index would resolve "constructor" to a function off the
+	// prototype and hand back something that is not a colour at all.
+	const key = reported.trim().toLowerCase();
+	return Object.hasOwn(INK_COLORS, key) ? INK_COLORS[key] : fallback;
+}
+
+/**
+ * Which podium to draw for a given presenter-view state.
+ *
+ * Lives here rather than with the action so it can be tested without pulling
+ * the Stream Deck SDK into a unit test, and because it is the part that was
+ * wrong: being backwards still produces a perfectly plausible key.
+ *
+ * A podium, not an eye — the eye is private viewing, which is a different
+ * control entirely. Struck through while the notes pane exists and plain once
+ * it is hidden, so the key shows what pressing it will do, matching the entry
+ * PowerPoint Live swaps into its own Change view menu.
+ */
+export function presenterViewGlyph(showing: boolean): string {
+	return showing ? "pptHidePresenterView" : "pptShowPresenterView";
+}
+
+/**
+ * Which eye to draw for a given private-viewing state.
+ *
+ * Struck through while attendees may NOT move through the deck on their own,
+ * matching Teams. Note this one is the state rather than the action: unlike the
+ * presenter-view podium, the slash here says what is currently true.
+ */
+export function privateViewGlyph(enabled: boolean): string {
+	return enabled ? "pptPrivateView" : "pptPrivateViewOff";
+}
+
+/**
+ * Renders a PowerPoint Live drawing tool.
+ *
+ * The artwork is Microsoft's own, captured from the Teams DOM — gradients,
+ * blur filters, blend modes and all. These are illustrations rather than
+ * glyphs, which is why two earlier attempts (drawing them by hand, then
+ * substituting the flat "Clay" icons from the Teams bundle) both looked wrong
+ * next to the real toolbar.
+ *
+ * Returned as a pre-rendered PNG rather than SVG. Stream Deck's own renderer
+ * does not support everything the artwork uses, and left the highlighter and
+ * eraser tips unfilled; rasterising at build time with a complete renderer
+ * means the key shows what Teams shows, and saves the deck the work.
+ */
+export function renderTool(
+	control: string,
+	options: { available: boolean; active: boolean; color?: string }
+): string {
+	const { available, active } = options;
+
+	if (!available) return TOOL_IMAGES[`${control}|unavailable`] ?? "";
+
+	const ink = toolColor(control, options.color);
+	const key = `${control}|${ink}|${active ? "on" : "off"}`;
+
+	// A colour Teams has added since the images were built falls back to the
+	// tool's own, which is always rendered.
+	return (
+		TOOL_IMAGES[key] ??
+		TOOL_IMAGES[`${control}|${TOOL_DEFAULT_COLOR[control]}|${active ? "on" : "off"}`] ??
+		TOOL_IMAGES[`${control}|unavailable`] ??
+		""
+	);
 }
 
 /** Fraction of the key the artwork fills when a label sits beneath it. */

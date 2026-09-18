@@ -4,13 +4,14 @@
  *
  * Run with: node tools/generate-icons.ts
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Resvg } from "@resvg/resvg-js";
 
-import { REACTION_KEYS, renderEmoji, renderGlyph, renderReaction } from "../src/icons.ts";
+import { REACTION_KEYS, TOOL_DEFAULT_COLOR, renderEmoji, renderGlyph, renderReaction } from "../src/icons.ts";
+import { TOOL_ICONS, composeToolSvg } from "./tool-art.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const IMGS = path.join(ROOT, "com.bad-duck.teamscontrol.sdPlugin", "imgs");
@@ -31,20 +32,14 @@ const ACTIONS: Record<string, { glyph: string; danger?: boolean }> = {
 	"ppt-status": { glyph: "pptSlide" },
 	"ppt-sync": { glyph: "pptSync" },
 	"ppt-grid": { glyph: "pptGrid" },
-	"ppt-zoom-in": { glyph: "pptZoomIn" },
-	"ppt-zoom-out": { glyph: "pptZoomOut" },
 	"ppt-high-contrast": { glyph: "pptContrast" },
 	"ppt-translate": { glyph: "pptTranslate" },
 	"ppt-take-control": { glyph: "pptTakeControl" },
 	"ppt-popout": { glyph: "pptPopout" },
 	"ppt-copilot": { glyph: "pptCopilot" },
 
-	// PowerPoint Live, presenting.
-	"ppt-cursor": { glyph: "pptCursor" },
-	"ppt-laser": { glyph: "pptLaser" },
-	"ppt-pen": { glyph: "pptPen" },
-	"ppt-highlighter": { glyph: "pptHighlighter" },
-	"ppt-eraser": { glyph: "pptEraser" },
+	// PowerPoint Live, presenting. The five drawing tools are handled separately
+	// below: they ship Teams' own artwork rather than a Fluent stand-in.
 	"ppt-private-view": { glyph: "pptPrivateView" },
 	"ppt-hide-presenter-view": { glyph: "pptHidePresenterView" },
 	"ppt-refresh": { glyph: "pptRefresh" },
@@ -74,6 +69,44 @@ for (const [name, { glyph, danger }] of Object.entries(ACTIONS)) {
 	// Action list icons must be monochrome white on transparent.
 	write(path.join(dir, "icon.svg"), renderGlyph(glyph, "on"));
 	write(path.join(dir, "key.svg"), renderGlyph(glyph, danger ? "danger" : "on"));
+}
+
+/**
+ * The drawing tools, which are the exception to the monochrome rule.
+ *
+ * Their keys show Teams' own artwork, captured from the DOM, and a generic
+ * Fluent pen beside the real one in the action list reads as a different
+ * control. The artwork is already rasterised into tool-images.generated.json,
+ * so both files come straight from it and cannot drift from what the key draws.
+ */
+const TOOL_ACTIONS = ["ppt-cursor", "ppt-laser", "ppt-pen", "ppt-highlighter", "ppt-eraser"];
+
+for (const name of TOOL_ACTIONS) {
+	const dir = path.join(IMGS, "actions", name);
+	const icon = TOOL_ICONS[name];
+	if (!icon) throw new Error(`no captured artwork for ${name}`);
+	const ink = TOOL_DEFAULT_COLOR[name] ?? "#FFFFFF";
+
+	// Rasterised at each size rather than scaled from one, so the gradients and
+	// blur filters resolve at the size they are actually shown at. Stream Deck's
+	// own sizes: 20px in the action list, 72px on a key, doubled for @2x.
+	const sizes: [string, number][] = [
+		["icon.png", 20],
+		["icon@2x.png", 40],
+		["key.png", 72],
+		["key@2x.png", 144]
+	];
+
+	mkdirSync(dir, { recursive: true });
+	for (const [file, size] of sizes) {
+		writePng(path.join(dir, file), composeToolSvg(icon, ink, false, size), size);
+	}
+
+	// The manifest references these without an extension, so a stale SVG left
+	// beside the PNG is ambiguous - and was what the action list kept showing.
+	for (const stale of ["icon.svg", "key.svg"]) {
+		rmSync(path.join(dir, stale), { force: true });
+	}
 }
 
 // Each reaction is its own action, so each gets its own artwork. The key shows

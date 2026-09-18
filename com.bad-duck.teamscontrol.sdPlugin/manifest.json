@@ -1,7 +1,7 @@
 {
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
 	"Name": "Teams Meeting Controls",
-	"Version": "1.6.0.0",
+	"Version": "1.7.0.0",
 	"Author": "Bad Duck Software",
 	"Description": "Control Microsoft Teams meetings from your Stream Deck. Mute, camera, raise hand, reactions, background blur and more â€” with live state on every key. Works while Teams is in the background; never sends keystrokes.",
 	"Category": "Teams Meeting Controls",
@@ -316,7 +316,7 @@
 			]
 		},
 		{
-			"Name": "PPT Live: Sync to Presenter",
+			"Name": "PPT Attendee: Sync",
 			"UUID": "com.bad-duck.teamscontrol.ppt-sync",
 			"Icon": "imgs/actions/ppt-sync/icon",
 			"Tooltip": "Return to the presenter's slide. Lights up while you are viewing privately.",
@@ -352,42 +352,6 @@
 			]
 		},
 		{
-			"Name": "PPT Live: Zoom In",
-			"UUID": "com.bad-duck.teamscontrol.ppt-zoom-in",
-			"Icon": "imgs/actions/ppt-zoom-in/icon",
-			"Tooltip": "Magnify the slide. As an attendee this is only for you; while presenting it zooms for everyone.",
-			"Controllers": [
-				"Keypad"
-			],
-			"SupportedInMultiActions": true,
-			"UserTitleEnabled": false,
-			"PropertyInspectorPath": "ui/ppt.html",
-			"States": [
-				{
-					"Image": "imgs/actions/ppt-zoom-in/key",
-					"TitleAlignment": "bottom"
-				}
-			]
-		},
-		{
-			"Name": "PPT Live: Zoom Out",
-			"UUID": "com.bad-duck.teamscontrol.ppt-zoom-out",
-			"Icon": "imgs/actions/ppt-zoom-out/icon",
-			"Tooltip": "Shrink the slide back down. As an attendee this is only for you; while presenting it zooms for everyone.",
-			"Controllers": [
-				"Keypad"
-			],
-			"SupportedInMultiActions": true,
-			"UserTitleEnabled": false,
-			"PropertyInspectorPath": "ui/ppt.html",
-			"States": [
-				{
-					"Image": "imgs/actions/ppt-zoom-out/key",
-					"TitleAlignment": "bottom"
-				}
-			]
-		},
-		{
 			"Name": "PPT Live: High Contrast",
 			"UUID": "com.bad-duck.teamscontrol.ppt-high-contrast",
 			"Icon": "imgs/actions/ppt-high-contrast/icon",
@@ -406,7 +370,7 @@
 			]
 		},
 		{
-			"Name": "PPT Live: Translate Slides",
+			"Name": "PPT Attendee: Translate Slides",
 			"UUID": "com.bad-duck.teamscontrol.ppt-translate",
 			"Icon": "imgs/actions/ppt-translate/icon",
 			"Tooltip": "Translate the slides into a chosen language, only for you",
@@ -424,7 +388,7 @@
 			]
 		},
 		{
-			"Name": "PPT Live: Take Control",
+			"Name": "PPT Attendee: Take Control",
 			"UUID": "com.bad-duck.teamscontrol.ppt-take-control",
 			"Icon": "imgs/actions/ppt-take-control/icon",
 			"Tooltip": "Take control of the deck someone else is presenting. This makes you the presenter: this key then dims and the presenter keys light up.",
@@ -460,7 +424,7 @@
 			]
 		},
 		{
-			"Name": "PPT Live: Ask Copilot",
+			"Name": "PPT Attendee: Ask Copilot",
 			"UUID": "com.bad-duck.teamscontrol.ppt-copilot",
 			"Icon": "imgs/actions/ppt-copilot/icon",
 			"Tooltip": "Select and drag text on the slide to ask Copilot about it",
@@ -478,7 +442,7 @@
 			]
 		},
 		{
-			"Name": "PPT Live: Laser Pointer",
+			"Name": "PPT Presenter: Laser Pointer",
 			"UUID": "com.bad-duck.teamscontrol.ppt-laser",
 			"Icon": "imgs/actions/ppt-laser/icon",
 			"Tooltip": "Use the laser pointer on your slides",
@@ -496,7 +460,7 @@
 			]
 		},
 		{
-			"Name": "PPT Live: Pen",
+			"Name": "PPT Presenter: Pen",
 			"UUID": "com.bad-duck.teamscontrol.ppt-pen",
 			"Icon": "imgs/actions/ppt-pen/icon",
 			"Tooltip": "Draw on your slides with the pen",
@@ -514,7 +478,7 @@
 			]
 		},
 		{
-			"Name": "PPT Live: Highlighter",
+			"Name": "PPT Presenter: Highlighter",
 			"UUID": "com.bad-duck.teamscontrol.ppt-highlighter",
 			"Icon": "imgs/actions/ppt-highlighter/icon",
 			"Tooltip": "Highlight part of your slide",
@@ -532,7 +496,7 @@
 			]
 		},
 		{
-			"Name": "PPT Live: Eraser",
+			"Name": "PPT Presenter: Eraser",
 			"UUID": "com.bad-duck.teamscontrol.ppt-eraser",
 			"Icon": "imgs/actions/ppt-eraser/icon",
 			"Tooltip": "Erase your annotations",
@@ -550,7 +514,7 @@
 			]
 		},
 		{
-			"Name": "PPT Live: Cursor",
+			"Name": "PPT Presenter: Cursor",
 			"UUID": "com.bad-duck.teamscontrol.ppt-cursor",
 			"Icon": "imgs/actions/ppt-cursor/icon",
 			"Tooltip": "Put the drawing tools away and go back to the cursor",
@@ -568,7 +532,7 @@
 			]
 		},
 		{
-			"Name": "PPT Live: Private View",
+			"Name": "PPT Presenter: Private View",
 			"UUID": "com.bad-duck.teamscontrol.ppt-private-view",
 			"Icon": "imgs/actions/ppt-private-view/icon",
 			"Tooltip": "Let attendees move through the deck on their own, or stop them",
@@ -586,7 +550,7 @@
 			]
 		},
 		{
-			"Name": "PPT Live: Presenter View",
+			"Name": "PPT Presenter: Presenter View",
 			"UUID": "com.bad-duck.teamscontrol.ppt-hide-presenter-view",
 			"Icon": "imgs/actions/ppt-hide-presenter-view/icon",
 			"Tooltip": "Show or hide your notes and thumbnails. Only affects your own screen.",
@@ -604,7 +568,7 @@
 			]
 		},
 		{
-			"Name": "PPT Live: Present Latest",
+			"Name": "PPT Presenter: Present Latest",
 			"UUID": "com.bad-duck.teamscontrol.ppt-refresh",
 			"Icon": "imgs/actions/ppt-refresh/icon",
 			"Tooltip": "Reload the deck to present the latest saved version",
@@ -622,7 +586,7 @@
 			]
 		},
 		{
-			"Name": "PPT Live: Copy Link",
+			"Name": "PPT Presenter: Copy Link",
 			"UUID": "com.bad-duck.teamscontrol.ppt-copy-link",
 			"Icon": "imgs/actions/ppt-copy-link/icon",
 			"Tooltip": "Copy a link to the deck you are presenting",
@@ -640,7 +604,7 @@
 			]
 		},
 		{
-			"Name": "PPT Live: Layout Content Only",
+			"Name": "PPT Presenter: Content Only",
 			"UUID": "com.bad-duck.teamscontrol.ppt-layout-content",
 			"Icon": "imgs/actions/ppt-layout-content/icon",
 			"Tooltip": "Show the slides on their own",
@@ -658,7 +622,7 @@
 			]
 		},
 		{
-			"Name": "PPT Live: Layout Cameo",
+			"Name": "PPT Presenter: Layout Cameo",
 			"UUID": "com.bad-duck.teamscontrol.ppt-layout-cameo",
 			"Icon": "imgs/actions/ppt-layout-cameo/icon",
 			"Tooltip": "Place your camera feed onto the slide. Needs your camera on.",
@@ -676,7 +640,7 @@
 			]
 		},
 		{
-			"Name": "PPT Live: Stop Presenting",
+			"Name": "PPT Presenter: Stop Presenting",
 			"UUID": "com.bad-duck.teamscontrol.ppt-stop-presenting",
 			"Icon": "imgs/actions/ppt-stop-presenting/icon",
 			"Tooltip": "Stop sharing the deck",

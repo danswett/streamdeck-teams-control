@@ -12,7 +12,15 @@
 import { action } from "@elgato/streamdeck";
 
 import type { TeamsState } from "../bridge";
-import { renderGlyph, renderLabelled, renderSimple, type Tone } from "../icons";
+import {
+	presenterViewGlyph,
+	privateViewGlyph,
+	renderGlyph,
+	renderLabelled,
+	renderSimple,
+	renderTool,
+	type Tone
+} from "../icons";
 import { GuardedAction, TeamsAction, usable } from "./base";
 
 /** True while a deck is actually being presented, in either role. */
@@ -55,9 +63,26 @@ export class PptNextAction extends PptAction {
 }
 
 @action({ UUID: "com.bad-duck.teamscontrol.ppt-grid" })
-export class PptGridAction extends PptAction {
-	protected override readonly control = "ppt-grid";
-	protected override readonly glyph = "pptGrid";
+export class PptGridAction extends TeamsAction {
+	protected override targetFor(): string {
+		return "ppt-grid";
+	}
+
+	/**
+	 * Grid view is a real toggle, and the only key that must keep working while
+	 * it is open: opening it unmounts the entire slide-show surface, so every
+	 * other PowerPoint Live control genuinely disappears until it is closed.
+	 *
+	 * Outlined at rest and solid when open, which is the same pair PowerPoint
+	 * Live itself swaps between — it ships both variants and fills the squares
+	 * on hover.
+	 */
+	protected override draw(state: TeamsState): string {
+		const open = state.states["ppt-grid"];
+		const glyph = open ? "pptGridOn" : "pptGrid";
+		if (!usable(state, "ppt-grid")) return renderGlyph(glyph, "unavailable");
+		return renderGlyph(glyph, open ? "accent" : "on");
+	}
 }
 
 @action({ UUID: "com.bad-duck.teamscontrol.ppt-popout" })
@@ -72,22 +97,26 @@ export class PptCopilotAction extends PptAction {
 	protected override readonly glyph = "pptCopilot";
 }
 
-@action({ UUID: "com.bad-duck.teamscontrol.ppt-zoom-in" })
-export class PptZoomInAction extends PptAction {
-	protected override readonly control = "ppt-zoom-in";
-	protected override readonly glyph = "pptZoomIn";
-}
-
-@action({ UUID: "com.bad-duck.teamscontrol.ppt-zoom-out" })
-export class PptZoomOutAction extends PptAction {
-	protected override readonly control = "ppt-zoom-out";
-	protected override readonly glyph = "pptZoomOut";
-}
-
+/**
+ * Views the slides in high contrast, for you only.
+ *
+ * A real checkbox in Teams, but one that lives inside a flyout, so its state is
+ * only readable while that flyout is open. The sidecar reads the true value at
+ * the moment it presses and reports the result, which means the key is accurate
+ * from your first press and re-syncs on every one after — it can only be stale
+ * if you change it in Teams directly.
+ */
 @action({ UUID: "com.bad-duck.teamscontrol.ppt-high-contrast" })
-export class PptHighContrastAction extends PptAction {
-	protected override readonly control = "ppt-high-contrast";
-	protected override readonly glyph = "pptContrast";
+export class PptHighContrastAction extends TeamsAction {
+	protected override targetFor(): string {
+		return "ppt-high-contrast";
+	}
+
+	protected override draw(state: TeamsState): string {
+		const control = "ppt-high-contrast";
+		if (!usable(state, control)) return renderGlyph("pptContrast", "unavailable");
+		return renderGlyph("pptContrast", state.states[control] ? "accent" : "on");
+	}
 }
 
 /**
@@ -173,7 +202,6 @@ export class PptStatusAction extends TeamsAction {
 	protected override draw(state: TeamsState): string {
 		if (!pptLive(state)) return renderLabelled("pptSlide", "", "unavailable");
 
-		const presenting = state.states["ppt-presenting"] ?? false;
 		const slide = state.context["ppt.slide"] ?? "";
 		const total = state.context["ppt.slides"] ?? "";
 
@@ -181,11 +209,7 @@ export class PptStatusAction extends TeamsAction {
 		// the pointer is away, so the slide number has to stand on its own.
 		const label = slide && total ? `${slide}/${total}` : slide;
 
-		return renderLabelled(
-			presenting ? "pptPresenter" : "pptSlide",
-			label,
-			presenting ? "accent" : "on"
-		);
+		return renderLabelled("pptSlide", label, "on");
 	}
 }
 
@@ -202,62 +226,92 @@ export class PptStatusAction extends TeamsAction {
  *
  * Teams exposes them as a single-select list, so the active tool is read from
  * the UI Automation selection rather than from a label — which means it also
- * tracks a tool you picked in Teams itself, not just one pressed from the deck.
+ * tracks a tool you picked in Teams itself.
+ *
+ * The ink colour comes from the same place: Teams puts it in the control's
+ * accessible name ("Pen: Light blue, Thickness 3"), so changing colour in
+ * Teams recolours the key.
  */
 abstract class InkToolAction extends TeamsAction {
 	protected abstract readonly control: string;
-	protected abstract readonly glyph: string;
 
 	protected override targetFor(): string {
 		return this.control;
 	}
 
 	protected override draw(state: TeamsState): string {
-		if (!usable(state, this.control)) return renderGlyph(this.glyph, "unavailable");
-		return renderGlyph(this.glyph, state.states[this.control] ? "accent" : "on");
+		return renderTool(this.control, {
+			available: usable(state, this.control),
+			active: state.states[this.control] ?? false,
+			color: state.context[`ppt.color.${this.control}`]
+		});
 	}
 }
 
 @action({ UUID: "com.bad-duck.teamscontrol.ppt-cursor" })
 export class PptCursorAction extends InkToolAction {
 	protected override readonly control = "ppt-cursor";
-	protected override readonly glyph = "pptCursor";
 }
 
 @action({ UUID: "com.bad-duck.teamscontrol.ppt-laser" })
 export class PptLaserAction extends InkToolAction {
 	protected override readonly control = "ppt-laser";
-	protected override readonly glyph = "pptLaser";
 }
 
 @action({ UUID: "com.bad-duck.teamscontrol.ppt-pen" })
 export class PptPenAction extends InkToolAction {
 	protected override readonly control = "ppt-pen";
-	protected override readonly glyph = "pptPen";
 }
 
 @action({ UUID: "com.bad-duck.teamscontrol.ppt-highlighter" })
 export class PptHighlighterAction extends InkToolAction {
 	protected override readonly control = "ppt-highlighter";
-	protected override readonly glyph = "pptHighlighter";
 }
 
 @action({ UUID: "com.bad-duck.teamscontrol.ppt-eraser" })
 export class PptEraserAction extends InkToolAction {
 	protected override readonly control = "ppt-eraser";
-	protected override readonly glyph = "pptEraser";
 }
 
+/**
+ * Lets attendees move through the deck on their own, or stops them.
+ *
+ * The button's label never changes and it offers no toggle pattern, so the
+ * sidecar reads the state out of its tooltip instead.
+ */
 @action({ UUID: "com.bad-duck.teamscontrol.ppt-private-view" })
-export class PptPrivateViewAction extends PptAction {
-	protected override readonly control = "ppt-private-view";
-	protected override readonly glyph = "pptPrivateView";
+export class PptPrivateViewAction extends TeamsAction {
+	protected override targetFor(): string {
+		return "ppt-private-view";
+	}
+
+	protected override draw(state: TeamsState): string {
+		const control = "ppt-private-view";
+		const glyph = privateViewGlyph(state.states[control]);
+		return renderGlyph(glyph, usable(state, control) ? "on" : "unavailable");
+	}
 }
 
+/**
+ * Shows or hides your notes and thumbnails. A real toggle: the notes pane
+ * existing is what "presenter view is showing" means, so the key tracks the
+ * state even when you change it in Teams directly.
+ */
 @action({ UUID: "com.bad-duck.teamscontrol.ppt-hide-presenter-view" })
-export class PptHidePresenterViewAction extends PptAction {
-	protected override readonly control = "ppt-hide-presenter-view";
-	protected override readonly glyph = "pptHidePresenterView";
+export class PptHidePresenterViewAction extends TeamsAction {
+	protected override targetFor(): string {
+		return "ppt-hide-presenter-view";
+	}
+
+	protected override draw(state: TeamsState): string {
+		const control = "ppt-hide-presenter-view";
+
+		// Drawn in white either way. The slash is the state, so colouring it as
+		// well said the same thing twice - and said it backwards, because the
+		// accent landed on the resting state rather than the changed one.
+		const glyph = presenterViewGlyph(state.states[control]);
+		return renderGlyph(glyph, usable(state, control) ? "on" : "unavailable");
+	}
 }
 
 @action({ UUID: "com.bad-duck.teamscontrol.ppt-refresh" })

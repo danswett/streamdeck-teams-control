@@ -1,14 +1,22 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { Resvg } from "@resvg/resvg-js";
 import {
+	INK_COLORS,
+	presenterViewGlyph,
+	privateViewGlyph,
 	REACTION_KEYS,
 	renderEmoji,
 	renderEmojiFrame,
+	renderGlyph,
 	renderHandFrame,
 	renderReaction,
 	renderReactionFrame,
 	renderSimple,
 	renderToggle,
-	toDataUri
+	renderTool,
+	toDataUri,
+	toolColor
 } from "../src/icons";
 
 /** Stream Deck rejects anything that is not a well-formed image. */
@@ -154,5 +162,175 @@ describe("press animation", () => {
 
 	it("returns valid empty artwork for an unknown key", () => {
 		expectSvg(renderEmojiFrame("does-not-exist", 0.5));
+	});
+});
+
+describe("ink colours", () => {
+	// The sidecar reads a colour name off the Teams palette and the plugin turns
+	// it into ink. A name the sidecar can report but the plugin does not know
+	// renders in the tool's default colour instead, silently showing the wrong
+	// ink - so the two lists have to agree.
+	const selectors = JSON.parse(
+		readFileSync("com.bad-duck.teamscontrol.sdPlugin/selectors.json", "utf8")
+	) as { powerPointLive: { inkColorNames: string[] } };
+
+	it("renders every colour the sidecar can report", () => {
+		for (const name of selectors.powerPointLive.inkColorNames) {
+			expect(INK_COLORS[name.toLowerCase()], `no ink for "${name}"`).toBeDefined();
+		}
+	});
+
+	it("covers all three palettes, which differ from each other", () => {
+		// Pen-only, highlighter-only and laser-only names respectively.
+		for (const name of ["Magenta", "Faded blue", "Light orange"]) {
+			expect(selectors.powerPointLive.inkColorNames).toContain(name);
+		}
+	});
+
+	it("gives each colour distinct artwork", () => {
+		const green = renderTool("ppt-pen", { available: true, active: true, color: "Light green" });
+		const red = renderTool("ppt-pen", { available: true, active: true, color: "Red" });
+		expect(green).not.toBe(red);
+	});
+
+	it("falls back rather than throwing on a colour Teams has since added", () => {
+		expect(toolColor("ppt-pen", "Chartreuse Sparkle")).toBe(toolColor("ppt-pen", undefined));
+	});
+});
+
+describe("PowerPoint Live glyph geometry", () => {
+	// These three were all wrong in a way that looks fine in isolation and only
+	// shows up beside the real toolbar: the contrast circle filled the wrong
+	// half, the grid was solid where PowerPoint Live draws outlines, and refresh
+	// had one arrow where it has two. Geometry, not eyeballing, so a future
+	// icon swap cannot quietly reintroduce any of them.
+	const SIZE = 288;
+
+	function sampler(key: string): (x: number, y: number) => number {
+		const img = new Resvg(renderGlyph(key, "on"), {
+			fitTo: { mode: "width", value: SIZE }
+		}).render();
+		const px = img.pixels;
+		// Alpha: "is there ink here", regardless of the tone it was drawn in.
+		return (fx, fy) =>
+			px[(Math.round(fy * img.height) * img.width + Math.round(fx * img.width)) * 4 + 3];
+	}
+
+	it("fills the left half of the contrast circle, as PowerPoint Live does", () => {
+		const at = sampler("pptContrast");
+		expect(at(0.42, 0.5)).toBeGreaterThan(200);
+		expect(at(0.58, 0.5)).toBeLessThan(60);
+	});
+
+	it("keeps the outline on the unfilled half, so it reads as a circle", () => {
+		const at = sampler("pptContrast");
+		let ring = 0;
+		for (let x = 0.58; x < 0.95; x += 0.005) ring = Math.max(ring, at(x, 0.5));
+		expect(ring).toBeGreaterThan(150);
+	});
+
+	/** Strongest ink found along a line, so a test need not know exact coordinates. */
+	function maxAlong(
+		at: (x: number, y: number) => number,
+		axis: "x" | "y",
+		fixed: number,
+		from: number,
+		to: number
+	): number {
+		let max = 0;
+		for (let v = from; v <= to; v += 0.004) {
+			max = Math.max(max, axis === "x" ? at(v, fixed) : at(fixed, v));
+		}
+		return max;
+	}
+
+	it("draws the grid as outlined squares rather than solid ones", () => {
+		const at = sampler("pptGrid");
+		// Hollow centres...
+		expect(at(0.31, 0.31)).toBeLessThan(60);
+		expect(at(0.69, 0.69)).toBeLessThan(60);
+		// ...but only right if the edges above and below them are drawn.
+		expect(maxAlong(at, "y", 0.31, 0.15, 0.28)).toBeGreaterThan(200);
+		expect(maxAlong(at, "y", 0.31, 0.34, 0.47)).toBeGreaterThan(200);
+	});
+
+	it("fills the grid squares once grid view is open, as Teams does on hover", () => {
+		const at = sampler("pptGridOn");
+		expect(at(0.31, 0.31)).toBeGreaterThan(200);
+		expect(at(0.69, 0.69)).toBeGreaterThan(200);
+	});
+
+	it("draws refresh with two arrows, so both sides of the circle carry ink", () => {
+		const at = sampler("pptRefresh");
+		expect(maxAlong(at, "x", 0.5, 0.1, 0.35)).toBeGreaterThan(200);
+		expect(maxAlong(at, "x", 0.5, 0.65, 0.9)).toBeGreaterThan(200);
+		// Open in the middle: a single thick arrow would fill it.
+		expect(at(0.5, 0.5)).toBeLessThan(60);
+	});
+});
+
+describe("presenter view key", () => {
+	// Reported as "backwards": the slash was appearing while presenter view was
+	// hidden, and in accent yellow rather than white. PowerPoint Live strikes
+	// the podium through while the view is SHOWING, because that is what
+	// pressing it will do. A podium, not an eye - the eye is private viewing.
+	it("strikes the podium through while presenter view is showing", () => {
+		expect(presenterViewGlyph(true)).toBe("pptHidePresenterView");
+	});
+
+	it("shows a plain podium once presenter view is hidden", () => {
+		expect(presenterViewGlyph(false)).toBe("pptShowPresenterView");
+	});
+
+	it("actually draws a slash on one and not the other", () => {
+		const SIZE = 288;
+		const ink = (key: string) => {
+			const img = new Resvg(renderGlyph(key, "on"), {
+				fitTo: { mode: "width", value: SIZE }
+			}).render();
+			const px = img.pixels;
+			const at = (fx: number, fy: number) =>
+				px[(Math.round(fy * img.height) * img.width + Math.round(fx * img.width)) * 4 + 3];
+			// The slash runs corner to corner, clear of the podium itself.
+			let max = 0;
+			for (let v = 0.12; v <= 0.30; v += 0.004) max = Math.max(max, at(v, 0.18));
+			for (let v = 0.70; v <= 0.88; v += 0.004) max = Math.max(max, at(v, 0.78));
+			return max;
+		};
+
+		expect(ink("pptHidePresenterView")).toBeGreaterThan(200);
+		expect(ink("pptShowPresenterView")).toBeLessThan(60);
+	});
+});
+
+describe("private view key", () => {
+	// The eye is struck through while attendees may NOT move through the deck
+	// on their own. Unlike the presenter-view podium, the slash here is the
+	// state rather than the action.
+	it("strikes the eye through while private viewing is disabled", () => {
+		expect(privateViewGlyph(false)).toBe("pptPrivateViewOff");
+	});
+
+	it("shows a plain eye while private viewing is enabled", () => {
+		expect(privateViewGlyph(true)).toBe("pptPrivateView");
+	});
+
+	it("actually draws a slash on the disabled one and not the enabled one", () => {
+		const SIZE = 288;
+		const ink = (key: string) => {
+			const img = new Resvg(renderGlyph(key, "on"), {
+				fitTo: { mode: "width", value: SIZE }
+			}).render();
+			const px = img.pixels;
+			const at = (fx: number, fy: number) =>
+				px[(Math.round(fy * img.height) * img.width + Math.round(fx * img.width)) * 4 + 3];
+			let max = 0;
+			for (let v = 0.12; v <= 0.30; v += 0.004) max = Math.max(max, at(v, 0.18));
+			for (let v = 0.70; v <= 0.88; v += 0.004) max = Math.max(max, at(v, 0.78));
+			return max;
+		};
+
+		expect(ink("pptPrivateViewOff")).toBeGreaterThan(200);
+		expect(ink("pptPrivateView")).toBeLessThan(60);
 	});
 });

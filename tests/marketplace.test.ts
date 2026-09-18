@@ -39,11 +39,36 @@ function coloursIn(file: string): string[] {
 const WHITE = new Set(["#fff", "#ffffff"]);
 
 describe("action list icons", () => {
-	it.each(manifest.Actions.map((a) => [a.Name, a.Icon] as const))(
+	/**
+	 * The five PowerPoint Live drawing tools are a deliberate exception to the
+	 * monochrome-SVG rule.
+	 *
+	 * Their keys show Teams' own artwork - full-colour illustrations with
+	 * gradients and blur filters, captured from the Teams DOM - and a generic
+	 * monochrome pen beside the real one in the action list reads as a different
+	 * control. They ship as PNG because that artwork cannot be reduced to a
+	 * white stroke without becoming a different drawing.
+	 *
+	 * Listed explicitly so the rule still binds for every other action: without
+	 * this the colour check would pass vacuously on a PNG, since it scans SVG
+	 * markup for fills.
+	 */
+	const ARTWORK_ACTIONS = new Set([
+		"com.bad-duck.teamscontrol.ppt-cursor",
+		"com.bad-duck.teamscontrol.ppt-laser",
+		"com.bad-duck.teamscontrol.ppt-pen",
+		"com.bad-duck.teamscontrol.ppt-highlighter",
+		"com.bad-duck.teamscontrol.ppt-eraser"
+	]);
+
+	const glyphActions = manifest.Actions.filter((a) => !ARTWORK_ACTIONS.has(a.UUID));
+
+	it.each(glyphActions.map((a) => [a.Name, a.Icon] as const))(
 		"%s is monochrome white",
 		(_name, icon) => {
 			const file = resolveImage(icon);
 			expect(file, `missing icon file for ${icon}`).toBeDefined();
+			expect(file!.endsWith(".svg"), `${icon} should be SVG`).toBe(true);
 
 			// The guidelines require a white stroke on transparent; colour is
 			// explicitly called out as incorrect for the action list. The keys
@@ -54,14 +79,24 @@ describe("action list icons", () => {
 	);
 
 	it("uses SVG so it scales to the high-DPI variant", () => {
+		for (const action of glyphActions) {
+			expect(resolveImage(action.Icon)!.endsWith(".svg"), action.Name).toBe(true);
+		}
+	});
+
+	it("ships the drawing tools as artwork, and only those", () => {
+		// Guards the exception in both directions: the tools must carry the real
+		// artwork, and nothing else may quietly join them.
 		for (const action of manifest.Actions) {
-			expect(resolveImage(action.Icon)!.endsWith(".svg")).toBe(true);
+			const file = resolveImage(action.Icon);
+			expect(file, action.Name).toBeDefined();
+			expect(file!.endsWith(".png"), action.Name).toBe(ARTWORK_ACTIONS.has(action.UUID));
 		}
 	});
 
 	it("draws no opaque background rectangle", () => {
 		// A solid background is called out as incorrect.
-		for (const action of manifest.Actions) {
+		for (const action of glyphActions) {
 			const svg = readFileSync(resolveImage(action.Icon)!, "utf8");
 			expect(svg).not.toMatch(/<rect[^>]*width="(100%|144)"/);
 		}

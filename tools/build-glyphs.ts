@@ -43,34 +43,56 @@ const CONTROLS: Record<string, string> = {
 
 	// PowerPoint Live. Slide navigation uses chevrons rather than the media-style
 	// arrows so it does not read as a recording transport.
-	pptPrev: "chevron_left_28_filled",
-	pptNext: "chevron_right_28_filled",
-	pptGrid: "grid_28_filled",
+	//
+	// These are the 20px tier, not the 28px one the rest of the keys use,
+	// because that is the tier PowerPoint Live's own toolbar is drawn at -
+	// confirmed by matching the path data captured from the Teams DOM against
+	// the shipped icons (tools/match-captured-icons.js). Fluent redraws each
+	// tier rather than scaling it, so the 28px versions are visibly different
+	// shapes, not just bigger ones.
+	pptPrev: "chevron_left_20_filled",
+	pptNext: "chevron_right_20_filled",
+	// Outlined at rest, solid while grid view is open. Teams ships both halves
+	// of the bundle and fills the squares on hover.
+	pptGrid: "grid_20_regular",
+	pptGridOn: "grid_20_filled",
 	pptSync: "arrow_sync_24_filled",
-	pptZoomIn: "zoom_in_28_filled",
-	pptZoomOut: "zoom_out_28_filled",
 	// Fluent's system set carries no contrast glyph at any size; the half-filled
-	// circle is the same idea and is what Fluent uses for theme switching.
+	// circle is the same idea and is what Fluent uses for theme switching. Note
+	// it is rotated to match - see ROTATIONS.
 	pptContrast: "circle_half_fill_24_filled",
 	pptTranslate: "translate_28_filled",
 	pptTakeControl: "hand_point_28_filled",
 	pptPopout: "window_new_28_filled",
 	pptCopilot: "slide_text_sparkle_28_filled",
 	pptSlide: "slide_text_28_filled",
-	pptPresenter: "presenter_28_filled",
 
-	// Presenter tools. Fluent has no laser-pointer glyph, so the target
-	// reticle stands in — it is the same "pointing at a thing" idea and reads
-	// clearly at key size, which a small dot would not.
+	// Presenter tools, drawn in PowerPoint Live's own colours (see TOOL_COLORS).
+	// Fluent has no laser-pointer glyph at any size, so the small filled circle
+	// stands in: in red it reads as the dot a laser actually puts on the slide,
+	// which is closer to what Teams shows than a reticle or a torch would be.
 	pptCursor: "cursor_28_filled",
-	pptLaser: "target_24_filled",
+	pptLaser: "circle_small_24_filled",
 	pptPen: "pen_28_filled",
 	pptHighlighter: "highlight_24_filled",
 	pptEraser: "eraser_24_filled",
+
 	pptStopPresenting: "presenter_off_24_filled",
+	// Private viewing: whether attendees may move through the deck on their
+	// own. Struck through while they may not, which is how Teams draws it.
 	pptPrivateView: "eye_24_filled",
-	pptHidePresenterView: "eye_off_24_filled",
-	pptRefresh: "arrow_clockwise_28_filled",
+	pptPrivateViewOff: "eye_off_24_filled",
+	// The pair PowerPoint Live's Change view menu swaps between. A podium, not
+	// an eye - the eye belongs to private viewing. Struck through while the
+	// notes pane exists, plain once it is hidden, named for the action each
+	// offers, which is also how Teams labels them. 20px tier like the rest of
+	// that toolbar.
+	pptHidePresenterView: "presenter_off_20_filled",
+	pptShowPresenterView: "presenter_20_filled",
+	// Two arrows, not one: PowerPoint Live's refresh is the circular sync pair.
+	// Confirmed as arrow_sync_20_filled by matching the captured path data, so
+	// it is the 20px tier like the rest of that toolbar.
+	pptRefresh: "arrow_sync_20_filled",
 	pptCopyLink: "link_28_filled",
 	pptLayoutContent: "slide_layout_24_filled",
 	pptLayoutCameo: "video_person_28_filled",
@@ -110,6 +132,17 @@ const EXTRA_EMOJI: Record<string, string> = {
 
 type Parsed = { viewBox: string; body: string };
 
+/**
+ * Glyphs rotated to the orientation the product draws them at.
+ *
+ * Fluent ships one orientation per icon and it is not always the one Teams
+ * uses. PowerPoint Live's high-contrast button fills the LEFT half of the
+ * circle; circle_half_fill fills the bottom, so it turns a quarter clockwise.
+ */
+const ROTATIONS: Record<string, number> = {
+	pptContrast: 90
+};
+
 function parse(file: string): Parsed {
 	const svg = readFileSync(file, "utf8");
 
@@ -125,11 +158,23 @@ function parse(file: string): Parsed {
 	return { viewBox, body };
 }
 
-function emit(entries: Record<string, string>, dir: string): Record<string, Parsed> {
+function emit(entries: Record<string, string>, dir: string, rotate = false): Record<string, Parsed> {
 	const out: Record<string, Parsed> = {};
 	for (const [key, file] of Object.entries(entries)) {
-		out[key] = parse(path.join(dir, `${file}.svg`));
-		console.log(`  ${key} <- ${file}.svg`);
+		const parsed = parse(path.join(dir, `${file}.svg`));
+
+		const spin = rotate ? ROTATIONS[key] : undefined;
+		if (spin !== undefined) {
+			// Rotated about the viewBox centre, so the glyph stays centred on the
+			// key whatever its size tier.
+			const [minX, minY, w, h] = parsed.viewBox.split(/[\s,]+/).map(Number);
+			const cx = minX + w / 2;
+			const cy = minY + h / 2;
+			parsed.body = `<g transform="rotate(${spin} ${cx} ${cy})">${parsed.body}</g>`;
+		}
+
+		out[key] = parsed;
+		console.log(`  ${key} <- ${file}.svg${spin === undefined ? "" : ` (rotated ${spin}\u00b0)`}`);
 	}
 	return out;
 }
@@ -144,7 +189,7 @@ const data = {
 		"  @fluentui/svg-icons (Fluent UI System Icons) - control glyphs, no fill",
 		"  fluentui-emoji ('flat' style)                - reactions, full colour"
 	],
-	controls: emit(CONTROLS, SYS),
+	controls: emit(CONTROLS, SYS, true),
 	reactions: emit(REACTIONS, EMOJI),
 	emoji: emit(EXTRA_EMOJI, EMOJI)
 };
