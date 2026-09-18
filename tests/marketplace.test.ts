@@ -154,3 +154,66 @@ describe("state images", () => {
 		}
 	});
 });
+
+describe("property inspector descriptions", () => {
+	const PLUGIN = "com.bad-duck.teamscontrol.sdPlugin";
+	const manifest = JSON.parse(readFileSync(path.join(PLUGIN, "manifest.json"), "utf8")) as {
+		Actions: { UUID: string; Name: string; Tooltip?: string; PropertyInspectorPath?: string }[];
+	};
+
+	// Twenty PowerPoint Live actions share one inspector, so the panel looks up
+	// the clicked action here. Hand-written rather than generated: these say
+	// what the key does, what its state means and when it is available, which
+	// the one-line tooltip cannot.
+	const generated = readFileSync(path.join(PLUGIN, "ui", "action-descriptions.js"), "utf8");
+	const descriptions = JSON.parse(
+		generated.slice(generated.indexOf("{"), generated.lastIndexOf("}") + 1)
+	) as Record<string, string>;
+
+	it("describes every action", () => {
+		for (const action of manifest.Actions) {
+			expect(descriptions[action.UUID], `no description for ${action.Name}`).toBeTruthy();
+		}
+	});
+
+	it("describes nothing that is not an action", () => {
+		const uuids = new Set(manifest.Actions.map((a) => a.UUID));
+		for (const uuid of Object.keys(descriptions)) {
+			expect(uuids.has(uuid), `${uuid} is not an action`).toBe(true);
+		}
+	});
+
+	it("says more than the tooltip already does", () => {
+		// The whole point of the panel text: if it only repeated the one-liner
+		// from the action list it would not be worth the space.
+		for (const action of manifest.Actions) {
+			const description = descriptions[action.UUID];
+			expect(description.length, action.Name).toBeGreaterThan(80);
+			expect(description, action.Name).not.toBe(action.Tooltip?.trim());
+		}
+	});
+
+	it("is loaded by every inspector that needs it", () => {
+		const inspectors = new Set(
+			manifest.Actions.map((a) => a.PropertyInspectorPath).filter(Boolean) as string[]
+		);
+		for (const rel of inspectors) {
+			const html = readFileSync(path.join(PLUGIN, rel), "utf8");
+			expect(html, rel).toContain("action-descriptions.js");
+			expect(html, rel).toContain('id="action-description"');
+			// Generated text goes in as text, not markup.
+			expect(html, rel).not.toMatch(/\.innerHTML\s*=/);
+		}
+	});
+
+	it("ships no debug tooling in the inspectors", () => {
+		const inspectors = new Set(
+			manifest.Actions.map((a) => a.PropertyInspectorPath).filter(Boolean) as string[]
+		);
+		for (const rel of inspectors) {
+			const html = readFileSync(path.join(PLUGIN, rel), "utf8");
+			expect(html, rel).not.toContain("Diagnostics");
+			expect(html, rel).not.toContain("discover");
+		}
+	});
+});

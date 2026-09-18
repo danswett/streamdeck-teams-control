@@ -1,32 +1,28 @@
 <!doctype html>
-<html>
-	<head lang="en">
+<html lang="en">
+	<head>
 		<meta charset="utf-8" />
+		<title>Leave meeting settings</title>
+		<link rel="stylesheet" href="inspector.css" />
 		<script src="sdpi-components.js"></script>
 	</head>
 	<body>
+		<p class="hint" id="action-description"></p>
+
 		<sdpi-item label="Confirm">
 			<sdpi-checkbox setting="requireHold" label="Press and hold to leave"></sdpi-checkbox>
 		</sdpi-item>
-		<p style="color: #999; font-size: 11px; padding: 0 8px">
+		<p class="hint">
 			Leaving a meeting can't be undone. With this enabled the key must be held
 			for about a second before it takes effect.
 		</p>
-
-		<details>
-			<summary style="cursor: pointer; margin: 8px 0; color: #999">Diagnostics</summary>
-			<sdpi-item label="Map Teams UI">
-				<button id="discover-toolbar">Dump toolbar</button>
-			</sdpi-item>
-			<p style="color: #999; font-size: 11px; padding: 0 8px">
-				Join a meeting first. Results are written to the plugin log.
-			</p>
-		</details>
-
+		<script src="action-descriptions.js"></script>
 		<script>
-			const { streamDeckClient } = SDPIComponents;
-			document.getElementById("discover-toolbar").addEventListener("click", () => {
-				streamDeckClient.send("sendToPlugin", { command: "discover", menu: "" });
+			// Several actions share each inspector - twenty share ppt.html - so it has
+			// to name the key you actually clicked. textContent, never innerHTML.
+			SDPIComponents.streamDeckClient.getConnectionInfo().then(({ actionInfo }) => {
+				const text = globalThis.ACTION_DESCRIPTIONS?.[actionInfo?.action];
+				if (text) document.getElementById("action-description").textContent = text;
 			});
 		</script>
 	</body>

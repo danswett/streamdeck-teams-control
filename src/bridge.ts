@@ -11,6 +11,14 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SIDECAR = path.join(HERE, "sidecar", "TeamsBridge.exe");
 const SELECTORS = path.resolve(HERE, "..", "selectors.json");
 
+/**
+ * How long to wait for a press to report back. Must stay above the slowest
+ * single operation the sidecar performs and below the point where a stuck key
+ * feels broken; the sidecar independently discards anything queued longer than
+ * this, so the two never disagree about whether a press still counts.
+ */
+const INVOKE_TIMEOUT_MS = 10_000;
+
 export { EMPTY_STATE, type TeamsState };
 
 type Pending = {
@@ -142,10 +150,6 @@ class Bridge {
 				break;
 			}
 
-			case "discover":
-				logger.info(`discover(${String(msg["menu"])}): ${JSON.stringify(msg["elements"])}`);
-				break;
-
 			case "error":
 				logger.warn(`Sidecar error: ${String(msg["message"])}`);
 				break;
@@ -183,7 +187,18 @@ class Bridge {
 		}
 	}
 
-	/** Presses a Teams control. Resolves with the outcome so keys can show feedback. */
+	/**
+	 * Presses a Teams control. Resolves with the outcome so keys can show
+	 * feedback.
+	 *
+	 * The timeout is generous because the work behind a press is not uniform: a
+	 * slide advance is one posted click, but a flyout-nested control has to open
+	 * a menu, wait for it to populate, press an item and then make sure the menu
+	 * closed again — measured at up to ~4.5s on a live meeting. At the old 5s a
+	 * press queued behind one of those was reported as failed while the sidecar
+	 * was still working on it, and then it landed anyway, which read as a key
+	 * firing long after it was pressed.
+	 */
 	invoke(target: string, arg?: string): Promise<{ ok: boolean; error?: string }> {
 		const id = this.#nextId++;
 		if (!this.#send({ id, cmd: "invoke", target, arg: arg ?? "" })) {
@@ -194,14 +209,9 @@ class Bridge {
 			const timer = setTimeout(() => {
 				this.#pending.delete(id);
 				resolve({ ok: false, error: "timed out" });
-			}, 5000);
+			}, INVOKE_TIMEOUT_MS);
 			this.#pending.set(id, { resolve, timer });
 		});
-	}
-
-	/** Dumps a flyout's contents to the plugin log; used to re-map Teams' UI. */
-	discover(menu?: string): void {
-		this.#send({ id: this.#nextId++, cmd: "discover", menu: menu ?? "" });
 	}
 }
 

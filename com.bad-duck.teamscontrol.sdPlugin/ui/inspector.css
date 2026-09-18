@@ -1,0 +1,35 @@
+/*
+ * Shared styling for the property inspectors.
+ *
+ * Stream Deck injects --font-family and --font-size into the inspector
+ * document, and the sdpi-components pick them up. A plain element does not:
+ * it falls back to the browser default, which is why the help text rendered as
+ * tiny Times New Roman next to correctly-styled controls.
+ *
+ * Everything here reads the host's own variables, so the text matches whatever
+ * Stream Deck is using rather than a guess at it. The fallbacks only apply when
+ * a page is opened outside Stream Deck.
+ */
+body {
+	font-family: var(--font-family, "Segoe UI", system-ui, sans-serif);
+	font-size: var(--font-size, 9pt);
+	color: var(--color-content-primary, #d8d8d8);
+}
+
+/* Explanatory text under a control. Secondary colour, same size as the rest. */
+.hint {
+	color: var(--color-content-secondary, #969696);
+	padding: 0 8px;
+	margin: 6px 0;
+	line-height: 1.4;
+}
+
+details > summary {
+	cursor: pointer;
+	margin: 8px 0;
+	color: var(--color-content-secondary, #969696);
+}
+
+code {
+	font-family: var(--font-family-monospace, Consolas, monospace);
+}

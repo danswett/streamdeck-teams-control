@@ -412,9 +412,13 @@ That risk is contained rather than hidden:
   and the working default is kept, rather than failing on every state read
   afterwards. Matching is also bounded, so a pattern that backtracks badly
   cannot wedge the sidecar.
-- Every action's property inspector has a **Diagnostics** panel that dumps the
-  live Teams UI tree (ids, names, accelerators, ARIA properties, toggle states)
-  into the plugin log, so a broken selector can be re-derived in about a minute.
+- The sidecar's stdio protocol carries a `discover` command that dumps the live
+  Teams UI tree (ids, names, accelerators, ARIA properties, toggle states), so a
+  broken selector can be re-derived in about a minute. Run
+  `bin/sidecar/TeamsBridge.exe` from a terminal and send it the line shown in
+  [the protocol section](#protocol). It is deliberately not wired to a button:
+  a dump lists every control in the meeting window, which is not something to
+  put one click away in a shipping UI.
 - Invocation falls back `Invoke` → `Toggle` → `LegacyIAccessible.DoDefaultAction`.
 
 Two Teams behaviours are handled explicitly rather than left to chance:
@@ -453,7 +457,7 @@ Two Teams behaviours are handled explicitly rather than left to chance:
 
 If Teams breaks something, please
 [open an issue](https://github.com/danswett/streamdeck-teams-control/issues)
-with a Diagnostics dump attached.
+with a `discover` dump attached.
 
 ### Other languages
 
@@ -472,11 +476,21 @@ indicators** read English labels. To localise, edit the `activePattern` /
 
 PRs adding language packs are very welcome.
 
-The PowerPoint Live keys need no translating at all. Role detection matches CSS
-class names, the drawing tools report their state through UI Automation's
-selection rather than a label, and the slide-translation languages are keyed by
-endonym (`Deutsch`, `日本語`, `Original`), which is what Teams uses regardless
-of its own display language.
+The PowerPoint Live keys need very little translating. Role detection matches
+the automation IDs of two meeting-toolbar buttons rather than any label, the
+drawing tools report which one is in use through UI Automation's selection
+rather than a label, and the slide-translation languages are keyed by endonym
+(`Deutsch`, `日本語`, `Original`), which is what Teams uses regardless of its
+own display language.
+
+The exception is ink colour. While a drawing tool's flyout is open, Teams
+unmounts the tool button whose name carries the colour, so the colour has to be
+read from the flyout's swatches — and those carry no automation ID, only a name.
+`inkColorNames` lists them, and `arrowOptionPattern` excludes the laser
+pointer's arrow options, which share the pen's flyout and always report one of
+themselves as selected. Both are in `selectors.json`, and both need translating
+for a non-English Teams. Getting them wrong costs only immediacy: the colour
+still updates, just when the flyout closes rather than on the click.
 
 ### Why not macOS?
 
@@ -497,11 +511,14 @@ opens no TCP or UDP port; it speaks to the plugin over its own stdin and stdout.
 The meeting window title is read to tell a meeting window from a chat window,
 but it is never written to the log.
 
-**Before attaching a Diagnostics dump to an issue**, be aware it lists every
+**Before attaching a `discover` dump to an issue**, be aware it lists every
 interactive control in the meeting window — its automation id, accessible name
 and enabled state. Teams labels those by action ("Mute", "Open chat"), so a
 dump from an ordinary meeting contains no names, but a pane listing people can
 put participant names in a control label. Read it before posting it.
+
+That is also why the dump is not exposed as a button anywhere in the plugin:
+it has to be asked for deliberately, by running the sidecar yourself.
 
 ---
 

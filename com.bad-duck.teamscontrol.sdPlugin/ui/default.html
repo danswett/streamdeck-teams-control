@@ -1,47 +1,26 @@
 <!doctype html>
-<html>
-	<head lang="en">
+<html lang="en">
+	<head>
 		<meta charset="utf-8" />
+		<title>Teams meeting control settings</title>
+		<link rel="stylesheet" href="inspector.css" />
 		<script src="sdpi-components.js"></script>
 	</head>
 	<body>
-		<p style="color: #999; font-size: 12px; padding: 0 8px">
+		<p class="hint" id="action-description"></p>
+
+		<p class="hint">
 			This key mirrors the matching Microsoft Teams meeting control. It works
 			while Teams is in the background and never sends keystrokes.
 		</p>
-
-		<details>
-			<summary style="cursor: pointer; margin: 8px 0; color: #999">Diagnostics</summary>
-			<sdpi-item label="Map Teams UI">
-				<button id="discover-toolbar">Dump toolbar</button>
-			</sdpi-item>
-			<sdpi-item label="">
-				<button id="discover-react">Dump React menu</button>
-			</sdpi-item>
-			<sdpi-item label="">
-				<button id="discover-more">Dump More menu</button>
-			</sdpi-item>
-			<sdpi-item label="">
-				<button id="discover-video">Dump video options</button>
-			</sdpi-item>
-			<p style="color: #999; font-size: 11px; padding: 0 8px">
-				Join a meeting first. Results are written to the plugin log, which you
-				can open from Stream Deck via Help → Open Logs Folder. Use these dumps
-				to update <code>selectors.json</code> after a Teams update.
-			</p>
-		</details>
-
+		<script src="action-descriptions.js"></script>
 		<script>
-			const { streamDeckClient } = SDPIComponents;
-			const dump = (id, menu) =>
-				document.getElementById(id).addEventListener("click", () => {
-					streamDeckClient.send("sendToPlugin", { command: "discover", menu });
-				});
-
-			dump("discover-toolbar", "");
-			dump("discover-react", "reaction-menu-button");
-			dump("discover-more", "callingButtons-showMoreBtn");
-			dump("discover-video", "video-button-configure");
+			// Several actions share each inspector - twenty share ppt.html - so it has
+			// to name the key you actually clicked. textContent, never innerHTML.
+			SDPIComponents.streamDeckClient.getConnectionInfo().then(({ actionInfo }) => {
+				const text = globalThis.ACTION_DESCRIPTIONS?.[actionInfo?.action];
+				if (text) document.getElementById("action-description").textContent = text;
+			});
 		</script>
 	</body>
 </html>

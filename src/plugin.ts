@@ -37,9 +37,7 @@ import {
 	PptStopPresentingAction,
 	PptSyncAction,
 	PptTakeControlAction,
-	PptTranslateAction,
-	PptZoomInAction,
-	PptZoomOutAction
+	PptTranslateAction
 } from "./actions/powerpoint";
 import { bridge } from "./bridge";
 import { profileSwitcher } from "./profiles";
@@ -66,8 +64,6 @@ streamDeck.actions.registerAction(new PptNextAction());
 streamDeck.actions.registerAction(new PptStatusAction());
 streamDeck.actions.registerAction(new PptSyncAction());
 streamDeck.actions.registerAction(new PptGridAction());
-streamDeck.actions.registerAction(new PptZoomInAction());
-streamDeck.actions.registerAction(new PptZoomOutAction());
 streamDeck.actions.registerAction(new PptHighContrastAction());
 streamDeck.actions.registerAction(new PptTranslateAction());
 streamDeck.actions.registerAction(new PptTakeControlAction());
@@ -87,18 +83,6 @@ streamDeck.actions.registerAction(new PptCopyLinkAction());
 streamDeck.actions.registerAction(new PptLayoutContentAction());
 streamDeck.actions.registerAction(new PptLayoutCameoAction());
 streamDeck.actions.registerAction(new PptStopPresentingAction());
-
-/**
- * Diagnostics hook. The property inspector can ask the sidecar to dump a Teams
- * flyout into the plugin log, which is how the selector map gets re-derived if
- * a Teams update moves a control.
- */
-streamDeck.ui.onSendToPlugin((ev) => {
-	const payload = ev.payload as { command?: string; menu?: string } | undefined;
-	if (payload?.command === "discover") {
-		bridge.discover(payload.menu);
-	}
-});
 
 bridge.start();
 profileSwitcher.start();

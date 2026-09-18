@@ -1,14 +1,18 @@
 <!doctype html>
-<html>
-	<head lang="en">
+<html lang="en">
+	<head>
 		<meta charset="utf-8" />
+		<title>Stop presenting settings</title>
+		<link rel="stylesheet" href="inspector.css" />
 		<script src="sdpi-components.js"></script>
 	</head>
 	<body>
+		<p class="hint" id="action-description"></p>
+
 		<sdpi-item label="Confirm">
 			<sdpi-checkbox setting="requireHold" label="Press and hold to stop"></sdpi-checkbox>
 		</sdpi-item>
-		<p style="color: #999; font-size: 11px; padding: 0 8px">
+		<p class="hint">
 			Stopping ends the presentation for everyone in the meeting. With this
 			enabled the key must be held for about a second before it takes effect.
 		</p>
@@ -20,25 +24,17 @@
 				label="Switch profile during PowerPoint Live"
 			></sdpi-checkbox>
 		</sdpi-item>
-		<p style="color: #999; font-size: 11px; padding: 0 8px">
+		<p class="hint">
 			Shared with every PowerPoint Live key. Switches to the bundled "PowerPoint
 			Live" profile while a deck is being presented, and back afterwards.
 		</p>
-
-		<details>
-			<summary style="cursor: pointer; margin: 8px 0; color: #999">Diagnostics</summary>
-			<sdpi-item label="Map Teams UI">
-				<button id="discover-toolbar">Dump toolbar</button>
-			</sdpi-item>
-			<p style="color: #999; font-size: 11px; padding: 0 8px">
-				Start presenting a deck first. Results are written to the plugin log.
-			</p>
-		</details>
-
+		<script src="action-descriptions.js"></script>
 		<script>
-			const { streamDeckClient } = SDPIComponents;
-			document.getElementById("discover-toolbar").addEventListener("click", () => {
-				streamDeckClient.send("sendToPlugin", { command: "discover", menu: "" });
+			// Several actions share each inspector - twenty share ppt.html - so it has
+			// to name the key you actually clicked. textContent, never innerHTML.
+			SDPIComponents.streamDeckClient.getConnectionInfo().then(({ actionInfo }) => {
+				const text = globalThis.ACTION_DESCRIPTIONS?.[actionInfo?.action];
+				if (text) document.getElementById("action-description").textContent = text;
 			});
 		</script>
 	</body>
