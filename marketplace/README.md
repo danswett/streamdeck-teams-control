@@ -84,6 +84,8 @@ Marketplace, and Elgato's guidelines ask for the organization name.
 |---|---|
 | Maker organization | Bad Duck Software |
 | Marketplace handle | `@badduck` |
+| Marketplace listing | https://marketplace.elgato.com/product/teams-meeting-controls-cd033891-69c4-4ee7-95e5-f07773b6fb95 |
+| Product ID | `cd033891-69c4-4ee7-95e5-f07773b6fb95` |
 | Manifest `Author` | `Bad Duck Software` |
 | Manifest `URL` | https://bad-duck.com |
 | Manifest `SupportURL` | https://github.com/danswett/streamdeck-teams-control/issues |
@@ -119,9 +121,48 @@ Free.
 
 ## Release notes
 
-For the **first** Marketplace version, use the notes below rather than the
-GitHub release notes — those describe changes against a previous build, which a
-new Marketplace user has never seen.
+The product is **published**, so a submission is a new version of an existing
+listing rather than a first publication. Use the version notes below; they
+describe what changed, which is what an existing user opens the listing to find
+out.
+
+The first-release notes are kept further down for reference only — they describe
+the plugin from scratch, which is the right shape for a first publication and
+the wrong shape now.
+
+### Version 1.8.1 — the notes for this submission
+
+Marketplace shows plain text, so this is the GitHub release rewritten for
+someone who has the plugin installed but has never read a commit.
+
+```
+PowerPoint Live control, and profiles that follow the meeting.
+
+POWERPOINT LIVE
+Twenty-two new actions.
+
+Watching a deck: move through slides at your own pace, jump back in sync with the presenter, grid view, high contrast, pop out, ask Copilot, translate into 19 languages, and take control.
+
+Presenting: laser pointer, pen, highlighter, eraser, cursor, presenter view, private view, present the latest version, copy link, layout, and stop sharing, with a live slide counter on the key. Ink keys show the colour you picked in Teams.
+
+Keys follow your role, so an attendee never sees presenter tools that cannot light up, and taking control mid-meeting re-lights the deck for presenting.
+
+PROFILES
+Three bundled profiles can move the deck on their own: meeting controls when you join, attendee or presenter tools when a deck goes up, back to meeting controls when it ends, and back to your own profile when you leave. Turn it on with "Follow the meeting between profiles" on any PowerPoint Live key. 15-key decks.
+
+FIXES
+Stop sharing now answers the confirmation Teams shows, instead of leaving it on screen. A key pressed during a presentation no longer reports a timeout. Leave no longer shows a warning when tapped.
+
+REQUIREMENTS
+Windows 10 or later, Stream Deck 7.1 or later, and the Microsoft Teams desktop app. Windows only.
+```
+
+1,330 characters, within the 1,500 limit.
+
+### First-release notes — reference only
+
+Used for the original publication. Kept because a listing that is ever recreated
+from scratch needs this shape rather than a changelog.
 
 ```
 First release.
@@ -157,38 +198,8 @@ Not affiliated with or endorsed by Microsoft.
 rather than what changed, because a first-time reader has no previous build to
 compare against.
 
-For **subsequent** versions, use the notes from the matching GitHub release,
-which describe what changed:
+For the changelog behind these notes, see the matching GitHub release:
 https://github.com/danswett/streamdeck-teams-control/releases
-
-### Version 1.8.1
-
-The notes to paste into Maker Console for this submission. Marketplace shows
-plain text, so this is the GitHub release rewritten for someone who has the
-plugin installed but has never read a commit.
-
-```
-PowerPoint Live control, and profiles that follow the meeting.
-
-POWERPOINT LIVE
-Twenty-two new actions.
-
-Watching a deck: move through slides at your own pace, jump back in sync with the presenter, grid view, high contrast, pop out, ask Copilot, translate into 19 languages, and take control.
-
-Presenting: laser pointer, pen, highlighter, eraser, cursor, presenter view, private view, present the latest version, copy link, layout, and stop sharing, with a live slide counter on the key. Ink keys show the colour you picked in Teams.
-
-Keys follow your role, so an attendee never sees presenter tools that cannot light up, and taking control mid-meeting re-lights the deck for presenting.
-
-PROFILES
-Three bundled profiles can move the deck on their own: meeting controls when you join, attendee or presenter tools when a deck goes up, back to meeting controls when it ends, and back to your own profile when you leave. Turn it on with "Follow the meeting between profiles" on any PowerPoint Live key. 15-key decks.
-
-FIXES
-Stop sharing now answers the confirmation Teams shows, instead of leaving it on screen. A key pressed during a presentation no longer reports a timeout. Leave no longer shows a warning when tapped.
-
-REQUIREMENTS
-Windows 10 or later, Stream Deck 7.1 or later, and the Microsoft Teams desktop app. Windows only.
-```
-
 ---
 
 ## Publishing a new version
@@ -241,20 +252,32 @@ to maker@elgato.com.
 
 - [x] A Maker Console account exists and the organization name matches the
       manifest `Author` field — Bad Duck Software, set in 1.5.0.
-- [ ] Decide on the trademark question below.
+- [x] The name cleared review at first publication, so the trademark question
+      below is settled in practice. It is kept for the reasoning, not as an
+      open decision.
 - [ ] `npm run test` passes and CI is green on the commit being shipped.
 - [ ] The `.streamDeckPlugin` uploaded is the one the release workflow built.
+- [ ] The **Details** tab carries the long description from this file. The
+      published listing currently shows the 215-character manifest text, which
+      is below Elgato's 250-character minimum for a description and says
+      nothing about PowerPoint Live.
+- [ ] The **Media** tab carries all six gallery items, not the original three.
+
+Media and copy are versioned separately from the product file, so the two
+uploads below are independent: a new version does not refresh the description or
+the gallery, and changing those does not require a new version.
 
 ### Trademark
 
 "Teams" is Microsoft's trademark, and Elgato's guidelines say a product name
 must not infringe one. Naming a plugin after the application it controls is
-normal and is nominative use, but it is a judgement call that Elgato makes at
-review, not one this repository can settle. The description states plainly that
+normal and is nominative use. The name cleared review at first publication,
+which settles it in practice, but the reasoning is kept because a name can only
+be changed after creation by emailing maker@elgato.com — so a future rename is
+expensive and worth avoiding. The description states plainly that
 the plugin is not affiliated with or endorsed by Microsoft, no Microsoft logo or
 proprietary artwork is bundled, and the icons come from Microsoft's MIT-licensed
 Fluent sets.
 
-If Elgato asks for a change, the name can only be changed by emailing
-maker@elgato.com after creation — so it is worth being comfortable with it
-before the first submission.
+If Elgato ever asks for a change, it has to go through maker@elgato.com; the
+name cannot be edited in Maker Console.
