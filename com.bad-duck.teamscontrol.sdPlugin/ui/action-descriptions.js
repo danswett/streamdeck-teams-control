@@ -42,7 +42,7 @@ globalThis.ACTION_DESCRIPTIONS = {
 		"Shows or hides the participant roster. Teams reports no state for this button, so the key does not light up.",
 
 	"com.bad-duck.teamscontrol.leave":
-		"Leaves the meeting. This cannot be undone, so the key offers a press-and-hold guard below: with it on, the key must be held for about a second before it takes effect.",
+		"Leaves the meeting. This cannot be undone, so the key offers a press-and-hold guard below: with it on, the key must be held for about a second, and a quick tap is ignored rather than reported as an error. Off by default.",
 
 	"com.bad-duck.teamscontrol.ppt-prev":
 		"Goes back one slide. As the presenter this moves the deck for everyone; as an attendee it moves your view only, and the Sync key brings you back. Available whenever a deck is being presented.",
@@ -54,7 +54,7 @@ globalThis.ACTION_DESCRIPTIONS = {
 		"Shows the current slide and the deck length, such as 3 / 19. Display only - pressing it does nothing. It holds the last known position while Teams hides its toolbar or a flyout is open, rather than going blank.",
 
 	"com.bad-duck.teamscontrol.ppt-sync":
-		"Returns you to the slide the presenter is on, after you have moved through the deck privately. Attendee only, and available only while you are actually out of step.",
+		"Returns you to the slide the presenter is on, after you have moved through the deck privately. Attendee only. Teams only offers this while you are actually out of step, so the key reads 'In sync' the rest of the time.",
 
 	"com.bad-duck.teamscontrol.ppt-grid":
 		"Opens the grid of slide thumbnails, and closes it again. A real toggle, so the key stays lit while the grid is open. Opening the grid removes every other PowerPoint Live control from Teams' UI, which makes this the one key that keeps working while it is up.",

@@ -73,7 +73,7 @@ reports itself unavailable in the other one.
 |---|---|---|
 | **PPT Live: Slide Counter** | ✅ `3/19` | Not pressable. Turns gold while you are the presenter |
 | **PPT Live: Previous / Next Slide** | availability only | Dims at the ends of the deck |
-| **PPT Live: Grid View** | availability only | All slides as thumbnails |
+| **PPT Live: Grid View** | ✅ open / closed | All slides as thumbnails |
 | **PPT Live: High Contrast** | availability only | Your screen only |
 | **PPT Live: Pop Out** | availability only | Moves the shared content into its own window |
 
@@ -89,11 +89,11 @@ reports itself unavailable in the other one.
 | Action | Live state shown | Notes |
 |---|---|---|
 | **PPT Presenter: Laser / Pen / Highlighter / Eraser / Cursor** | ✅ active tool | Read from UI Automation's selection, so it tracks a tool you picked in Teams too |
-| **PPT Presenter: Private Viewing** | availability only | Lets attendees browse the deck on their own, or stops them |
-| **PPT Presenter: Presenter View** | availability only | Shows or hides your notes and thumbnails. Your screen only |
+| **PPT Presenter: Private Viewing** | ✅ on / off | Lets attendees browse the deck on their own, or stops them. Read from the button's tooltip, which is the only place Teams reports it |
+| **PPT Presenter: Presenter View** | ✅ showing / hidden | Shows or hides your notes and thumbnails. Your screen only |
 | **PPT Presenter: Present Latest** | availability only | Reloads the deck to pick up saved edits |
 | **PPT Presenter: Copy Link** | availability only | Copies a link to the deck |
-| **PPT Presenter: Layout Content Only / Cameo** | availability only | Cameo dims until your camera is on |
+| **PPT Presenter: Content Only / Layout Cameo** | availability only | Cameo dims until your camera is on |
 | **PPT Presenter: Stop Presenting** | availability only | Press opens Teams' confirmation; hold to answer it |
 
 #### Taking control changes your role
@@ -498,11 +498,9 @@ indicators** read English labels. To localise, edit the `activePattern` /
 PRs adding language packs are very welcome.
 
 The PowerPoint Live keys need very little translating. Role detection matches
-the automation IDs of two meeting-toolbar buttons rather than any label, the
+the automation IDs of two meeting-toolbar buttons rather than any label, and the
 drawing tools report which one is in use through UI Automation's selection
-rather than a label, and the slide-translation languages are keyed by endonym
-(`Deutsch`, `日本語`, `Original`), which is what Teams uses regardless of its
-own display language.
+rather than a label.
 
 The exception is ink colour. While a drawing tool's flyout is open, Teams
 unmounts the tool button whose name carries the colour, so the colour has to be

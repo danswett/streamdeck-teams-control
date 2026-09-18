@@ -25,8 +25,9 @@
 		</p>
 		<script src="action-descriptions.js"></script>
 		<script>
-			// Several actions share each inspector - twenty share ppt.html - so it has
-			// to name the key you actually clicked. textContent, never innerHTML.
+			// Several actions share each inspector - most PowerPoint Live keys share
+			// ppt.html - so it has to name the key you actually clicked, and a count
+			// here would rot. textContent, never innerHTML.
 			SDPIComponents.streamDeckClient.getConnectionInfo().then(({ actionInfo }) => {
 				const text = globalThis.ACTION_DESCRIPTIONS?.[actionInfo?.action];
 				if (text) document.getElementById("action-description").textContent = text;
