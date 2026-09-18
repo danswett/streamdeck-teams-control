@@ -57,10 +57,11 @@ const CONTROLS: Record<string, string> = {
 	pptGrid: "grid_20_regular",
 	pptGridOn: "grid_20_filled",
 	pptSync: "arrow_sync_24_filled",
-	// Fluent's system set carries no contrast glyph at any size; the half-filled
-	// circle is the same idea and is what Fluent uses for theme switching. Note
-	// it is rotated to match - see ROTATIONS.
-	pptContrast: "circle_half_fill_24_filled",
+	// Teams uses Fluent's dark-theme glyph here, not a contrast one - confirmed
+	// by matching the path captured from the live Change view flyout. It already
+	// fills the left half, which is why the earlier stand-in needed rotating and
+	// this does not.
+	pptContrast: "dark_theme_20_filled",
 	pptTranslate: "translate_28_filled",
 	pptTakeControl: "hand_point_28_filled",
 	pptPopout: "window_new_28_filled",
@@ -77,7 +78,10 @@ const CONTROLS: Record<string, string> = {
 	pptHighlighter: "highlight_24_filled",
 	pptEraser: "eraser_24_filled",
 
-	pptStopPresenting: "presenter_off_24_filled",
+	// A screen with an X, not a podium. Teams draws "Stop sharing" this way -
+	// seen in the meeting toolbar - and the podium-off glyph that was here read
+	// as the same key as Presenter View, which is also a struck-through podium.
+	pptStopPresenting: "share_screen_stop_20_filled",
 	// Private viewing: whether attendees may move through the deck on their
 	// own. Struck through while they may not, which is how Teams draws it.
 	pptPrivateView: "eye_24_filled",
@@ -132,17 +136,6 @@ const EXTRA_EMOJI: Record<string, string> = {
 
 type Parsed = { viewBox: string; body: string };
 
-/**
- * Glyphs rotated to the orientation the product draws them at.
- *
- * Fluent ships one orientation per icon and it is not always the one Teams
- * uses. PowerPoint Live's high-contrast button fills the LEFT half of the
- * circle; circle_half_fill fills the bottom, so it turns a quarter clockwise.
- */
-const ROTATIONS: Record<string, number> = {
-	pptContrast: 90
-};
-
 function parse(file: string): Parsed {
 	const svg = readFileSync(file, "utf8");
 
@@ -158,23 +151,14 @@ function parse(file: string): Parsed {
 	return { viewBox, body };
 }
 
-function emit(entries: Record<string, string>, dir: string, rotate = false): Record<string, Parsed> {
+function emit(entries: Record<string, string>, dir: string): Record<string, Parsed> {
 	const out: Record<string, Parsed> = {};
 	for (const [key, file] of Object.entries(entries)) {
 		const parsed = parse(path.join(dir, `${file}.svg`));
 
-		const spin = rotate ? ROTATIONS[key] : undefined;
-		if (spin !== undefined) {
-			// Rotated about the viewBox centre, so the glyph stays centred on the
-			// key whatever its size tier.
-			const [minX, minY, w, h] = parsed.viewBox.split(/[\s,]+/).map(Number);
-			const cx = minX + w / 2;
-			const cy = minY + h / 2;
-			parsed.body = `<g transform="rotate(${spin} ${cx} ${cy})">${parsed.body}</g>`;
-		}
 
 		out[key] = parsed;
-		console.log(`  ${key} <- ${file}.svg${spin === undefined ? "" : ` (rotated ${spin}\u00b0)`}`);
+		console.log(`  ${key} <- ${file}.svg`);
 	}
 	return out;
 }
@@ -189,7 +173,7 @@ const data = {
 		"  @fluentui/svg-icons (Fluent UI System Icons) - control glyphs, no fill",
 		"  fluentui-emoji ('flat' style)                - reactions, full colour"
 	],
-	controls: emit(CONTROLS, SYS, true),
+	controls: emit(CONTROLS, SYS),
 	reactions: emit(REACTIONS, EMOJI),
 	emoji: emit(EXTRA_EMOJI, EMOJI)
 };
