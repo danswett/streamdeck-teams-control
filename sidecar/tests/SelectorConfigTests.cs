@@ -311,6 +311,35 @@ public class SelectorConfigTests : IDisposable
     }
 
     [Fact]
+    public void The_role_markers_are_the_two_mutually_exclusive_toolbar_buttons()
+    {
+        // These decide the role, not the root's CSS class. Hiding presenter
+        // view rewrites that class to the attendee value while you are still
+        // presenting, which retired every presenter key until the markers took
+        // over. Verified on a live meeting 2026-09-17.
+        var spec = new PowerPointLiveSpec();
+
+        Assert.Equal("stopPresentingPptBtn", spec.PresenterMarkerAutomationId);
+        Assert.Equal("takeControlPptBtn", spec.AttendeeMarkerAutomationId);
+        Assert.NotEqual(spec.PresenterMarkerAutomationId, spec.AttendeeMarkerAutomationId);
+    }
+
+    [Fact]
+    public void The_role_markers_match_the_controls_that_depend_on_them()
+    {
+        // The marker for a role is the very control only that role can use, so
+        // a drift between the two would silently disable half the keys.
+        var config = Program.LoadConfig("nope");
+
+        Assert.Equal(
+            config.PowerPointLive.PresenterMarkerAutomationId,
+            config.Controls["ppt-stop-presenting"].AutomationId);
+        Assert.Equal(
+            config.PowerPointLive.AttendeeMarkerAutomationId,
+            config.Controls["ppt-take-control"].AutomationId);
+    }
+
+    [Fact]
     public void ParseConfig_reads_the_swapped_menu_item_id_a_one_key_toggle_needs()
     {
         // Teams replaces "Hide presenter view" with "Show presenter view"
@@ -346,6 +375,190 @@ public class SelectorConfigTests : IDisposable
 
         Assert.True(cfg!.Controls["ppt-laser"].StateFromSelection);
         Assert.False(cfg.Controls["ppt-next"].StateFromSelection);
+    }
+
+    [Fact]
+    public void ParseConfig_reads_the_surface_and_colour_fields()
+    {
+        var cfg = Program.ParseConfig("""
+            {
+              "controls": {
+                "ppt-pen": {
+                  "automationId": "ink-tool-0",
+                  "surface": "slideShow",
+                  "colorFromName": true
+                }
+              }
+            }
+            """);
+
+        var spec = cfg!.Controls["ppt-pen"];
+        Assert.Equal("slideShow", spec.Surface);
+        Assert.True(spec.ColorFromName);
+    }
+
+    [Fact]
+    public void Private_view_reads_its_state_from_the_tooltip()
+    {
+        // The button is labelled "Private view" whichever way it is set and
+        // offers no toggle pattern, so the name says nothing. Chromium puts the
+        // tooltip in FullDescription, where it does change.
+        var config = Program.LoadConfig(Path.Combine(Path.GetTempPath(), "no-selectors-" + Guid.NewGuid()));
+        var spec = config.Controls["ppt-private-view"];
+
+        Assert.True(spec.StateFromFullDescription);
+        Assert.Equal("presenter", spec.RequiresRole);
+
+        // Captured live: the description states the action, so "Prevent" means
+        // private viewing is currently on.
+        Assert.True(spec.ActiveRegex!.IsMatch(
+            "Prevent participants from moving through shared presentation on their own. Has context menu"));
+        Assert.True(spec.InactiveRegex!.IsMatch(
+            "Allow participants to move through shared presentation on their own. Has context menu"));
+
+        // And they must not both match the same text, or the key would latch.
+        Assert.False(spec.ActiveRegex.IsMatch(
+            "Allow participants to move through shared presentation on their own. Has context menu"));
+        Assert.False(spec.InactiveRegex.IsMatch(
+            "Prevent participants from moving through shared presentation on their own. Has context menu"));
+    }
+
+    [Fact]
+    public void ParseConfig_reads_stateFromFullDescription()
+    {
+        var cfg = Program.ParseConfig("""
+            {
+              "controls": {
+                "ppt-private-view": {
+                  "automationId": "toggleEnablePrivateViewingButton",
+                  "stateFromFullDescription": true
+                },
+                "mute": { "automationId": "microphone-button" }
+              }
+            }
+            """);
+
+        Assert.True(cfg!.Controls["ppt-private-view"].StateFromFullDescription);
+        Assert.False(cfg.Controls["mute"].StateFromFullDescription);
+    }
+
+    [Fact]
+    public void The_default_ink_colours_are_the_ones_the_palettes_offer()
+    {
+        // Captured from a live presenter session, from all three palettes: they
+        // differ, and a name missing here cannot be read while its flyout is
+        // open. The swatches carry no automation id, so names are the only
+        // handle on them.
+        var colors = new SelectorConfig().PowerPointLive.InkColorNames;
+
+        // Pen.
+        foreach (var expected in new[]
+                 {
+                     "Black", "Blue", "Dark purple", "Dark red", "Dark yellow", "Gray",
+                     "Green", "Light blue", "Light gray", "Light green", "Light orange",
+                     "Magenta", "Orange", "Purple", "Red"
+                 })
+        {
+            Assert.Contains(expected, colors);
+        }
+
+        // Highlighter-only.
+        foreach (var expected in new[] { "Yellow", "Pink", "Faded green", "Faded blue", "Faded red" })
+        {
+            Assert.Contains(expected, colors);
+        }
+
+        // The pen's flyout also carries the laser pointer's arrow options, and
+        // one of them always reports itself selected. Treating those as colours
+        // would paint the key "No arrow".
+        Assert.DoesNotContain("No arrow", colors);
+        Assert.DoesNotContain("Single arrow", colors);
+        Assert.DoesNotContain("Double arrows", colors);
+    }
+
+    [Fact]
+    public void ParseConfig_reads_ink_colour_names()
+    {
+        var cfg = Program.ParseConfig("""
+            {
+              "powerPointLive": {
+                "inkColorNames": ["Rot", "Blau", "Hellgrun"]
+              }
+            }
+            """);
+
+        Assert.Equal(new[] { "Rot", "Blau", "Hellgrun" }, cfg!.PowerPointLive.InkColorNames);
+    }
+
+    [Fact]
+    public void An_empty_ink_colour_list_keeps_the_defaults()
+    {
+        // An empty list would otherwise disable colour reading outright, which
+        // is never what someone editing this file means by it.
+        var cfg = Program.ParseConfig("""
+            {
+              "powerPointLive": { "inkColorNames": [] }
+            }
+            """);
+
+        Assert.Contains("Red", cfg!.PowerPointLive.InkColorNames);
+    }
+
+    [Fact]
+    public void Every_slide_show_control_is_marked_so_it_survives_the_subtree_vanishing()
+    {
+        // Teams unmounts the slide-show subtree while a presentation is idle —
+        // measured absent for 12 of 40 seconds on a live meeting. Anything
+        // hosted there must be marked, or its key blinks out several times a
+        // minute. Controls on the meeting toolbar must NOT be marked, because
+        // theirs is stable and a stale reading would be wrong.
+        var config = Program.LoadConfig("nope");
+
+        var hosted = new[]
+        {
+            "ppt-prev", "ppt-next", "ppt-grid", "ppt-sync", "ppt-copilot",
+            "ppt-high-contrast", "ppt-translate", "ppt-hide-presenter-view",
+            "ppt-refresh", "ppt-copy-link",
+            "ppt-cursor", "ppt-laser", "ppt-pen", "ppt-highlighter", "ppt-eraser"
+        };
+        foreach (var key in hosted)
+            Assert.Equal("slideShow", config.Controls[key].Surface);
+
+        var meetingToolbar = new[]
+        {
+            "ppt-popout", "ppt-take-control", "ppt-stop-presenting",
+            "ppt-private-view", "ppt-layout-content", "ppt-layout-cameo"
+        };
+        foreach (var key in meetingToolbar)
+            Assert.True(string.IsNullOrEmpty(config.Controls[key].Surface),
+                $"{key} is on the meeting toolbar and should not be marked as slide-show hosted");
+    }
+
+    [Fact]
+    public void The_tool_colour_pattern_reads_the_ink_colour_Teams_names()
+    {
+        // Captured from a live meeting: the colour sits between the colon and
+        // the thickness, and can be more than one word.
+        var rx = new PowerPointLiveSpec().ToolColorRegex!;
+
+        Assert.Equal("Light blue", rx.Match("Pen: Light blue, Thickness 3").Groups[1].Value);
+        Assert.Equal("Light orange", rx.Match("Laser pointer: Light orange").Groups[1].Value);
+        Assert.Equal("Pink", rx.Match("Highlighter: Pink, Thickness 3").Groups[1].Value);
+
+        // Tools with no ink colour say nothing extra.
+        Assert.False(rx.IsMatch("Cursor"));
+        Assert.False(rx.IsMatch("Eraser"));
+    }
+
+    [Fact]
+    public void Only_the_tools_that_carry_an_ink_colour_report_one()
+    {
+        var config = Program.LoadConfig("nope");
+
+        foreach (var key in new[] { "ppt-cursor", "ppt-laser", "ppt-pen", "ppt-highlighter", "ppt-eraser" })
+            Assert.True(config.Controls[key].ColorFromName, $"{key} should report its colour");
+
+        Assert.False(config.Controls["ppt-next"].ColorFromName);
     }
 
     [Fact]

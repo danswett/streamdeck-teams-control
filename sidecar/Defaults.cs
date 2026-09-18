@@ -95,15 +95,26 @@ public static class Defaults
             // meeting toolbar, so none of these exist unless a deck is being
             // presented. That is what makes the keys dim on their own.
             // Captured from a live meeting on 2026-09-17.
-            ["ppt-prev"] = new() { AutomationId = "prevSlideButton" },
-            ["ppt-next"] = new() { AutomationId = "nextSlideButton" },
-            ["ppt-grid"] = new() { AutomationId = "gridViewToolbarButton" },
+            ["ppt-prev"] = new() { AutomationId = "prevSlideButton", Surface = "slideShow" },
+            ["ppt-next"] = new() { AutomationId = "nextSlideButton", Surface = "slideShow" },
+
+            // Grid view replaces the whole slide-show subtree with an overlay,
+            // so the button that opened it is gone by the time you want out.
+            // The overlay's close button carries no AutomationId at all, hence
+            // the name match, and the overlay's presence is the state.
+            ["ppt-grid"] = new()
+            {
+                Surface = "slideShow",
+                AutomationId = "gridViewToolbarButton",
+                ActiveWhenPresentAutomationId = "fluent-grid-view",
+                OffName = @"^\s*close\s+grid\s+view\s*$"
+            },
 
             // Only rendered once you have navigated away from the presenter's
             // slide, so its presence is exactly the "viewing privately" signal.
-            ["ppt-sync"] = new() { AutomationId = "syncToPresenterToolbarButton" },
+            ["ppt-sync"] = new() { AutomationId = "syncToPresenterToolbarButton", Surface = "slideShow" },
 
-            ["ppt-copilot"] = new() { AutomationId = "inkToExplainToolbarButton" },
+            ["ppt-copilot"] = new() { AutomationId = "inkToExplainToolbarButton", Surface = "slideShow" },
 
             // Moves the shared content into its own window.
             ["ppt-popout"] = new() { AutomationId = "popout-content-button" },
@@ -119,20 +130,11 @@ public static class Defaults
             },
 
             // ---- PowerPoint Live "Change view" flyout ----
-            ["ppt-zoom-in"] = new()
-            {
-                Menu = "toolbarChangeViewButton",
-                MenuItemAutomationId = "toolbarMagnifyZoomOverflowButtonZoomInButton"
-            },
-            ["ppt-zoom-out"] = new()
-            {
-                Menu = "toolbarChangeViewButton",
-                MenuItemAutomationId = "toolbarMagnifyZoomOverflowButtonZoomOutButton"
-            },
             // A real checkbox, so pressing it toggles rather than needing an
             // "off" twin the way the background effects do.
             ["ppt-high-contrast"] = new()
             {
+                Surface = "slideShow",
                 Menu = "toolbarChangeViewButton",
                 MenuItemAutomationId = "toolbarHighContrastOverflowButton"
             },
@@ -148,6 +150,7 @@ public static class Defaults
             // mean nothing.
             ["ppt-translate"] = new()
             {
+                Surface = "slideShow",
                 Menu = "toolbarChangeViewButton",
                 Submenu = "toolbarTranslateSlidesOverflowButton",
                 MenuItemAutomationId = "toolbarTranslateSlidesLanguageMenuItem-{arg}",
@@ -165,13 +168,21 @@ public static class Defaults
             },
             ["ppt-private-view"] = new()
             {
-                // An Invoke button whose label stays "Private view" either way,
-                // so there is no state to read — only a press to make.
                 AutomationId = "toggleEnablePrivateViewingButton",
+                // The label is "Private view" whichever way it is set, and the
+                // button offers no toggle pattern, so the state is only in the
+                // tooltip. Chromium publishes that as FullDescription, which
+                // reads without hovering: "Prevent participants from moving..."
+                // while private viewing is on, "Allow participants to move..."
+                // while it is off.
+                StateFromFullDescription = true,
+                ActivePattern = @"^\s*Prevent\b",
+                InactivePattern = @"^\s*Allow\b",
                 RequiresRole = "presenter"
             },
             ["ppt-refresh"] = new()
             {
+                Surface = "slideShow",
                 AutomationId = "toolbarRefreshButton",
                 RequiresRole = "presenter"
             },
@@ -180,30 +191,40 @@ public static class Defaults
             // is readable from the selection rather than from a label.
             ["ppt-cursor"] = new()
             {
+                Surface = "slideShow",
+                ColorFromName = true,
                 AutomationId = "ink-tool-4",
                 RequiresRole = "presenter",
                 StateFromSelection = true
             },
             ["ppt-laser"] = new()
             {
+                Surface = "slideShow",
+                ColorFromName = true,
                 AutomationId = "ink-tool-3",
                 RequiresRole = "presenter",
                 StateFromSelection = true
             },
             ["ppt-pen"] = new()
             {
+                Surface = "slideShow",
+                ColorFromName = true,
                 AutomationId = "ink-tool-0",
                 RequiresRole = "presenter",
                 StateFromSelection = true
             },
             ["ppt-highlighter"] = new()
             {
+                Surface = "slideShow",
+                ColorFromName = true,
                 AutomationId = "ink-tool-1",
                 RequiresRole = "presenter",
                 StateFromSelection = true
             },
             ["ppt-eraser"] = new()
             {
+                Surface = "slideShow",
+                ColorFromName = true,
                 AutomationId = "ink-tool-2",
                 RequiresRole = "presenter",
                 StateFromSelection = true
@@ -211,17 +232,22 @@ public static class Defaults
 
             ["ppt-copy-link"] = new()
             {
+                Surface = "slideShow",
                 Menu = "toolbarShareButton",
                 MenuItemAutomationId = "toolbarShareButtonMenuListCopyLinkItem",
                 RequiresRole = "presenter"
             },
             ["ppt-hide-presenter-view"] = new()
             {
+                Surface = "slideShow",
                 Menu = "toolbarChangeViewButton",
                 MenuItemAutomationId = "toolbarPresenterUIHideOverflowButton",
                 // Teams replaces the entry with its opposite rather than
                 // checking it, so both ids are needed for one key to toggle.
                 MenuItemToggleAutomationId = "toolbarPresenterUIShowOverflowButton",
+                // The notes pane existing is what "presenter view is showing"
+                // actually means, and it survives the menu closing.
+                ActiveWhenPresentAutomationId = "notes-pane-parent",
                 RequiresRole = "presenter"
             },
             ["ppt-layout-content"] = new()

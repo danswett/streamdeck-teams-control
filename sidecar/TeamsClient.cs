@@ -62,6 +62,59 @@ public sealed class ControlSpec
     /// </summary>
     public bool StateFromSelection { get; set; }
 
+    /// <summary>
+    /// Matches <see cref="ActivePattern"/> and <see cref="InactivePattern"/>
+    /// against the element's FullDescription rather than its name.
+    ///
+    /// For buttons whose label never changes and whose state lives only in the
+    /// tooltip: "Private view" stays "Private view" either way, while its
+    /// description switches between allowing and preventing. Chromium publishes
+    /// the tooltip there, so it reads without hovering. Localised, like the name
+    /// patterns it reuses.
+    /// </summary>
+    public bool StateFromFullDescription { get; set; }
+
+    /// <summary>
+    /// An element whose mere presence means this control is currently on.
+    ///
+    /// Some Teams controls expose no state at all, only a consequence: grid
+    /// view is an overlay that replaces the slide surface, and presenter view
+    /// is simply whether the notes pane exists. Both are reliable, and both are
+    /// locale-independent.
+    /// </summary>
+    public string? ActiveWhenPresentAutomationId { get; set; }
+
+    /// <summary>
+    /// What to press to turn the control back off, when that is a different
+    /// element from the one that turned it on. Grid view opens from the slide
+    /// toolbar but closes from a button inside the overlay it opened — and that
+    /// button carries no AutomationId, only a name.
+    /// </summary>
+    public string? OffAutomationId { get; set; }
+    public string? OffName { get; set; }
+
+    /// <summary>
+    /// Marks a control as living inside the slide-show subtree rather than on
+    /// the meeting toolbar.
+    ///
+    /// That subtree is not always in the accessibility tree: Teams unmounts the
+    /// whole thing while the presentation is idle — measured absent for 12 of
+    /// 40 seconds on a live meeting — and rebuilds it on interaction. Controls
+    /// marked this way keep their last known availability across those gaps
+    /// instead of blinking out, which is what made every key flicker.
+    /// </summary>
+    public string? Surface { get; set; }
+
+    /// <summary>
+    /// Reads the tool's ink colour out of its accessible name, which is where
+    /// Teams puts it ("Pen: Light blue, Thickness 3"), so a key can be drawn in
+    /// the colour the tool will actually draw in.
+    /// </summary>
+    public bool ColorFromName { get; set; }
+
+    private Regex? _off;
+    public Regex? OffRegex => _off ??= Compile(OffName);
+
     private Regex? _active;
     private Regex? _inactive;
     private Regex? _menuItem;
@@ -94,7 +147,8 @@ public sealed class ControlSpec
                      ("activePattern", ActivePattern),
                      ("inactivePattern", InactivePattern),
                      ("menuItemName", MenuItemName),
-                     ("menuItemOffName", MenuItemOffName)
+                     ("menuItemOffName", MenuItemOffName),
+                     ("offName", OffName)
                  })
         {
             if (string.IsNullOrWhiteSpace(pattern)) continue;
@@ -148,9 +202,20 @@ public sealed class PowerPointLiveSpec
     public string SlideContainerAutomationId { get; set; } = "slideshow-app-container";
 
     /// <summary>
-    /// The role is published as a CSS class on the root rather than as an
-    /// accessible property, so it is matched out of the class name. This is
-    /// locale-independent.
+    /// Role markers on the meeting toolbar. Only one can exist at a time — you
+    /// can stop a share you are giving, or ask for control of one you are not —
+    /// which makes them the authoritative answer, and the one that survives
+    /// both the grid overlay and presenter view being hidden.
+    /// </summary>
+    public string PresenterMarkerAutomationId { get; set; } = "stopPresentingPptBtn";
+    public string AttendeeMarkerAutomationId { get; set; } = "takeControlPptBtn";
+
+    /// <summary>
+    /// Fallback role detection, used only when neither marker is offered.
+    ///
+    /// Not the primary signal, despite looking like one: the class tracks the
+    /// current view mode rather than the role, and flips to the attendee value
+    /// when a presenter hides their own notes and thumbnails.
     /// </summary>
     public string PresenterClassPattern { get; set; } = @"slideshow-app-presenter-role";
     public string AttendeeClassPattern { get; set; } = @"slideshow-app-attendee-role";
@@ -158,8 +223,78 @@ public sealed class PowerPointLiveSpec
     /// <summary>Matches the "3 of 19" counter in the toolbar. Group 1 is the slide, group 2 the total.</summary>
     public string SlidePositionPattern { get; set; } = @"^\s*(\d+)\s*(?:of|/)\s*(\d+)\s*$";
 
+    /// <summary>
+    /// The grid-of-thumbnails overlay.
+    ///
+    /// Opening it replaces the entire slide-show subtree: the root, the
+    /// toolbar and every control disappear from the tree. Without knowing
+    /// about it the plugin would decide the presentation had ended and dim
+    /// every key — including the one key that closes the grid again.
+    /// </summary>
+    public string GridViewAutomationId { get; set; } = "fluent-grid-view";
+
     /// <summary>Strips Teams' wrapper off the document title to leave the file name.</summary>
     public string DeckTitlePattern { get; set; } = @"^\s*SlideShow\s*[-–]\s*(.+?)\s*$";
+
+    /// <summary>
+    /// Pulls the ink colour out of a drawing tool's accessible name: the part
+    /// after the colon and before any thickness. "Pen: Light blue, Thickness 3"
+    /// gives "Light blue". Localised, like the name it reads.
+    /// </summary>
+    public string ToolColorPattern { get; set; } = @"^[^:]+:\s*([^,]+?)\s*(?:,|$)";
+
+    /// <summary>
+    /// The ink colours offered in a drawing tool's flyout, which is the only
+    /// place the chosen colour can be read while that flyout is open: opening it
+    /// removes the tool button itself from the tree, taking its name — and with
+    /// it the colour — along.
+    ///
+    /// The union of all three palettes, captured from a live presenter session.
+    /// They differ: the pen offers dark and magenta shades the highlighter does
+    /// not, the highlighter offers "Faded" and "Yellow" the pen does not, and
+    /// the laser offers only six. The swatches carry no automation id, so their
+    /// names are the only handle on them.
+    ///
+    /// A list rather than "whichever swatch is selected" because the pen's
+    /// flyout also carries the laser pointer's arrow options, and one of those
+    /// always reports itself as selected too. Localised, like the names it
+    /// matches.
+    /// </summary>
+    public string[] InkColorNames { get; set; } =
+    {
+        "Black", "Blue", "Dark purple", "Dark red", "Dark yellow", "Faded blue",
+        "Faded green", "Faded red", "Gray", "Green", "Light blue", "Light gray",
+        "Light green", "Light orange", "Magenta", "Orange", "Pink", "Purple",
+        "Red", "Yellow"
+    };
+
+    /// <summary>
+    /// Name of the surface whose controls come and go with the slide-show
+    /// subtree; matched against <see cref="ControlSpec.Surface"/>.
+    /// </summary>
+    public string SlideShowSurface { get; set; } = "slideShow";
+
+    /// <summary>
+    /// How long a slide-show control keeps its last known availability after
+    /// the subtree vanishes. Comfortably longer than the gaps observed on a
+    /// live meeting, and bounded so a presentation that really has ended still
+    /// dims the keys.
+    /// </summary>
+    public int DetachedGraceMs { get; set; } = 30_000;
+
+    /// <summary>
+    /// The laser pointer's arrow options, which share the drawing-tool flyout
+    /// with the colour swatches and are the reason a colour cannot simply be
+    /// "the selected radio button": one of these always reports itself selected
+    /// too. Localised, like the names they match.
+    /// </summary>
+    public string ArrowOptionPattern { get; set; } = @"^(No arrow|Single arrow|Double arrows)$";
+
+    private Regex? _arrowOption;
+    public Regex? ArrowOptionRegex => _arrowOption ??= Compile(ArrowOptionPattern);
+
+    private Regex? _toolColor;
+    public Regex? ToolColorRegex => _toolColor ??= Compile(ToolColorPattern);
 
     private Regex? _presenter;
     private Regex? _attendee;
@@ -184,7 +319,9 @@ public sealed class PowerPointLiveSpec
                      ("presenterClassPattern", PresenterClassPattern),
                      ("attendeeClassPattern", AttendeeClassPattern),
                      ("slidePositionPattern", SlidePositionPattern),
-                     ("deckTitlePattern", DeckTitlePattern)
+                     ("deckTitlePattern", DeckTitlePattern),
+                     ("toolColorPattern", ToolColorPattern),
+                     ("arrowOptionPattern", ArrowOptionPattern)
                  })
         {
             if (string.IsNullOrWhiteSpace(pattern)) continue;
@@ -320,15 +457,43 @@ public sealed class TeamsClient : IDisposable
     }
 
     /// <summary>Watches the controls whose label carries state.</summary>
-    private void WatchControl(AutomationElement el)
+    /// <summary>
+    /// Subscribes to the properties that carry a control's state, so a change
+    /// made in Teams itself is noticed at once rather than at the next poll.
+    ///
+    /// Watched once per control: re-subscribing on every snapshot leaks
+    /// handlers, and a few hundred of them turn every small change into a storm
+    /// of redundant re-reads.
+    /// </summary>
+    private void WatchControl(string key, AutomationElement el, ControlSpec spec)
     {
         if (!UseEvents) return;
+
+        if (_watched.TryGetValue(key, out var existing))
+        {
+            if (Equals(existing.Element, el)) return;
+
+            try { existing.Element.FrameworkAutomationElement.UnregisterPropertyChangedEventHandler(existing.Handler); }
+            catch { }
+            _watched.Remove(key);
+        }
+
         try
         {
+            // The name carries mute/camera state and, for a drawing tool, its
+            // ink colour. Selection carries which tool is in use, and does not
+            // touch the name at all — without it, switching tool in Teams was
+            // only noticed when the backstop poll came round.
+            var properties = spec.StateFromSelection
+                ? new[] { _automation.PropertyLibrary.Element.Name, _automation.PropertyLibrary.SelectionItem.IsSelected }
+                : new[] { _automation.PropertyLibrary.Element.Name };
+
             var handler = el.RegisterPropertyChangedEvent(
                 TreeScope.Element,
-                (_, _, _) => RaiseHint("name-changed"),
-                _automation.PropertyLibrary.Element.Name);
+                (_, _, _) => RaiseHint("property-changed"),
+                properties);
+
+            _watched[key] = (el, handler);
             _propertyHandlers.Add((el, handler));
         }
         catch
@@ -336,6 +501,9 @@ public sealed class TeamsClient : IDisposable
             // Not fatal: the backstop poll still picks the change up.
         }
     }
+
+    /// <summary>Current property subscription per control, so each is watched once.</summary>
+    private readonly Dictionary<string, (AutomationElement Element, FlaUI.Core.EventHandlers.PropertyChangedEventHandlerBase Handler)> _watched = new();
 
     private void ClearControlWatches()
     {
@@ -345,6 +513,7 @@ public sealed class TeamsClient : IDisposable
             catch { }
         }
         _propertyHandlers.Clear();
+        _watched.Clear();
     }
 
     public void Dispose()
@@ -695,6 +864,8 @@ public sealed class TeamsClient : IDisposable
     /// </summary>
     private bool IsToolbarVisible(AutomationElement win)
     {
+        if (_index is not null) return _index.ContainsKey(_config.MeetingProbeAutomationId);
+
         const string cacheKey = "probe";
         if (_cache.TryGetValue(cacheKey, out var probe) && IsAlive(probe)) return true;
         _cache.Remove(cacheKey);
@@ -708,6 +879,17 @@ public sealed class TeamsClient : IDisposable
 
     private AutomationElement? ResolveControl(string key, ControlSpec spec)
     {
+        // During a snapshot the index has already answered this in one pass.
+        if (_index is not null)
+        {
+            if (!_index.TryGetValue(spec.AutomationId, out var indexed)) return null;
+
+            _cache[key] = indexed;
+            if (spec.ActiveRegex is not null || spec.InactiveRegex is not null || spec.StateFromSelection)
+                WatchControl(key, indexed, spec);
+            return indexed;
+        }
+
         if (_cache.TryGetValue(key, out var cached) && IsAlive(cached)) return cached;
         _cache.Remove(key);
 
@@ -721,7 +903,7 @@ public sealed class TeamsClient : IDisposable
 
         // The label is the state, so a change to it is the event worth waking for.
         if (spec.ActiveRegex is not null || spec.InactiveRegex is not null || spec.StateFromSelection)
-            WatchControl(el);
+            WatchControl(key, el, spec);
         return el;
     }
 
@@ -731,6 +913,8 @@ public sealed class TeamsClient : IDisposable
     /// </summary>
     private AutomationElement? ResolveMenuHost(AutomationElement win, string menuId)
     {
+        if (_index is not null) return _index.GetValueOrDefault(menuId);
+
         var cacheKey = $"menu:{menuId}";
         if (_cache.TryGetValue(cacheKey, out var cached) && IsAlive(cached)) return cached;
         _cache.Remove(cacheKey);
@@ -758,12 +942,22 @@ public sealed class TeamsClient : IDisposable
             return null;
         }
 
-        var name = NameOf(el);
-        if (name.Length == 0) return null;
+        // Some buttons keep one label whatever they do and put the state in the
+        // tooltip instead. Chromium publishes that as FullDescription, which is
+        // readable without hovering - "Private view" is always "Private view",
+        // but its description switches between allowing and preventing.
+        var text = spec.StateFromFullDescription ? FullDescriptionOf(el) : NameOf(el);
+        if (text.Length == 0) return null;
 
-        if (SafeMatch(spec.ActiveRegex, name)) return true;
-        if (SafeMatch(spec.InactiveRegex, name)) return false;
+        if (SafeMatch(spec.ActiveRegex, text)) return true;
+        if (SafeMatch(spec.InactiveRegex, text)) return false;
         return null;
+    }
+
+    private static string FullDescriptionOf(AutomationElement el)
+    {
+        try { return el.Properties.FullDescription.ValueOrDefault ?? ""; }
+        catch { return ""; }
     }
 
     /// <summary>
@@ -777,10 +971,92 @@ public sealed class TeamsClient : IDisposable
         try { return rx.IsMatch(value); }
         catch (RegexMatchTimeoutException)
         {
-            Console.Error.WriteLine($"selector pattern timed out against '{value}'; treating as no match");
+            // The pattern and the length, never the value. What was matched
+            // against is a control name or a tooltip read out of the meeting
+            // window, and this is the one place such text could reach a log.
+            Console.Error.WriteLine(
+                $"selector pattern /{rx}/ timed out against {value.Length} chars; treating as no match");
             return false;
         }
     }
+
+    /// <summary>
+    /// Finds every control a snapshot needs in a single traversal.
+    ///
+    /// Resolving controls one at a time became catastrophic once PowerPoint
+    /// Live arrived. A control that is present can be cached; one that is
+    /// absent cannot, so each missing control cost a full descendant walk of a
+    /// Teams window — and most PowerPoint controls are absent most of the time.
+    /// At thirty-five controls that meant six or more full walks per snapshot,
+    /// measured at 2.6 to 8.9 seconds, which is what made the keys feel dead.
+    ///
+    /// One OR condition over every id answers the whole question in one pass.
+    /// </summary>
+    private Dictionary<string, AutomationElement> BuildIndex(AutomationElement win)
+    {
+        var index = new Dictionary<string, AutomationElement>(StringComparer.Ordinal);
+        var ids = WantedIds();
+        if (ids.Length == 0) return index;
+
+        try
+        {
+            var found = win.FindAllDescendants(cf =>
+            {
+                FlaUI.Core.Conditions.ConditionBase condition = cf.ByAutomationId(ids[0]);
+                for (var i = 1; i < ids.Length; i++) condition = condition.Or(cf.ByAutomationId(ids[i]));
+                return condition;
+            });
+
+            foreach (var el in found)
+            {
+                string id;
+                try { id = el.Properties.AutomationId.ValueOrDefault ?? ""; }
+                catch { continue; }
+                if (id.Length == 0) continue;
+
+                // Teams can carry the same id in more than one view; the first
+                // match is the one in the live tree.
+                index.TryAdd(id, el);
+            }
+        }
+        catch { }
+
+        return index;
+    }
+
+    /// <summary>Every AutomationId a snapshot looks for. Fixed, so built once.</summary>
+    private string[] WantedIds()
+    {
+        if (_wantedIds is not null) return _wantedIds;
+
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (_, spec) in _config.Controls)
+        {
+            if (!string.IsNullOrEmpty(spec.AutomationId)) ids.Add(spec.AutomationId);
+            if (!string.IsNullOrEmpty(spec.Menu)) ids.Add(spec.Menu!);
+            if (!string.IsNullOrEmpty(spec.ActiveWhenPresentAutomationId))
+                ids.Add(spec.ActiveWhenPresentAutomationId!);
+        }
+
+        var ppt = _config.PowerPointLive;
+        foreach (var id in new[]
+                 {
+                     ppt.RootAutomationId, ppt.ToolbarAutomationId, ppt.SlideContainerAutomationId,
+                     ppt.GridViewAutomationId, ppt.PresenterMarkerAutomationId,
+                     ppt.AttendeeMarkerAutomationId, _config.MeetingProbeAutomationId
+                 })
+        {
+            if (!string.IsNullOrEmpty(id)) ids.Add(id);
+        }
+
+        _wantedIds = ids.ToArray();
+        return _wantedIds;
+    }
+
+    private string[]? _wantedIds;
+
+    /// <summary>Index for the snapshot in progress; null outside one.</summary>
+    private Dictionary<string, AutomationElement>? _index;
 
     /// <summary>
     /// Reads the PowerPoint Live surface, if one is being presented.
@@ -806,20 +1082,75 @@ public sealed class TeamsClient : IDisposable
             return null;
         });
 
-        if (root is null) return null;
+        string className = "";
+        if (root is not null)
+        {
+            try { className = root.Properties.ClassName.ValueOrDefault ?? ""; }
+            catch { className = ""; }
+        }
 
-        string className;
-        try { className = root.Properties.ClassName.ValueOrDefault ?? ""; }
-        catch { return null; }
+        var grid = FindAnywhere(win, ppt.GridViewAutomationId);
 
-        // Teams keeps the root mounted with an empty class between decks, so the
-        // role marker — not the element — is what proves a live presentation.
-        var role = SafeMatch(ppt.PresenterRegex, className) ? "presenter"
+        // The meeting toolbar decides the role, because only one of these two
+        // buttons can exist: you can stop a share you are giving, or ask for
+        // control of one you are not.
+        //
+        // The root's CSS class looks like it should answer this and does not.
+        // It tracks the VIEW MODE, not the role: hiding presenter view rewrites
+        // it from "presenter-role" to "attendee-role" while you are still very
+        // much presenting. Trusting it retired every presenter key the moment
+        // someone collapsed their notes. The class is kept only as a fallback
+        // for the case where neither button is offered.
+        var role = FindAnywhere(win, ppt.PresenterMarkerAutomationId) is not null ? "presenter"
+            : FindAnywhere(win, ppt.AttendeeMarkerAutomationId) is not null ? "attendee"
+            : SafeMatch(ppt.PresenterRegex, className) ? "presenter"
             : SafeMatch(ppt.AttendeeRegex, className) ? "attendee"
             : null;
+
         if (role is null) return null;
 
+        // Those two buttons are PowerPoint-specific, so the role also proves a
+        // deck is up. That matters because the slide-show subtree itself is not
+        // dependable: Teams unmounts it while the presentation sits idle, and
+        // requiring it here reported the deck as gone several times a minute.
+        if (root is not null) _pptSurfaceSeenAt = Environment.TickCount64;
+
         context["ppt.role"] = role;
+
+        if (grid is not null)
+        {
+            context["ppt.grid"] = "1";
+
+            // The slide toolbar is gone, but the grid marks the current slide as
+            // its selected thumbnail, so the counter keeps working.
+            var selected = SelectedGridSlide(grid) ?? _lastSlide;
+            if (selected is not null)
+            {
+                context["ppt.slide"] = selected;
+                _lastSlide = selected;
+            }
+            if (_lastSlideTotal is not null) context["ppt.slides"] = _lastSlideTotal;
+            if (_lastDeck is not null) context["ppt.deck"] = _lastDeck;
+            return role;
+        }
+
+        if (root is null)
+        {
+            // Live, but the slide-show surface is momentarily not in the tree.
+            // Flagged for the control loop below, then removed again: this flaps
+            // every few seconds, and leaving it in the published context would
+            // change the fingerprint each time and force a full repaint of every
+            // key for no visible reason.
+            //
+            // Everything read from that surface is carried forward. The slide
+            // number especially: opening any flyout takes the surface with it,
+            // and without this the counter key blanked every time.
+            context["ppt.detached"] = "1";
+            if (_lastSlide is not null) context["ppt.slide"] = _lastSlide;
+            if (_lastSlideTotal is not null) context["ppt.slides"] = _lastSlideTotal;
+            if (_lastDeck is not null) context["ppt.deck"] = _lastDeck;
+            return role;
+        }
 
         // "Current slide: Slide 3" — the authoritative position, and the one
         // that keeps working when the toolbar auto-hides.
@@ -828,7 +1159,11 @@ public sealed class TeamsClient : IDisposable
         if (container is not null)
         {
             var digits = FirstNumber(NameOf(container));
-            if (digits is not null) context["ppt.slide"] = digits;
+            if (digits is not null)
+            {
+                context["ppt.slide"] = digits;
+                _lastSlide = digits;
+            }
         }
 
         // The toolbar's "3 of 19" counter is the only source for the deck length.
@@ -847,6 +1182,8 @@ public sealed class TeamsClient : IDisposable
 
                     context["ppt.slide"] = m.Groups[1].Value;
                     context["ppt.slides"] = m.Groups[2].Value;
+                    _lastSlide = m.Groups[1].Value;
+                    _lastSlideTotal = m.Groups[2].Value;
                     break;
                 }
             }
@@ -854,9 +1191,115 @@ public sealed class TeamsClient : IDisposable
         }
 
         var deck = DeckNameFrom(root, ppt);
-        if (deck is not null) context["ppt.deck"] = deck;
+        if (deck is not null)
+        {
+            context["ppt.deck"] = deck;
+            _lastDeck = deck;
+        }
+
+        // The surface can be present while the pieces read from it are not: the
+        // toolbar auto-hides, and opening a flyout takes the counter with it.
+        // Nothing here ever legitimately goes from known to unknown while a deck
+        // is up, so a missing reading means "not visible right now", not "gone" —
+        // publish the last one instead of blanking the key.
+        if (!context.ContainsKey("ppt.slide") && _lastSlide is not null)
+            context["ppt.slide"] = _lastSlide;
+        if (!context.ContainsKey("ppt.slides") && _lastSlideTotal is not null)
+            context["ppt.slides"] = _lastSlideTotal;
+        if (!context.ContainsKey("ppt.deck") && _lastDeck is not null)
+            context["ppt.deck"] = _lastDeck;
 
         return role;
+    }
+
+    /// <summary>Slide position, deck length and deck name, carried across the gaps
+    /// where the slide-show surface leaves the tree - the grid overlay replacing it,
+    /// a flyout opening, or Teams unmounting it while idle.</summary>
+    private string? _lastSlide;
+    private string? _lastSlideTotal;
+    private string? _lastDeck;
+
+    /// <summary>When the slide-show subtree was last actually in the tree.</summary>
+    private long _pptSurfaceSeenAt;
+
+    /// <summary>
+    /// Finds an element in any Teams window, meeting window first.
+    ///
+    /// Cached hard, because this is called several times per snapshot — role
+    /// markers, the grid overlay, the notes pane — and each miss is a full
+    /// descendant walk of a Teams window, which is tens of thousands of
+    /// elements and the single most expensive thing this process does.
+    ///
+    /// Misses are remembered too, on a short timer. Without that, the common
+    /// case of "this element legitimately does not exist right now" paid for a
+    /// full walk on every poll and made the keys visibly lag.
+    /// </summary>
+    private AutomationElement? FindAnywhere(AutomationElement win, string automationId)
+    {
+        if (string.IsNullOrEmpty(automationId)) return null;
+
+        // The snapshot's own index already covers the meeting window.
+        if (_index is not null && _index.TryGetValue(automationId, out var indexed)) return indexed;
+
+        var key = $"any:{automationId}";
+        if (_cache.TryGetValue(key, out var cached))
+        {
+            if (IsAlive(cached)) return cached;
+            _cache.Remove(key);
+        }
+
+        // Inside a snapshot the index is authoritative for the meeting window,
+        // so a miss there means absent; only look wider when there is more than
+        // one Teams window to look at.
+        if (_index is not null && SearchScopes(win).Length <= 1) return null;
+
+        if (_missingUntil.TryGetValue(automationId, out var until) && Environment.TickCount64 < until)
+            return null;
+
+        foreach (var scope in SearchScopes(win))
+        {
+            if (_index is not null && Equals(scope, win)) continue;
+
+            var found = FindById(scope, automationId);
+            if (found is null) continue;
+
+            _cache[key] = found;
+            _missingUntil.Remove(automationId);
+            return found;
+        }
+
+        _missingUntil[automationId] = Environment.TickCount64 + MissingRecheckMs;
+        return null;
+    }
+
+    /// <summary>
+    /// How long a failed lookup is trusted before searching again. Short enough
+    /// that appearing controls light up promptly, long enough that an absent
+    /// one is not re-searched on every poll.
+    /// </summary>
+    private const int MissingRecheckMs = 1500;
+
+    /// <summary>When each absent element may be looked for again.</summary>
+    private readonly Dictionary<string, long> _missingUntil = new();
+
+    /// <summary>The slide number the grid overlay currently has selected.</summary>
+    private static string? SelectedGridSlide(AutomationElement grid)
+    {
+        try
+        {
+            foreach (var item in grid.FindAllDescendants(cf => cf.ByControlType(ControlType.ListItem)))
+            {
+                try
+                {
+                    var sel = item.Patterns.SelectionItem.PatternOrDefault;
+                    if (sel is null || !sel.IsSelected.ValueOrDefault) continue;
+                    return FirstNumber(NameOf(item));
+                }
+                catch { }
+            }
+        }
+        catch { }
+        return null;
     }
 
     /// <summary>
@@ -900,6 +1343,133 @@ public sealed class TeamsClient : IDisposable
         return null;
     }
 
+    /// <summary>Last ink colour seen per tool, held across the subtree's absences.</summary>
+    private readonly Dictionary<string, string> _lastToolColors = new();
+
+    /// <summary>Whether a control lives in the subtree Teams unmounts when idle.</summary>
+    private bool IsSlideShowControl(ControlSpec spec) =>
+        !string.IsNullOrEmpty(spec.Surface) &&
+        string.Equals(spec.Surface, _config.PowerPointLive.SlideShowSurface, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Ink colour named by a drawing tool, e.g. "Pen: Light blue, Thickness 3".</summary>
+    private string? ToolColorOf(AutomationElement el)
+    {
+        var rx = _config.PowerPointLive.ToolColorRegex;
+        if (rx is null) return null;
+
+        var name = NameOf(el);
+        if (name.Length == 0) return null;
+
+        try
+        {
+            var m = rx.Match(name);
+            if (!m.Success) return null;
+            var value = m.Groups[1].Value.Trim();
+            return value.Length == 0 ? null : value;
+        }
+        catch (RegexMatchTimeoutException) { return null; }
+    }
+
+    /// <summary>
+    /// Reads the ink colour out of an open drawing-tool flyout.
+    ///
+    /// Needed because opening that flyout unmounts the tool button it belongs
+    /// to, so the usual source — the button's own name — does not exist at the
+    /// moment the colour changes. Teams recolours its toolbar on the click, and
+    /// without this the plugin only caught up once the flyout closed.
+    ///
+    /// Only swatches named as colours count. The same flyout carries the laser
+    /// pointer's arrow options, and one of those reports itself selected too, so
+    /// "the selected radio button" alone would happily return "No arrow".
+    /// </summary>
+    private string? SelectedPaletteColor(AutomationElement win)
+    {
+        var ppt = _config.PowerPointLive;
+        var names = ppt.InkColorNames ?? Array.Empty<string>();
+        var arrows = ppt.ArrowOptionRegex;
+
+        string? listed = null;
+        string? fallback = null;
+        var sawArrow = false;
+
+        try
+        {
+            foreach (var radio in win.FindAllDescendants(cf => cf.ByControlType(ControlType.RadioButton)))
+            {
+                var name = NameOf(radio).Trim();
+                if (name.Length == 0) continue;
+
+                bool isArrow;
+                try { isArrow = arrows is not null && arrows.IsMatch(name); }
+                catch (RegexMatchTimeoutException) { isArrow = false; }
+
+                if (isArrow) { sawArrow = true; continue; }
+
+                bool selected;
+                try { selected = radio.Patterns.SelectionItem.Pattern.IsSelected.ValueOrDefault; }
+                catch { continue; }
+                if (!selected) continue;
+
+                if (names.Contains(name, StringComparer.OrdinalIgnoreCase)) listed ??= name;
+                else fallback ??= name;
+            }
+        }
+        catch { }
+
+        // A known colour is taken at face value. Anything else is only trusted
+        // once an arrow option has confirmed this really is a drawing-tool
+        // flyout, which covers a colour Teams adds after this list was written.
+        // That guard only helps in the pen's flyout — it is the one that carries
+        // the arrow options — so the list still has to be kept complete.
+        return listed ?? (sawArrow ? fallback : null);
+    }
+
+    /// <summary>
+    /// Reads the ink colour out of an open drawing-tool flyout and publishes it
+    /// against the tool it belongs to, returning that tool's key.
+    ///
+    /// Called from both snapshot paths because either can be the one running
+    /// when a colour changes: opening a PowerPoint flyout leaves the meeting
+    /// toolbar in place, while opening a Teams menu does not.
+    /// </summary>
+    private string? ApplyPaletteColor(MeetingSnapshot snap, AutomationElement win, string? role)
+    {
+        if (role != "presenter") return null;
+
+        var color = SelectedPaletteColor(win);
+        if (color is null) return null;
+
+        var key = SelectedInkToolKey();
+        if (key is null) return null;
+
+        snap.InkFlyoutOpen = true;
+
+        // An open palette is proof the deck is still up, so it holds the grace
+        // window open. Without this, studying the colours for half a minute
+        // dimmed every slide-show key and dropped the colours altogether — the
+        // surface has been "missing" the whole time the flyout was up.
+        _pptSurfaceSeenAt = Environment.TickCount64;
+
+        snap.Context[$"ppt.color.{key}"] = color;
+        _lastToolColors[key] = color;
+        return key;
+    }
+
+    /// <summary>
+    /// The drawing tool a colour change applies to: the selected one. Its own
+    /// button is gone while its flyout is open, so this reads the selection that
+    /// was true when the flyout opened.
+    /// </summary>
+    private string? SelectedInkToolKey()
+    {
+        foreach (var (key, spec) in _config.Controls)
+        {
+            if (!spec.ColorFromName) continue;
+            if (_lastStates.TryGetValue(key, out var on) && on) return key;
+        }
+        return null;
+    }
+
     /// <summary>Caches a looked-up element under a key, re-finding it once it dies.</summary>
     private AutomationElement? ResolveCached(string key, Func<AutomationElement?> find)
     {
@@ -924,6 +1494,22 @@ public sealed class TeamsClient : IDisposable
 
         snap.WindowTitle = NameOf(win);
 
+        // One traversal answers every lookup below. Built here so the whole
+        // snapshot sees a consistent view, and cleared in the finally so
+        // presses outside a snapshot still resolve elements live.
+        _index = BuildIndex(win);
+        try
+        {
+            return Populate(snap, win);
+        }
+        finally
+        {
+            _index = null;
+        }
+    }
+
+    private MeetingSnapshot Populate(MeetingSnapshot snap, AutomationElement win)
+    {
         // Read before the toolbar check: PowerPoint Live lives outside the
         // meeting toolbar, so it stays readable while a flyout covers it.
         var role = ReadPowerPointLive(win, snap.Context);
@@ -940,6 +1526,21 @@ public sealed class TeamsClient : IDisposable
             foreach (var key in _config.Controls.Keys)
                 snap.Available[key] = !_lastAvailable.TryGetValue(key, out var was) || was;
             foreach (var (k, v) in _lastStates) snap.States[k] = v;
+
+            // Ink colour is the exception. It has to come from the palette
+            // rather than from the tool, because opening the palette unmounts
+            // the tool button — which is why a new colour used to appear only
+            // once the palette closed, long after Teams had recoloured its own
+            // toolbar on the click.
+            var inkKey = ApplyPaletteColor(snap, win, role);
+
+            foreach (var (key, spec) in _config.Controls)
+            {
+                if (!spec.ColorFromName) continue;
+                if (key == inkKey) continue;
+                PublishToolColor(snap, key, spec, ResolveControl(key, spec));
+            }
+
             return snap;
         }
 
@@ -947,6 +1548,23 @@ public sealed class TeamsClient : IDisposable
         // located once per snapshot rather than once per control. Resolving them
         // individually cost seven full tree walks every poll.
         var menuAvailable = new Dictionary<string, bool>(StringComparer.Ordinal);
+
+        // Teams unmounts the slide-show subtree while a presentation is idle.
+        // Within the grace window its controls keep what they last reported,
+        // because the deck has not gone anywhere — only its accessibility tree
+        // has.
+        var surfaceGone = snap.Context.ContainsKey("ppt.detached");
+
+        // Opening a drawing tool's flyout unmounts that surface too, and with it
+        // the very button whose name carries the ink colour. So the one moment
+        // the colour can change is the one moment it cannot be read the usual
+        // way, and the palette itself becomes the only source.
+        //
+        // Gated on the surface being gone, which is the only time it is needed.
+        var paletteKey = surfaceGone ? ApplyPaletteColor(snap, win, role) : null;
+
+        var detached = surfaceGone &&
+                       Environment.TickCount64 - _pptSurfaceSeenAt < _config.PowerPointLive.DetachedGraceMs;
 
         foreach (var (key, spec) in _config.Controls)
         {
@@ -961,6 +1579,59 @@ public sealed class TeamsClient : IDisposable
                 continue;
             }
 
+            if (detached && IsSlideShowControl(spec))
+            {
+                snap.Available[key] = !_lastAvailable.TryGetValue(key, out var held) || held;
+                if (_lastStates.TryGetValue(key, out var heldState)) snap.States[key] = heldState;
+
+                // Covers the tool whose palette is open too: its colour was just
+                // published from that palette, so the remembered value is it.
+                if (_lastToolColors.TryGetValue(key, out var heldColor))
+                    snap.Context[$"ppt.color.{key}"] = heldColor;
+                continue;
+            }
+
+            // Controls whose state is "something else exists": grid view is an
+            // overlay, presenter view is the notes pane. Read first, because in
+            // grid view the button that opened it has left the tree — which is
+            // exactly when that key has to stay live to get back out.
+            var presenceState = !string.IsNullOrEmpty(spec.ActiveWhenPresentAutomationId);
+            if (presenceState)
+            {
+                var on = FindAnywhere(win, spec.ActiveWhenPresentAutomationId!) is not null;
+
+                // The grid overlay unmounts the slide-show surface, and with it
+                // the notes pane that presenter view is judged by. Reading it
+                // there would report presenter view as switched off every time
+                // someone opened the thumbnails. The grid's own key is exempt:
+                // the overlay is precisely what it reports on.
+                var hiddenByGrid = snap.Context.ContainsKey("ppt.grid") &&
+                                   !on &&
+                                   !string.Equals(spec.ActiveWhenPresentAutomationId,
+                                       _config.PowerPointLive.GridViewAutomationId, StringComparison.Ordinal);
+
+                if (hiddenByGrid && _lastStates.TryGetValue(key, out var held))
+                {
+                    snap.States[key] = held;
+                }
+                else
+                {
+                    snap.States[key] = on;
+                    _lastStates[key] = on;
+                }
+
+                // Only a control with its own off selector is reachable through
+                // it; the rest still toggle through their normal menu or button,
+                // so they fall through to the usual availability check below.
+                if (snap.States[key] && (!string.IsNullOrEmpty(spec.OffAutomationId) || spec.OffRegex is not null))
+                {
+                    var reachable = OffTarget(win, spec) is not null;
+                    snap.Available[key] = reachable;
+                    _lastAvailable[key] = reachable;
+                    continue;
+                }
+            }
+
             // Menu-nested controls (reactions, hand, blur) are not readable
             // without opening their flyout, so only report availability.
             if (!string.IsNullOrEmpty(spec.Menu))
@@ -973,6 +1644,12 @@ public sealed class TeamsClient : IDisposable
                 }
                 snap.Available[key] = menuOk;
                 _lastAvailable[key] = menuOk;
+
+                // A flyout-nested toggle cannot be read without opening its
+                // flyout, so its state is whatever the last press established.
+                // Without this a menu control could never show state at all.
+                if (!presenceState && _lastStates.TryGetValue(key, out var menuState))
+                    snap.States[key] = menuState;
                 continue;
             }
 
@@ -981,13 +1658,18 @@ public sealed class TeamsClient : IDisposable
             {
                 snap.Available[key] = false;
                 _lastAvailable[key] = false;
-                if (_lastStates.TryGetValue(key, out var carried)) snap.States[key] = carried;
+                // Presence already decided this one; do not overwrite it.
+                if (!presenceState && _lastStates.TryGetValue(key, out var carried)) snap.States[key] = carried;
                 continue;
             }
 
             var available = SafeEnabled(el);
             snap.Available[key] = available;
             _lastAvailable[key] = available;
+
+            // A presence-based control has its state already, read from the
+            // thing it produced rather than from the button that produced it.
+            if (presenceState) continue;
 
             var st = ReadState(el, spec);
             if (st.HasValue)
@@ -999,9 +1681,34 @@ public sealed class TeamsClient : IDisposable
             {
                 snap.States[key] = carried;
             }
+
+            // The ink colour rides along in the same name the selection came
+            // from, so a key can be drawn in the colour it will actually draw.
+            PublishToolColor(snap, key, spec, el);
         }
 
         return snap;
+    }
+
+    /// <summary>
+    /// Publishes the colour a drawing tool will draw in, falling back to the last
+    /// one seen. <paramref name="el"/> is null when the control could not be
+    /// resolved this time round, which is not the same as it having no colour.
+    /// </summary>
+    private void PublishToolColor(MeetingSnapshot snap, string key, ControlSpec spec, AutomationElement? el)
+    {
+        if (!spec.ColorFromName) return;
+
+        var color = el is null ? null : ToolColorOf(el);
+        if (color is not null)
+        {
+            snap.Context[$"ppt.color.{key}"] = color;
+            _lastToolColors[key] = color;
+        }
+        else if (_lastToolColors.TryGetValue(key, out var lastColor))
+        {
+            snap.Context[$"ppt.color.{key}"] = lastColor;
+        }
     }
 
     /// <summary>
@@ -1096,25 +1803,35 @@ public sealed class TeamsClient : IDisposable
         // anything: clicking the menu button again while it is already closing
         // would re-open it, and the next key press would then just close it
         // instead of acting.
-        if (WaitForToolbar(win, 1500)) return;
+        if (WaitForDismissed(win, host, 1500)) return;
+
+        // Ask the menu to close itself before clicking anything. This is the
+        // only dismissal that cannot have a side effect, and it matters most
+        // during PowerPoint Live: a stray click on the slide surface advances
+        // the deck for everyone watching.
+        if (host is not null)
+        {
+            TryCollapse(host);
+            if (WaitForDismissed(win, host, 700)) return;
+        }
 
         // Clicking the menu button again toggles the flyout shut. Its screen
         // position was captured before opening, because the toolbar leaves the
         // accessibility tree while a popup is up.
         if (hostPoint is { } p && InputPoster.TryClickPoint(_renderWidget, p.x, p.y))
         {
-            if (WaitForToolbar(win, 900)) return;
+            if (WaitForDismissed(win, host, 900)) return;
         }
 
         // Otherwise click an inert spot inside the meeting window, which is what
         // dismisses a popup normally.
         if (TryClickAway(win))
         {
-            if (WaitForToolbar(win, 900)) return;
+            if (WaitForDismissed(win, host, 900)) return;
         }
 
         if (host is not null) TryCollapse(host);
-        if (WaitForToolbar(win, 300)) return;
+        if (WaitForDismissed(win, host, 300)) return;
 
         if (anchor is not null)
         {
@@ -1151,14 +1868,14 @@ public sealed class TeamsClient : IDisposable
                     var invoke = chain[i].Patterns.Invoke.PatternOrDefault;
                     if (invoke is null) continue;
                     invoke.Invoke();
-                    if (WaitForToolbar(win, 600)) return;
+                    if (WaitForDismissed(win, host, 600)) return;
                 }
                 catch { }
             }
         }
 
-        if (!WaitForToolbar(win, 600))
-            Console.Error.WriteLine("warning: could not dismiss Teams flyout; toolbar still hidden");
+        if (!WaitForDismissed(win, host, 600))
+            Console.Error.WriteLine("warning: could not dismiss Teams flyout");
     }
 
     /// <summary>
@@ -1199,6 +1916,14 @@ public sealed class TeamsClient : IDisposable
             };
             var occupied = ClickableBounds(win);
 
+            // The slide surface is not inert. Clicking it during PowerPoint Live
+            // advances the deck — for everyone, if you are the one presenting —
+            // so a dismissal that landed there was silently driving the
+            // presentation. It carries no clickable children of its own, so
+            // nothing else would have excluded it.
+            var slides = PowerPointSurfaceBounds(win);
+            if (slides is { } s) occupied.Add(s);
+
             foreach (var (x, y) in candidates)
             {
                 if (occupied.Any(b => b.Contains(x, y))) continue;
@@ -1208,6 +1933,30 @@ public sealed class TeamsClient : IDisposable
             return false;
         }
         catch { return false; }
+    }
+
+    /// <summary>
+    /// Screen bounds of the PowerPoint Live slide surface, when one is up.
+    /// Treated as occupied so no dismissal click ever lands on a slide.
+    /// </summary>
+    private System.Drawing.Rectangle? PowerPointSurfaceBounds(AutomationElement win)
+    {
+        foreach (var id in new[]
+                 {
+                     _config.PowerPointLive.RootAutomationId,
+                     _config.PowerPointLive.GridViewAutomationId
+                 })
+        {
+            var el = FindAnywhere(win, id);
+            if (el is null) continue;
+            try
+            {
+                var r = el.BoundingRectangle;
+                if (r.Width > 0 && r.Height > 0) return r;
+            }
+            catch { }
+        }
+        return null;
     }
 
     /// <summary>Bounds of everything currently clickable in the window.</summary>
@@ -1265,6 +2014,46 @@ public sealed class TeamsClient : IDisposable
     {
         try { return el.Parent; }
         catch { return null; }
+    }
+
+    /// <summary>
+    /// Whether the flyout we opened has actually closed.
+    ///
+    /// Toolbar visibility alone is not the answer. The big Teams flyouts —
+    /// reactions, background effects — drop the whole toolbar from the tree, so
+    /// its return means they closed. The smaller PowerPoint Live popups do not:
+    /// the meeting toolbar stays right where it is while the Layout menu sits
+    /// open over it. Judging by the toolbar there, dismissal decided there was
+    /// nothing to do and left the menu on screen, where it then swallowed the
+    /// next key press.
+    ///
+    /// So the host's own expand state is preferred wherever it has one.
+    /// </summary>
+    private bool IsFlyoutClosed(AutomationElement win, AutomationElement? host)
+    {
+        if (host is not null)
+        {
+            try
+            {
+                var ec = host.Patterns.ExpandCollapse.PatternOrDefault;
+                if (ec is not null)
+                    return ec.ExpandCollapseState.ValueOrDefault != ExpandCollapseState.Expanded;
+            }
+            catch { }
+        }
+
+        return IsToolbarVisible(win);
+    }
+
+    private bool WaitForDismissed(AutomationElement win, AutomationElement? host, int timeoutMs)
+    {
+        var deadline = Environment.TickCount64 + timeoutMs;
+        while (true)
+        {
+            if (IsFlyoutClosed(win, host)) return true;
+            if (Environment.TickCount64 >= deadline) return false;
+            Thread.Sleep(60);
+        }
     }
 
     private bool WaitForToolbar(AutomationElement win, int timeoutMs)
@@ -1325,9 +2114,21 @@ public sealed class TeamsClient : IDisposable
     /// Scopes to search for a flyout. Teams renders some popups outside the
     /// meeting window, but walking the whole desktop is far too slow, so this
     /// is limited to Teams' own top-level windows with the meeting first.
+    ///
+    /// Cached briefly: enumerating the desktop's children is itself expensive,
+    /// and this is called from every lookup that may cross windows. Teams
+    /// windows do not come and go faster than this.
     /// </summary>
     private AutomationElement[] SearchScopes(AutomationElement win)
     {
+        if (_scopes is not null &&
+            Environment.TickCount64 < _scopesUntil &&
+            Equals(_scopesFor, win) &&
+            _scopes.All(IsAlive))
+        {
+            return _scopes;
+        }
+
         var scopes = new List<AutomationElement> { win };
         try
         {
@@ -1339,8 +2140,17 @@ public sealed class TeamsClient : IDisposable
             }
         }
         catch { }
-        return scopes.ToArray();
+
+        _scopes = scopes.ToArray();
+        _scopesFor = win;
+        _scopesUntil = Environment.TickCount64 + ScopesTtlMs;
+        return _scopes;
     }
+
+    private const int ScopesTtlMs = 3000;
+    private AutomationElement[]? _scopes;
+    private AutomationElement? _scopesFor;
+    private long _scopesUntil;
 
     /// <summary>
     /// Finds an element inside a just-opened flyout, polling until it appears.
@@ -1354,6 +2164,19 @@ public sealed class TeamsClient : IDisposable
         var deadline = Environment.TickCount64 + timeoutMs;
         var scopes = SearchScopes(win);
 
+        // An item Teams has greyed out — Cameo with the camera off — still
+        // exists. Kept aside rather than ignored so the caller can say
+        // "disabled" and close the menu, instead of polling to the timeout and
+        // leaving the flyout orphaned on screen.
+        AutomationElement? disabled = null;
+
+        // Once a disabled match is in hand there is little point waiting out the
+        // full timeout, but menus do populate in stages, so allow a short grace
+        // for it to become enabled. Cameo used to cost the whole 2.5s here,
+        // which was most of what pushed a press past the plugin's patience.
+        long disabledSince = 0;
+        const int DisabledGraceMs = 400;
+
         while (true)
         {
             foreach (var scope in scopes)
@@ -1364,7 +2187,13 @@ public sealed class TeamsClient : IDisposable
                     {
                         if (string.IsNullOrEmpty(autoId)) continue;
                         var byId = FindById(scope, autoId!);
-                        if (byId is not null && SafeEnabled(byId)) return byId;
+                        if (byId is null) continue;
+                        if (SafeEnabled(byId)) return byId;
+                        if (disabled is null)
+                        {
+                            disabled = byId;
+                            disabledSince = Environment.TickCount64;
+                        }
                     }
 
                     if (nameRx is not null)
@@ -1378,14 +2207,20 @@ public sealed class TeamsClient : IDisposable
 
                         foreach (var c in all)
                         {
-                            if (nameRx.IsMatch(NameOf(c))) return c;
+                            if (SafeMatch(nameRx, NameOf(c))) return c;
                         }
                     }
                 }
                 catch { }
             }
 
-            if (Environment.TickCount64 >= deadline) return null;
+            if (Environment.TickCount64 >= deadline) return disabled;
+
+            // Settled on "present but greyed out": report it now rather than
+            // making the user wait out a timeout for an answer we already have.
+            if (disabled is not null && Environment.TickCount64 - disabledSince >= DisabledGraceMs)
+                return disabled;
+
             Thread.Sleep(80);
         }
     }
@@ -1424,10 +2259,71 @@ public sealed class TeamsClient : IDisposable
         return template.Replace("{arg}", forRegex ? Regex.Escape(value) : value, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The element that turns an already-on control off.
+    ///
+    /// Falls back to the control's own selector, because most toggles close the
+    /// same way they opened; only the ones with a separate closing control —
+    /// grid view — need the explicit off selector.
+    /// </summary>
+    private AutomationElement? OffTarget(AutomationElement win, ControlSpec spec)
+    {
+        if (!string.IsNullOrEmpty(spec.OffAutomationId))
+        {
+            var byId = FindAnywhere(win, spec.OffAutomationId!);
+            if (byId is not null && SafeEnabled(byId)) return byId;
+        }
+
+        if (spec.OffRegex is not null)
+        {
+            // The grid overlay's close button carries no AutomationId at all,
+            // so a name match is the only way to reach it.
+            foreach (var scope in SearchScopes(win))
+            {
+                try
+                {
+                    var found = scope.FindAllDescendants(cf =>
+                        cf.ByControlType(ControlType.Button).Or(cf.ByControlType(ControlType.MenuItem)));
+
+                    foreach (var e in found)
+                    {
+                        if (!SafeMatch(spec.OffRegex, NameOf(e))) continue;
+                        if (SafeEnabled(e)) return e;
+                    }
+                }
+                catch { }
+            }
+        }
+
+        if (!string.IsNullOrEmpty(spec.AutomationId))
+        {
+            var self = FindAnywhere(win, spec.AutomationId);
+            if (self is not null && SafeEnabled(self)) return self;
+        }
+
+        return null;
+    }
+
     private (bool ok, string? error) InvokeCore(string target, ControlSpec spec, string? arg = null)
     {
         var win = ResolveMeetingWindow();
         if (win is null) return (false, "not in a meeting");
+
+        // A control that is already on may close from somewhere else entirely —
+        // grid view opens from the slide toolbar and closes from a button inside
+        // the overlay, by which time the opening button has left the tree. Only
+        // controls that declare a separate off selector take this path; the ones
+        // that merely report state through another element still toggle the
+        // normal way.
+        var hasOffSelector = !string.IsNullOrEmpty(spec.OffAutomationId) || spec.OffRegex is not null;
+        if (hasOffSelector &&
+            !string.IsNullOrEmpty(spec.ActiveWhenPresentAutomationId) &&
+            FindAnywhere(win, spec.ActiveWhenPresentAutomationId!) is not null)
+        {
+            var off = OffTarget(win, spec);
+            if (off is null) return (false, $"could not find how to turn '{target}' off");
+            return Press(off) ? (true, null) : (false, $"could not turn '{target}' off");
+        }
 
         var itemId = Fill(spec.MenuItemAutomationId, arg, forRegex: false);
         var itemToggleId = Fill(spec.MenuItemToggleAutomationId, arg, forRegex: false);
@@ -1527,7 +2423,22 @@ public sealed class TeamsClient : IDisposable
                 if (offItem is not null) item = offItem;
             }
 
+            // Teams greys out entries that do not apply — Cameo needs your
+            // camera on. Say so and let the finally block close the menu, rather
+            // than pressing nothing and leaving the flyout open.
+            if (!SafeEnabled(item))
+                return (false, $"'{target}' is not available right now");
+
+            // A checkbox inside a flyout can only be read while the flyout is
+            // open, which is exactly now. Reading the truth here and recording
+            // the flipped value means the key is right from the first press and
+            // re-syncs on every one after, instead of never showing state at
+            // all. Only stale if the same setting is changed in Teams directly.
+            var wasChecked = IsChecked(item);
+
             if (!Press(item)) return (false, $"could not invoke item for '{target}'");
+
+            if (wasChecked.HasValue) _lastStates[target] = !wasChecked.Value;
 
             // Two problems, one fix. The flyout does not reliably close on its
             // own, and after a selection Teams swallows the next click on that
@@ -1658,6 +2569,15 @@ public sealed class MeetingSnapshot
     /// and a key renders them rather than toggling on them.
     /// </summary>
     public Dictionary<string, string> Context { get; set; } = new();
+
+    /// <summary>
+    /// A drawing-tool flyout is open, so the colour can change without anything
+    /// raising an event: the tool button that would have reported it is unmounted
+    /// for as long as its own flyout is up. Polled faster while this holds, and
+    /// deliberately kept out of the fingerprint — it is a hint about how often to
+    /// look, not a piece of state worth repainting a key for.
+    /// </summary>
+    public bool InkFlyoutOpen { get; set; }
 
     public string Fingerprint()
     {

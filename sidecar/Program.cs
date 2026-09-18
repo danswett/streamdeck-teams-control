@@ -12,7 +12,15 @@ namespace TeamsBridge;
 /// </summary>
 public static class Program
 {
-    private sealed record WorkItem(int Id, string Cmd, string? Target, string? Menu, string? Arg = null);
+    private sealed record WorkItem(int Id, string Cmd, string? Target, string? Menu, string? Arg = null)
+    {
+        /// <summary>
+        /// When the request arrived. A menu walk takes seconds, so a handful of
+        /// quick presses can queue up behind one; without this they would all
+        /// run long after the user gave up, driving the meeting on their behalf.
+        /// </summary>
+        public long QueuedAt { get; } = Environment.TickCount64;
+    }
 
     private const int TrimIntervalMs = 60_000;
 
@@ -29,6 +37,15 @@ public static class Program
     /// and brings up the other half.
     /// </summary>
     private const int SettleMs = 1200;
+
+    /// <summary>
+    /// How long a queued press stays worth running. The plugin gives up on a
+    /// press after 10s and tells the key so; anything older than that would
+    /// fire after the user has been told it failed, which is worse than not
+    /// firing at all. Held just under the plugin's limit so the two cannot
+    /// disagree about whether a press still counts.
+    /// </summary>
+    private const int StaleInvokeMs = 9_000;
 
     [DllImport("user32.dll")]
     private static extern bool SetProcessDpiAwarenessContext(IntPtr value);
@@ -180,6 +197,11 @@ public static class Program
         // source of truth.
         var meetingPollMs = Math.Max(pollMs, 3000);
         var idlePollMs = Math.Max(pollMs, 15_000);
+
+        // While a drawing-tool flyout is open the tool button is unmounted, so a
+        // colour change raises no event and polling is the only way to see it.
+        // Brief and self-limiting: it only applies while that flyout is up.
+        var inkFlyoutPollMs = Math.Clamp(pollMs, 150, 500);
         var currentPollMs = meetingPollMs;
 
         // First trim shortly after start-up, then periodically.
@@ -239,7 +261,9 @@ public static class Program
             try
             {
                 var snap = client.GetSnapshot();
-                currentPollMs = snap.InMeeting ? meetingPollMs : idlePollMs;
+                currentPollMs = snap.InkFlyoutOpen ? inkFlyoutPollMs
+                    : snap.InMeeting ? meetingPollMs
+                    : idlePollMs;
                 nextPoll = Environment.TickCount64 + currentPollMs;
 
                 var fp = snap.Fingerprint();
@@ -307,6 +331,23 @@ public static class Program
 
             case "invoke":
             {
+                // Dropped rather than run late: the plugin has already timed out
+                // and told the key it failed, so acting now would move the
+                // meeting with nothing on screen explaining why.
+                var age = Environment.TickCount64 - item.QueuedAt;
+                if (age > StaleInvokeMs)
+                {
+                    Console.Error.WriteLine($"dropping stale invoke '{item.Target}' queued {age}ms ago");
+                    Emit(w =>
+                    {
+                        w.WriteString("type", "result");
+                        w.WriteNumber("id", item.Id);
+                        w.WriteBoolean("ok", false);
+                        w.WriteString("error", "dropped: queued too long");
+                    });
+                    break;
+                }
+
                 var (ok, err) = client.Invoke(item.Target ?? "", item.Arg);
                 Emit(w =>
                 {
@@ -480,6 +521,23 @@ public static class Program
             if (Str(ppt, "attendeeClassPattern") is { } ac) spec.AttendeeClassPattern = ac;
             if (Str(ppt, "slidePositionPattern") is { } sp) spec.SlidePositionPattern = sp;
             if (Str(ppt, "deckTitlePattern") is { } dt) spec.DeckTitlePattern = dt;
+            if (Str(ppt, "gridViewAutomationId") is { } gv) spec.GridViewAutomationId = gv;
+            if (Str(ppt, "presenterMarkerAutomationId") is { } pm) spec.PresenterMarkerAutomationId = pm;
+            if (Str(ppt, "attendeeMarkerAutomationId") is { } am) spec.AttendeeMarkerAutomationId = am;
+            if (Str(ppt, "toolColorPattern") is { } tc) spec.ToolColorPattern = tc;
+            if (Str(ppt, "arrowOptionPattern") is { } ao) spec.ArrowOptionPattern = ao;
+            if (ppt.TryGetProperty("inkColorNames", out var icn) && icn.ValueKind == JsonValueKind.Array)
+            {
+                var colors = icn.EnumerateArray()
+                    .Where(e => e.ValueKind == JsonValueKind.String)
+                    .Select(e => e.GetString()!)
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .ToArray();
+                if (colors.Length > 0) spec.InkColorNames = colors;
+            }
+            if (Str(ppt, "slideShowSurface") is { } ss) spec.SlideShowSurface = ss;
+            if (ppt.TryGetProperty("detachedGraceMs", out var dg) && dg.TryGetInt32(out var dgv))
+                spec.DetachedGraceMs = Math.Clamp(dgv, 0, 300_000);
         }
 
         if (!root.TryGetProperty("controls", out var controls)) return cfg;
@@ -499,8 +557,16 @@ public static class Program
                 MenuItemOffName = Str(o, "menuItemOffName"),
                 ActivePattern = Str(o, "activePattern"),
                 InactivePattern = Str(o, "inactivePattern"),
+                ActiveWhenPresentAutomationId = Str(o, "activeWhenPresentAutomationId"),
+                OffAutomationId = Str(o, "offAutomationId"),
+                OffName = Str(o, "offName"),
+                Surface = Str(o, "surface"),
+                ColorFromName = o.TryGetProperty("colorFromName", out var cfn) &&
+                                cfn.ValueKind == JsonValueKind.True,
                 StateFromSelection = o.TryGetProperty("stateFromSelection", out var sfs) &&
-                                     sfs.ValueKind == JsonValueKind.True
+                                     sfs.ValueKind == JsonValueKind.True,
+                StateFromFullDescription = o.TryGetProperty("stateFromFullDescription", out var sfd) &&
+                                           sfd.ValueKind == JsonValueKind.True
             };
         }
         return cfg;

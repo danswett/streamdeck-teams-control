@@ -39,17 +39,25 @@
 		"the presenter. Zooming while presenting changes what everyone sees.",
 		"",
 		"Captured from Teams 26255.500.5120.7530 on 2026-09-14, PowerPoint Live added",
-		"2026-09-17. After a Teams update, use the Diagnostics panel in any action's",
-		"property inspector to dump the live UI tree to the plugin log, then correct",
-		"the ids below and restart the plugin."
+		"2026-09-17. After a Teams update, run bin/sidecar/TeamsBridge.exe from a",
+		"terminal and send it {\"id\":1,\"cmd\":\"discover\",\"menu\":\"\"} to dump the live",
+		"UI tree, then correct the ids below and restart the plugin."
 	],
 	"version": 2,
 	"meetingProbeAutomationId": "microphone-button",
 	"powerPointLive": {
 		"$comment": [
-			"How a shared deck is recognised. The role is only exposed as a CSS class",
-			"on the slide-show root, so it is matched out of the class name - which",
-			"has the happy side effect of being locale-independent."
+			"How a shared deck is recognised.",
+			"",
+			"ROLE comes from the meeting toolbar, not from the slide-show root's CSS",
+			"class. Only one of the two marker buttons can exist at a time, so they",
+			"are authoritative. The class LOOKS like the answer and is not: it tracks",
+			"the current view mode, and flips to the attendee value when a presenter",
+			"hides their own notes and thumbnails. The class patterns are kept only",
+			"as a fallback for when neither button is offered.",
+			"",
+			"Opening grid view unmounts the whole slide-show subtree, root and all, so",
+			"the overlay is tracked separately; the toolbar markers survive it too."
 		],
 		"rootAutomationId": "ppt-previewer-root",
 		"toolbarAutomationId": "slideShowToolbarId",
@@ -57,7 +65,38 @@
 		"presenterClassPattern": "slideshow-app-presenter-role",
 		"attendeeClassPattern": "slideshow-app-attendee-role",
 		"slidePositionPattern": "^\\s*(\\d+)\\s*(?:of|/)\\s*(\\d+)\\s*$",
-		"deckTitlePattern": "^\\s*SlideShow\\s*[-\u2013]\\s*(.+?)\\s*$"
+		"deckTitlePattern": "^\\s*SlideShow\\s*[-\u2013]\\s*(.+?)\\s*$",
+		"gridViewAutomationId": "fluent-grid-view",
+		"presenterMarkerAutomationId": "stopPresentingPptBtn",
+		"attendeeMarkerAutomationId": "takeControlPptBtn",
+
+		"$comment2": [
+			"INK COLOUR is read from a drawing tool's accessible name, which looks",
+			"like \"Pen: Light blue, Thickness 3\" - except while that tool's own",
+			"flyout is open, because opening it unmounts the tool button and takes",
+			"the name with it. For that window the colour comes from the flyout's",
+			"swatches instead, which is what lets a key recolour on the click",
+			"rather than when the flyout closes.",
+			"",
+			"The swatches carry no automation id, so they are matched by name.",
+			"This is the union of all three palettes, which differ: the pen has",
+			"dark and magenta shades, the highlighter has the 'Faded' ones and",
+			"Yellow, and the laser offers only six.",
+			"",
+			"'the selected radio button' is not enough on its own: the pen's",
+			"flyout also holds the laser pointer's arrow options and one of those",
+			"always reports itself selected, so they are excluded by pattern.",
+			"",
+			"Both lists are localised, like the names they match."
+		],
+		"toolColorPattern": "^[^:]+:\\s*([^,]+?)\\s*(?:,|$)",
+		"inkColorNames": [
+			"Black", "Blue", "Dark purple", "Dark red", "Dark yellow", "Faded blue",
+			"Faded green", "Faded red", "Gray", "Green", "Light blue", "Light gray",
+			"Light green", "Light orange", "Magenta", "Orange", "Pink", "Purple",
+			"Red", "Yellow"
+		],
+		"arrowOptionPattern": "^(No arrow|Single arrow|Double arrows)$"
 	},
 	"controls": {
 		"mute": {
@@ -116,30 +155,29 @@
 			"menuItemOffName": "^\\s*no\\s+background\\s+effect\\s*$"
 		},
 
-		"ppt-prev": { "automationId": "prevSlideButton" },
-		"ppt-next": { "automationId": "nextSlideButton" },
-		"ppt-grid": { "automationId": "gridViewToolbarButton" },
-		"ppt-sync": { "automationId": "syncToPresenterToolbarButton" },
-		"ppt-copilot": { "automationId": "inkToExplainToolbarButton" },
+		"ppt-prev": { "automationId": "prevSlideButton", "surface": "slideShow" },
+		"ppt-next": { "automationId": "nextSlideButton", "surface": "slideShow" },
+		"ppt-grid": {
+			"surface": "slideShow",
+			"automationId": "gridViewToolbarButton",
+			"activeWhenPresentAutomationId": "fluent-grid-view",
+			"offName": "^\\s*close\\s+grid\\s+view\\s*$"
+		},
+		"ppt-sync": { "automationId": "syncToPresenterToolbarButton", "surface": "slideShow" },
+		"ppt-copilot": { "automationId": "inkToExplainToolbarButton", "surface": "slideShow" },
 		"ppt-popout": { "automationId": "popout-content-button" },
 		"ppt-take-control": {
 			"automationId": "takeControlPptBtn",
 			"requiresRole": "attendee"
 		},
 
-		"ppt-zoom-in": {
-			"menu": "toolbarChangeViewButton",
-			"menuItemAutomationId": "toolbarMagnifyZoomOverflowButtonZoomInButton"
-		},
-		"ppt-zoom-out": {
-			"menu": "toolbarChangeViewButton",
-			"menuItemAutomationId": "toolbarMagnifyZoomOverflowButtonZoomOutButton"
-		},
 		"ppt-high-contrast": {
+			"surface": "slideShow",
 			"menu": "toolbarChangeViewButton",
 			"menuItemAutomationId": "toolbarHighContrastOverflowButton"
 		},
 		"ppt-translate": {
+			"surface": "slideShow",
 			"menu": "toolbarChangeViewButton",
 			"submenu": "toolbarTranslateSlidesOverflowButton",
 			"menuItemAutomationId": "toolbarTranslateSlidesLanguageMenuItem-{arg}",
@@ -151,49 +189,76 @@
 			"requiresRole": "presenter"
 		},
 		"ppt-private-view": {
+			"$comment": [
+				"The label is 'Private view' whichever way it is set, and the button",
+				"offers no toggle pattern, so the state lives only in the tooltip.",
+				"Chromium publishes that as FullDescription, which reads without",
+				"hovering - so stateFromFullDescription matches the patterns below",
+				"against it instead of the name.",
+				"",
+				"'Prevent participants from moving...' means private viewing is on;",
+				"'Allow participants to move...' means it is off. Localised."
+			],
 			"automationId": "toggleEnablePrivateViewingButton",
+			"stateFromFullDescription": true,
+			"activePattern": "^\\s*Prevent\\b",
+			"inactivePattern": "^\\s*Allow\\b",
 			"requiresRole": "presenter"
 		},
 		"ppt-refresh": {
+			"surface": "slideShow",
 			"automationId": "toolbarRefreshButton",
 			"requiresRole": "presenter"
 		},
 
 		"ppt-cursor": {
+			"surface": "slideShow",
+			"colorFromName": true,
 			"automationId": "ink-tool-4",
 			"requiresRole": "presenter",
 			"stateFromSelection": true
 		},
 		"ppt-laser": {
+			"surface": "slideShow",
+			"colorFromName": true,
 			"automationId": "ink-tool-3",
 			"requiresRole": "presenter",
 			"stateFromSelection": true
 		},
 		"ppt-pen": {
+			"surface": "slideShow",
+			"colorFromName": true,
 			"automationId": "ink-tool-0",
 			"requiresRole": "presenter",
 			"stateFromSelection": true
 		},
 		"ppt-highlighter": {
+			"surface": "slideShow",
+			"colorFromName": true,
 			"automationId": "ink-tool-1",
 			"requiresRole": "presenter",
 			"stateFromSelection": true
 		},
 		"ppt-eraser": {
+			"surface": "slideShow",
+			"colorFromName": true,
 			"automationId": "ink-tool-2",
 			"requiresRole": "presenter",
 			"stateFromSelection": true
 		},
 
 		"ppt-copy-link": {
+			"surface": "slideShow",
 			"menu": "toolbarShareButton",
 			"menuItemAutomationId": "toolbarShareButtonMenuListCopyLinkItem",
 			"requiresRole": "presenter"
 		},
 		"ppt-hide-presenter-view": {
+			"surface": "slideShow",
 			"menu": "toolbarChangeViewButton",
 			"menuItemAutomationId": "toolbarPresenterUIHideOverflowButton",
 			"menuItemToggleAutomationId": "toolbarPresenterUIShowOverflowButton",
+			"activeWhenPresentAutomationId": "notes-pane-parent",
 			"requiresRole": "presenter"
 		},
 		"ppt-layout-content": {
