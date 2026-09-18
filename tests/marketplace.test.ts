@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -249,6 +249,134 @@ describe("action list order", () => {
 		for (const action of manifest.Actions as { Name: string; UUID: string }[]) {
 			if (!action.UUID.includes(".ppt-")) continue;
 			expect(rank(action.Name), action.Name).toBeGreaterThan(0);
+		}
+	});
+});
+/**
+ * The submission listing itself. The copy and the media are reviewed by a
+ * human and uploaded by hand, so nothing else catches them drifting away from
+ * the plugin - an earlier description advertised a zoom key long after it was
+ * removed, and claimed 20 translation languages when 19 ship plus an off
+ * switch. These assert Elgato's hard limits and keep the copy honest about
+ * what the plugin actually does.
+ *
+ * https://docs.elgato.com/guidelines/products
+ */
+describe("the Marketplace listing", () => {
+	const MARKET_DIR = path.resolve(__dirname, "..", "marketplace");
+	const readme = readFileSync(path.join(MARKET_DIR, "README.md"), "utf8");
+
+	/** Every fenced block, so the copy can be asserted where it is authored. */
+	function fencedBlocks(): { lang: string; text: string }[] {
+		const out: { lang: string; text: string }[] = [];
+		let inFence = false;
+		let lang = "";
+		let buf: string[] = [];
+
+		for (const line of readme.split(/\r?\n/)) {
+			const fence = /^```(\w*)\s*$/.exec(line);
+			if (fence) {
+				if (!inFence) {
+					inFence = true;
+					lang = fence[1];
+					buf = [];
+				} else {
+					out.push({ lang, text: buf.join("\n") });
+					inFence = false;
+				}
+				continue;
+			}
+			if (inFence) buf.push(line);
+		}
+		return out;
+	}
+
+	const plain = fencedBlocks().filter((b) => b.lang === "");
+	const name = plain.find((b) => !b.text.includes("\n"))?.text ?? "";
+	const description = plain.find((b) => b.text.startsWith("Control Microsoft Teams"))?.text ?? "";
+	const releaseNotes = plain.filter((b) => b !== undefined && b.text.length > 400 && b.text !== description);
+
+	/** Reads width and height out of a PNG's IHDR, no decoder needed. */
+	function pngSize(file: string): { width: number; height: number } {
+		const buf = readFileSync(file);
+		expect(buf.subarray(1, 4).toString("ascii"), `${file} is not a PNG`).toBe("PNG");
+		return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+	}
+
+	it("keeps the product name inside the length guidance", () => {
+		expect(name).toBeTruthy();
+		expect(name.length, `"${name}" is ${name.length} characters`).toBeLessThanOrEqual(30);
+		expect(name).toBe(manifest.Name);
+	});
+
+	it("keeps the description within 250 and 1500 characters", () => {
+		expect(description.length).toBeGreaterThanOrEqual(250);
+		expect(description.length).toBeLessThanOrEqual(1500);
+	});
+
+	it("opens on a complete sentence, because 250 characters become the search snippet", () => {
+		// Marketplace feeds the first 250 characters to search engines. Breaking
+		// mid-clause there reads as truncated rather than as a summary.
+		const opening = description.slice(0, 250);
+		expect(opening).toMatch(/[a-z)]$|\.$/);
+		expect(opening).not.toContain("\n\n");
+	});
+
+	it("keeps every release-notes block within 1500 characters", () => {
+		expect(releaseNotes.length).toBeGreaterThan(0);
+		for (const block of releaseNotes) {
+			expect(block.text.length, block.text.slice(0, 40)).toBeLessThanOrEqual(1500);
+		}
+	});
+
+	it("never names a control the plugin does not ship", () => {
+		// Zoom shipped, was removed for not working reliably, and stayed in the
+		// copy. A feature word in the listing has to correspond to an action.
+		const actions = manifest.Actions.map((a) => a.Name.toLowerCase()).join(" ");
+		const claims = ["zoom", "whiteboard", "breakout", "record", "transcript"];
+
+		for (const claim of claims) {
+			if (actions.includes(claim)) continue;
+			expect(description.toLowerCase(), `description claims "${claim}"`).not.toContain(claim);
+			for (const block of releaseNotes) {
+				expect(block.text.toLowerCase(), `release notes claim "${claim}"`).not.toContain(claim);
+			}
+		}
+	});
+
+	it("ships an app icon, a thumbnail and at least three gallery items", () => {
+		const gallery = [...readme.matchAll(/`(gallery-[\w-]+\.png)`/g)].map((m) => m[1]);
+		const unique = [...new Set(gallery)];
+		expect(unique.length, "Elgato requires three gallery items").toBeGreaterThanOrEqual(3);
+		expect(unique.length, "Elgato allows at most ten").toBeLessThanOrEqual(10);
+
+		for (const file of ["app-icon-288.png", "thumbnail.png", ...unique]) {
+			const full = path.join(MARKET_DIR, file);
+			expect(existsSync(full), `${file} is listed but missing`).toBe(true);
+
+			const { width, height } = pngSize(full);
+			if (file === "app-icon-288.png") {
+				expect({ width, height }).toEqual({ width: 288, height: 288 });
+			} else {
+				expect({ width, height }, `${file} is ${width}x${height}`).toEqual({
+					width: 1920,
+					height: 960
+				});
+			}
+		}
+	});
+
+	it("leaves no generated image behind that the listing does not use", () => {
+		// A renamed gallery item used to linger in the folder, where it could be
+		// uploaded by hand long after it stopped matching the plugin.
+		const listed = new Set([
+			"app-icon-288.png",
+			"thumbnail.png",
+			...[...readme.matchAll(/`(gallery-[\w-]+\.png)`/g)].map((m) => m[1])
+		]);
+
+		for (const file of readdirSync(MARKET_DIR).filter((f) => f.endsWith(".png"))) {
+			expect(listed.has(file), `${file} is in marketplace/ but not in the README`).toBe(true);
 		}
 	});
 });

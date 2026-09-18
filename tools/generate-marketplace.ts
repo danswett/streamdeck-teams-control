@@ -9,7 +9,7 @@
  * Run with: node tools/generate-marketplace.ts
  * https://docs.elgato.com/guidelines/products
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -19,9 +19,11 @@ import {
 	REACTION_KEYS,
 	renderEmoji,
 	renderGlyph,
+	renderLabelled,
 	renderReaction,
 	renderSimple,
-	renderToggle
+	renderToggle,
+	renderTool
 } from "../src/icons.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -52,6 +54,18 @@ const share = (active: boolean, available = true): string =>
 // Blur has no reported state - the sidecar returns availability only - so it is
 // always drawn white, exactly as BlurAction does.
 const blur = (available = true): string => renderGlyph("blur", available ? "on" : "unavailable");
+
+// Drawing tools ship as PNG artwork rather than monochrome glyphs, so the
+// helper the keys use hands back a data URI instead of an SVG document. Wrap it
+// so it can sit in the same layout as every other key.
+const tool = (control: string, active: boolean, available = true): string => {
+	const art = renderTool(control, { available, active });
+	if (!art.startsWith("data:")) return art;
+	return (
+		`<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">` +
+		`<image href="${art}" x="0" y="0" width="144" height="144"/></svg>`
+	);
+};
 
 /** Strips the wrapper so a key SVG can be nested inside a larger document. */
 function inner(svg: string): string {
@@ -128,7 +142,7 @@ function thumbnail(): string {
 	let body = `<text x="${W / 2}" y="250" fill="${TEXT}" font-family="${FONT}" font-size="86"
 		font-weight="600" text-anchor="middle">Teams Meeting Controls</text>`;
 	body += `<text x="${W / 2}" y="320" fill="${MUTED}" font-family="${FONT}" font-size="36"
-		text-anchor="middle">Live state on every key</text>`;
+		text-anchor="middle">Meetings and PowerPoint Live, with live state on every key</text>`;
 
 	body += row(
 		[
@@ -136,7 +150,8 @@ function thumbnail(): string {
 			{ svg: camera(false) },
 			{ svg: renderEmoji("hand", true) },
 			{ svg: renderReaction("react-like", true) },
-			{ svg: blur() },
+			{ svg: renderLabelled("pptSlide", "12/40", "on") },
+			{ svg: tool("ppt-laser", true) },
 			{ svg: renderSimple("leave", true, "danger") }
 		],
 		440,
@@ -187,10 +202,10 @@ function galleryState(): string {
 	return canvas(W, H, body);
 }
 
-/** The full action set, so the listing shows the scope at a glance. */
+/** The meeting action set, so the listing shows the scope at a glance. */
 function galleryActions(): string {
 	let body = `<text x="${W / 2}" y="170" fill="${TEXT}" font-family="${FONT}" font-size="60"
-		font-weight="600" text-anchor="middle">Thirteen actions</text>`;
+		font-weight="600" text-anchor="middle">Meeting controls</text>`;
 
 	body += row(
 		[
@@ -218,6 +233,133 @@ function galleryActions(): string {
 		40,
 		W
 	);
+
+	return canvas(W, H, body);
+}
+
+/** Presenting a deck: the tools that only a presenter sees. */
+function galleryPresenting(): string {
+	let body = `<text x="${W / 2}" y="160" fill="${TEXT}" font-family="${FONT}" font-size="60"
+		font-weight="600" text-anchor="middle">Presenting a deck</text>`;
+
+	body += row(
+		[
+			{ svg: tool("ppt-cursor", true), caption: "Cursor" },
+			{ svg: tool("ppt-laser", false), caption: "Laser" },
+			{ svg: tool("ppt-pen", false), caption: "Pen" },
+			{ svg: tool("ppt-highlighter", false), caption: "Highlighter" },
+			{ svg: tool("ppt-eraser", false), caption: "Eraser" }
+		],
+		270,
+		150,
+		46,
+		W
+	);
+
+	body += row(
+		[
+			{ svg: renderSimple("pptPrev", true), caption: "Previous" },
+			{ svg: renderLabelled("pptSlide", "12/40", "on"), caption: "Slide" },
+			{ svg: renderSimple("pptNext", true), caption: "Next" },
+			{ svg: renderSimple("pptRefresh", true), caption: "Present latest" },
+			{ svg: renderSimple("pptStopPresenting", true, "danger"), caption: "Stop sharing" }
+		],
+		560,
+		150,
+		46,
+		W
+	);
+
+	body += `<text x="${W / 2}" y="810" fill="${MUTED}" font-family="${FONT}" font-size="34"
+		text-anchor="middle">Ink keys show the colour picked in Teams</text>`;
+
+	return canvas(W, H, body);
+}
+
+/** Watching someone else's deck, at your own pace. */
+function galleryWatching(): string {
+	let body = `<text x="${W / 2}" y="160" fill="${TEXT}" font-family="${FONT}" font-size="60"
+		font-weight="600" text-anchor="middle">Watching a deck</text>`;
+
+	body += row(
+		[
+			{ svg: renderSimple("pptPrev", true), caption: "Previous" },
+			{ svg: renderSimple("pptNext", true), caption: "Next" },
+			{ svg: renderSimple("pptSync", true), caption: "Back in sync" },
+			{ svg: renderSimple("pptGrid", true), caption: "Grid view" }
+		],
+		270,
+		150,
+		56,
+		W
+	);
+
+	body += row(
+		[
+			{ svg: renderSimple("pptTranslate", true), caption: "Translate" },
+			{ svg: renderSimple("pptContrast", true), caption: "High contrast" },
+			{ svg: renderSimple("pptCopilot", true), caption: "Ask Copilot" },
+			{ svg: renderSimple("pptTakeControl", true, "accent"), caption: "Take control" }
+		],
+		560,
+		150,
+		56,
+		W
+	);
+
+	body += `<text x="${W / 2}" y="810" fill="${MUTED}" font-family="${FONT}" font-size="34"
+		text-anchor="middle">Move at your own pace without changing anyone else's view</text>`;
+
+	return canvas(W, H, body);
+}
+
+/**
+ * The profiles, which are the reason the deck is never showing the wrong half
+ * of the plugin. Kept to three labelled groups rather than prose, because the
+ * guidelines ask for minimal text on a gallery item.
+ */
+function galleryProfiles(): string {
+	let body = `<text x="${W / 2}" y="160" fill="${TEXT}" font-family="${FONT}" font-size="60"
+		font-weight="600" text-anchor="middle">The deck follows the meeting</text>`;
+
+	const groups: { label: string; keys: string[] }[] = [
+		{ label: "In a meeting", keys: ["mute", "camera", "hand"] },
+		{ label: "Watching a deck", keys: ["pptPrev", "pptNext", "pptSync"] },
+		{ label: "Presenting", keys: ["pptPen", "pptSlide", "pptStopPresenting"] }
+	];
+
+	const size = 132;
+	const gap = 18;
+	const groupWidth = 3 * size + 2 * gap;
+	const spread = (W - groups.length * groupWidth) / (groups.length + 1);
+
+	groups.forEach((group, gi) => {
+		const x0 = spread + gi * (groupWidth + spread);
+
+		group.keys.forEach((k, ki) => {
+			const x = x0 + ki * (size + gap);
+			let svg: string;
+			if (k === "mute") svg = mute(true);
+			else if (k === "camera") svg = camera(false);
+			else if (k === "hand") svg = renderEmoji("hand", true);
+			else if (k === "pptPen") svg = tool("ppt-pen", true);
+			else if (k === "pptSlide") svg = renderLabelled("pptSlide", "12/40", "on");
+			else svg = renderSimple(k, true, k === "pptStopPresenting" ? "danger" : "on");
+			body += key(x, 400, size, svg);
+		});
+
+		body += `<text x="${x0 + groupWidth / 2}" y="610" fill="${TEXT}" font-family="${FONT}"
+			font-size="32" text-anchor="middle">${group.label}</text>`;
+
+		if (gi < groups.length - 1) {
+			const ax = x0 + groupWidth + spread / 2;
+			body += `<path d="M ${ax - 26} 466 L ${ax + 18} 466 M ${ax + 4} 452 L ${ax + 20} 466 L ${ax + 4} 480"
+				stroke="${ACCENT}" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+		}
+	});
+
+	body += `<text x="${W / 2}" y="810" fill="${MUTED}" font-family="${FONT}" font-size="34"
+		text-anchor="middle">Switches itself, and switches back</text>`;
 
 	return canvas(W, H, body);
 }
@@ -254,7 +396,21 @@ console.log("Generating Marketplace media...");
 write("app-icon-288.png", appIcon(), 288);
 write("thumbnail.png", thumbnail(), W);
 write("gallery-1-live-state.png", galleryState(), W);
-write("gallery-2-actions.png", galleryActions(), W);
-write("gallery-3-no-meeting.png", galleryIdle(), W);
+write("gallery-2-meeting-controls.png", galleryActions(), W);
+write("gallery-3-presenting.png", galleryPresenting(), W);
+write("gallery-4-watching.png", galleryWatching(), W);
+write("gallery-5-profiles.png", galleryProfiles(), W);
+write("gallery-6-no-meeting.png", galleryIdle(), W);
+
+// Renamed as the set grew past the original three; without this the old files
+// sit in the folder and a submission can pick up a gallery item that no longer
+// matches anything the plugin does.
+for (const stale of ["gallery-2-actions.png", "gallery-3-no-meeting.png"]) {
+	const file = path.join(OUT, stale);
+	if (existsSync(file)) {
+		rmSync(file);
+		console.log(`  removed stale ${stale}`);
+	}
+}
 
 console.log("Done.");

@@ -16,9 +16,16 @@ shows the artwork that actually ships.
 |---|---|---|
 | `app-icon-288.png` | App icon | 288 × 288 PNG |
 | `thumbnail.png` | Thumbnail | 1920 × 960 PNG |
-| `gallery-1-live-state.png` | Gallery 1 of 3 | 1920 × 960 PNG |
-| `gallery-2-actions.png` | Gallery 2 of 3 | 1920 × 960 PNG |
-| `gallery-3-no-meeting.png` | Gallery 3 of 3 | 1920 × 960 PNG |
+| `gallery-1-live-state.png` | Gallery 1 of 6 | 1920 × 960 PNG |
+| `gallery-2-meeting-controls.png` | Gallery 2 of 6 | 1920 × 960 PNG |
+| `gallery-3-presenting.png` | Gallery 3 of 6 | 1920 × 960 PNG |
+| `gallery-4-watching.png` | Gallery 4 of 6 | 1920 × 960 PNG |
+| `gallery-5-profiles.png` | Gallery 5 of 6 | 1920 × 960 PNG |
+| `gallery-6-no-meeting.png` | Gallery 6 of 6 | 1920 × 960 PNG |
+
+Elgato requires three gallery items and allows up to ten. Six is the point at
+which the two halves of the plugin — meetings and PowerPoint Live — are both
+shown in both roles, without repeating a layout.
 
 Product file: `dist/com.bad-duck.teamscontrol.streamDeckPlugin`, built by
 `npm run pack` and attached to every GitHub release by the release workflow.
@@ -42,18 +49,25 @@ carry the requirements and the differentiator rather than a preamble.
 ```
 Control Microsoft Teams meetings from your Stream Deck: mute, camera, raise hand, the five reactions, background blur, screen share, chat, people and leave. Every key shows the real state of the meeting, so a muted mic looks muted before you press it.
 
-Full PowerPoint Live control too. Watching a deck? Move through slides at your own pace, jump back in sync with the presenter, open grid view, zoom, or translate the slides into 20 languages — all without touching anyone else's view. Presenting? Slide navigation, laser pointer, pen, highlighter and eraser, presenter view, private view, layout and stop sharing, with a live slide counter on the key. Keys follow your role, so taking control mid-meeting re-lights the deck for presenting.
+Full PowerPoint Live control too. Watching a deck? Move through slides at your own pace, jump back in sync with the presenter, open grid view, ask Copilot, or translate the slides into 19 languages, all without touching anyone else's view. Presenting? Slide navigation, laser pointer, pen, highlighter and eraser, presenter view, private view, layout and stop sharing, with a live slide counter on the key. Keys follow your role, so taking control mid-meeting re-lights the deck for presenting.
+
+Three bundled profiles can follow the meeting on their own: meeting controls when you join, attendee or presenter tools when a deck goes up, and back again when it ends.
 
 Teams does not need to be in focus and is never pulled to the front, so you can keep working while you mute, react or raise your hand. No keystrokes are sent, so nothing leaks into the window you are actually typing in, and no global hotkeys are taken.
 
-Keys dim when no meeting is running, so there is nothing to press by mistake, and light up the moment a call starts.
+Keys dim when no meeting is running, so there is nothing to press by mistake.
 
-Requires Windows 10 or later, Stream Deck 7.1 or later, and the Microsoft Teams desktop app. Windows only — macOS is not supported. Not affiliated with or endorsed by Microsoft.
+Requires Windows 10 or later, Stream Deck 7.1 or later, and the Microsoft Teams desktop app. Windows only. Not affiliated with or endorsed by Microsoft.
 ```
 
-1,294 characters, within the 1,500 limit and above the 250 minimum. The opening
-two sentences run to 252 characters, so the search-engine snippet reads as
+1,405 characters, within the 1,500 limit and above the 250 minimum. The opening
+two sentences run to 251 characters, so the search-engine snippet reads as
 complete sentences rather than breaking mid-clause.
+
+Character counts are asserted by `tests/marketplace.test.ts`, which also checks
+that the copy does not name a control the plugin no longer ships — an earlier
+version of this description advertised a zoom key months after it was removed,
+and claimed 20 translation languages when 19 ship plus an off switch.
 
 ## Tags
 
@@ -112,29 +126,68 @@ new Marketplace user has never seen.
 ```
 First release.
 
-Control Microsoft Teams meetings from your Stream Deck, with every key showing the live state of the call.
+Control Microsoft Teams meetings and PowerPoint Live from your Stream Deck, with every key showing the live state of the call.
 
-Thirteen actions: mute, camera, raise hand, five reactions (like, love, applause, laugh, wow), background blur, screen share, chat, people, and leave.
+MEETINGS
+Mute, camera, raise hand, five reactions (like, love, applause, laugh, wow), background blur, screen share, chat, people, and leave.
+
+POWERPOINT LIVE
+Watching a deck: move through slides at your own pace, jump back in sync with the presenter, grid view, high contrast, pop out, ask Copilot, translate into 19 languages, and take control.
+
+Presenting: laser pointer, pen, highlighter, eraser, cursor, presenter view, private view, present the latest version, copy link, layout, and stop sharing, with a live slide counter on the key.
+
+Keys follow your role, so an attendee never sees presenter tools.
 
 LIVE STATE
-Keys mirror Teams rather than guessing. A muted microphone shows the muted icon before you press anything, and a change you make in Teams itself reaches the keys in about a third of a second. Every key dims when no meeting is running, so there is nothing to press by mistake, and lights up the moment a call starts.
+Keys mirror Teams rather than guessing. A muted microphone shows the muted icon before you press anything, and a change you make in Teams itself reaches the keys in about a third of a second. Every key dims when no meeting is running, so there is nothing to press by mistake.
+
+PROFILES
+Three bundled profiles can move the deck on their own as a meeting goes, and back to your own profile when you leave. 15-key decks.
 
 STAYS OUT OF YOUR WAY
-Teams never needs to be in focus and is never pulled to the front, so you can mute, react or raise your hand without losing your place in whatever you are working in. No keystrokes are sent, so nothing leaks into the window you are actually typing in, and no global hotkeys are reserved.
-
-Reactions and raise hand animate when pressed, the way they do in Teams.
+Teams never needs to be in focus and is never pulled to the front. No keystrokes are sent, and no global hotkeys are reserved.
 
 REQUIREMENTS
-Windows 10 or later, Stream Deck 7.1 or later, and the Microsoft Teams desktop app. Windows only; macOS is not supported.
+Windows 10 or later, Stream Deck 7.1 or later, and the Microsoft Teams desktop app. Windows only.
 
 Not affiliated with or endorsed by Microsoft.
 ```
 
-1,170 characters, within the 1,500 limit.
+1,491 characters, within the 1,500 limit. It describes the plugin as it stands
+rather than what changed, because a first-time reader has no previous build to
+compare against.
 
 For **subsequent** versions, use the notes from the matching GitHub release,
 which describe what changed:
 https://github.com/danswett/streamdeck-teams-control/releases
+
+### Version 1.8.1
+
+The notes to paste into Maker Console for this submission. Marketplace shows
+plain text, so this is the GitHub release rewritten for someone who has the
+plugin installed but has never read a commit.
+
+```
+PowerPoint Live control, and profiles that follow the meeting.
+
+POWERPOINT LIVE
+Twenty-two new actions.
+
+Watching a deck: move through slides at your own pace, jump back in sync with the presenter, grid view, high contrast, pop out, ask Copilot, translate into 19 languages, and take control.
+
+Presenting: laser pointer, pen, highlighter, eraser, cursor, presenter view, private view, present the latest version, copy link, layout, and stop sharing, with a live slide counter on the key. Ink keys show the colour you picked in Teams.
+
+Keys follow your role, so an attendee never sees presenter tools that cannot light up, and taking control mid-meeting re-lights the deck for presenting.
+
+PROFILES
+Three bundled profiles can move the deck on their own: meeting controls when you join, attendee or presenter tools when a deck goes up, back to meeting controls when it ends, and back to your own profile when you leave. Turn it on with "Follow the meeting between profiles" on any PowerPoint Live key. 15-key decks.
+
+FIXES
+Stop sharing now answers the confirmation Teams shows, instead of leaving it on screen. A key pressed during a presentation no longer reports a timeout. Leave no longer shows a warning when tapped.
+
+REQUIREMENTS
+Windows 10 or later, Stream Deck 7.1 or later, and the Microsoft Teams desktop app. Windows only.
+```
 
 ---
 
