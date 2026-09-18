@@ -217,3 +217,38 @@ describe("property inspector descriptions", () => {
 		}
 	});
 });
+
+describe("action list order", () => {
+	// Stream Deck lists actions in manifest order, so this is the only lever on
+	// how the list reads. Grouped by the role a key needs: shared PowerPoint
+	// Live keys, then attendee-only, then presenter-only. Run
+	// tools/order-actions.ts after adding one.
+	const manifest = JSON.parse(
+		readFileSync(path.join("com.bad-duck.teamscontrol.sdPlugin", "manifest.json"), "utf8")
+	) as { Actions: { Name: string }[] };
+
+	const rank = (name: string): number =>
+		name.startsWith("PPT Live:") ? 1
+		: name.startsWith("PPT Attendee:") ? 2
+		: name.startsWith("PPT Presenter:") ? 3
+		: 0;
+
+	it("groups the PowerPoint Live keys by role, in order", () => {
+		const ranks = manifest.Actions.map((a) => rank(a.Name));
+		for (let i = 1; i < ranks.length; i++) {
+			expect(
+				ranks[i],
+				` sits after a later group`
+			).toBeGreaterThanOrEqual(ranks[i - 1]);
+		}
+	});
+
+	it("names every PowerPoint Live action with a role prefix", () => {
+		// Anything ppt-* without one would silently sort in with the meeting
+		// controls at the top.
+		for (const action of manifest.Actions as { Name: string; UUID: string }[]) {
+			if (!action.UUID.includes(".ppt-")) continue;
+			expect(rank(action.Name), action.Name).toBeGreaterThan(0);
+		}
+	});
+});

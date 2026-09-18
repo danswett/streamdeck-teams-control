@@ -1,7 +1,7 @@
 {
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
 	"Name": "Teams Meeting Controls",
-	"Version": "1.7.0.0",
+	"Version": "1.7.1.0",
 	"Author": "Bad Duck Software",
 	"Description": "Control Microsoft Teams meetings from your Stream Deck. Mute, camera, raise hand, reactions, background blur and more â€” with live state on every key. Works while Teams is in the background; never sends keystrokes.",
 	"Category": "Teams Meeting Controls",
@@ -316,24 +316,6 @@
 			]
 		},
 		{
-			"Name": "PPT Attendee: Sync",
-			"UUID": "com.bad-duck.teamscontrol.ppt-sync",
-			"Icon": "imgs/actions/ppt-sync/icon",
-			"Tooltip": "Return to the presenter's slide. Lights up while you are viewing privately.",
-			"Controllers": [
-				"Keypad"
-			],
-			"SupportedInMultiActions": true,
-			"UserTitleEnabled": false,
-			"PropertyInspectorPath": "ui/ppt.html",
-			"States": [
-				{
-					"Image": "imgs/actions/ppt-sync/key",
-					"TitleAlignment": "bottom"
-				}
-			]
-		},
-		{
 			"Name": "PPT Live: Grid View",
 			"UUID": "com.bad-duck.teamscontrol.ppt-grid",
 			"Icon": "imgs/actions/ppt-grid/icon",
@@ -370,6 +352,42 @@
 			]
 		},
 		{
+			"Name": "PPT Live: Pop Out",
+			"UUID": "com.bad-duck.teamscontrol.ppt-popout",
+			"Icon": "imgs/actions/ppt-popout/icon",
+			"Tooltip": "Move the shared content into its own window",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-popout/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "PPT Attendee: Sync",
+			"UUID": "com.bad-duck.teamscontrol.ppt-sync",
+			"Icon": "imgs/actions/ppt-sync/icon",
+			"Tooltip": "Return to the presenter's slide. Lights up while you are viewing privately.",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-sync/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
 			"Name": "PPT Attendee: Translate Slides",
 			"UUID": "com.bad-duck.teamscontrol.ppt-translate",
 			"Icon": "imgs/actions/ppt-translate/icon",
@@ -401,24 +419,6 @@
 			"States": [
 				{
 					"Image": "imgs/actions/ppt-take-control/key",
-					"TitleAlignment": "bottom"
-				}
-			]
-		},
-		{
-			"Name": "PPT Live: Pop Out",
-			"UUID": "com.bad-duck.teamscontrol.ppt-popout",
-			"Icon": "imgs/actions/ppt-popout/icon",
-			"Tooltip": "Move the shared content into its own window",
-			"Controllers": [
-				"Keypad"
-			],
-			"SupportedInMultiActions": true,
-			"UserTitleEnabled": false,
-			"PropertyInspectorPath": "ui/ppt.html",
-			"States": [
-				{
-					"Image": "imgs/actions/ppt-popout/key",
 					"TitleAlignment": "bottom"
 				}
 			]
