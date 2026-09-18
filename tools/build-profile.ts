@@ -120,7 +120,7 @@ const PROFILES: Profile[] = [
 			"0,2": { action: "mute", name: "Mute" },
 			"1,2": { action: "camera", name: "Camera" },
 			"2,2": { action: "ppt-hide-presenter-view", name: "PPT Presenter: Presenter View" },
-			"3,2": { action: "ppt-private-view", name: "PPT Presenter: Private View" },
+			"3,2": { action: "ppt-private-view", name: "PPT Presenter: Private Viewing" },
 			"4,2": {
 				action: "ppt-stop-presenting",
 				name: "PPT Presenter: Stop Presenting"

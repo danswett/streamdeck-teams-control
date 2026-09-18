@@ -508,7 +508,7 @@
 			]
 		},
 		{
-			"Name": "PPT Presenter: Private View",
+			"Name": "PPT Presenter: Private Viewing",
 			"UUID": "com.bad-duck.teamscontrol.ppt-private-view",
 			"Icon": "imgs/actions/ppt-private-view/icon",
 			"Tooltip": "Let attendees move through the deck on their own, or stop them",

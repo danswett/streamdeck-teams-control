@@ -51,7 +51,7 @@ the same accessibility layer screen readers use.
 | **Share Screen** | ✅ sharing / not | Opens the share tray |
 | **Chat** | availability only | Toggles the meeting chat pane |
 | **People** | availability only | Toggles the participant roster |
-| **Leave** | availability only | Optional press-and-hold confirmation |
+| **Leave** | availability only | Press opens Teams' confirmation; hold to answer it |
 
 Every key dims to grey when you are not in a meeting, so the deck always
 reflects reality.
@@ -74,7 +74,6 @@ reports itself unavailable in the other one.
 | **PPT Live: Slide Counter** | ✅ `3/19` | Not pressable. Turns gold while you are the presenter |
 | **PPT Live: Previous / Next Slide** | availability only | Dims at the ends of the deck |
 | **PPT Live: Grid View** | availability only | All slides as thumbnails |
-| **PPT Live: Zoom In / Out** | availability only | ⚠️ "only for me" as an attendee, **for everyone** while presenting |
 | **PPT Live: High Contrast** | availability only | Your screen only |
 | **PPT Live: Pop Out** | availability only | Moves the shared content into its own window |
 
@@ -82,20 +81,20 @@ reports itself unavailable in the other one.
 
 | Action | Live state shown | Notes |
 |---|---|---|
-| **PPT Live: Sync to Presenter** | ✅ lights up when out of sync | Teams only shows this button once you have browsed away, so the key being lit *is* the "you are viewing privately" signal |
-| **PPT Live: Take Control** | availability only | ⚠️ Makes you the presenter — see below |
+| **PPT Attendee: Sync** | ✅ lights up when out of sync | Teams only shows this button once you have browsed away, so the key being lit *is* the "you are viewing privately" signal |
+| **PPT Attendee: Take Control** | availability only | ⚠️ Makes you the presenter — see below |
 
 **Driving (presenter)**
 
 | Action | Live state shown | Notes |
 |---|---|---|
-| **PPT Live: Laser / Pen / Highlighter / Eraser / Cursor** | ✅ active tool | Read from UI Automation's selection, so it tracks a tool you picked in Teams too |
-| **PPT Live: Private View** | availability only | Lets attendees browse the deck on their own, or stops them |
-| **PPT Live: Presenter View** | availability only | Shows or hides your notes and thumbnails. Your screen only |
-| **PPT Live: Present Latest** | availability only | Reloads the deck to pick up saved edits |
-| **PPT Live: Copy Link** | availability only | Copies a link to the deck |
-| **PPT Live: Layout Content Only / Cameo** | availability only | Cameo dims until your camera is on |
-| **PPT Live: Stop Presenting** | availability only | Optional press-and-hold confirmation |
+| **PPT Presenter: Laser / Pen / Highlighter / Eraser / Cursor** | ✅ active tool | Read from UI Automation's selection, so it tracks a tool you picked in Teams too |
+| **PPT Presenter: Private Viewing** | availability only | Lets attendees browse the deck on their own, or stops them |
+| **PPT Presenter: Presenter View** | availability only | Shows or hides your notes and thumbnails. Your screen only |
+| **PPT Presenter: Present Latest** | availability only | Reloads the deck to pick up saved edits |
+| **PPT Presenter: Copy Link** | availability only | Copies a link to the deck |
+| **PPT Presenter: Layout Content Only / Cameo** | availability only | Cameo dims until your camera is on |
+| **PPT Presenter: Stop Presenting** | availability only | Press opens Teams' confirmation; hold to answer it |
 
 #### Taking control changes your role
 
