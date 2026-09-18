@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { Resvg } from "@resvg/resvg-js";
 import {
@@ -26,6 +26,55 @@ function expectSvg(svg: string): void {
 	expect(svg).toContain('xmlns="http://www.w3.org/2000/svg"');
 	// Unbalanced groups render as a blank key rather than an error.
 	expect((svg.match(/<g[\s>]/g) ?? []).length).toBe((svg.match(/<\/g>/g) ?? []).length);
+}
+
+/**
+ * Alpha sampler over a rasterised glyph: "is there ink at this point", whatever
+ * tone it was drawn in.
+ *
+ * Cached, and warmed up before the suite runs. Rasterising is native work that
+ * pays a one-off initialisation on first use - font enumeration especially -
+ * and on a cold CI runner that alone blew vitest's 5s default timeout, failing
+ * whichever geometry test happened to go first.
+ */
+const RASTER_SIZE = 288;
+const samplerCache = new Map<string, (x: number, y: number) => number>();
+
+function sampler(key: string): (x: number, y: number) => number {
+	const cached = samplerCache.get(key);
+	if (cached) return cached;
+
+	const img = new Resvg(renderGlyph(key, "on"), {
+		fitTo: { mode: "width", value: RASTER_SIZE }
+	}).render();
+	const px = img.pixels;
+	const at = (fx: number, fy: number): number =>
+		px[(Math.round(fy * img.height) * img.width + Math.round(fx * img.width)) * 4 + 3];
+
+	samplerCache.set(key, at);
+	return at;
+}
+
+// Generous, because it is paying for native start-up rather than for the work
+// itself; every test after it samples a cached raster.
+beforeAll(() => {
+	sampler("pptContrast");
+}, 120_000);
+
+
+/** Strongest ink found along a line, so a test need not know exact coordinates. */
+function maxAlong(
+	at: (x: number, y: number) => number,
+	axis: "x" | "y",
+	fixed: number,
+	from: number,
+	to: number
+): number {
+	let max = 0;
+	for (let v = from; v <= to; v += 0.004) {
+		max = Math.max(max, axis === "x" ? at(v, fixed) : at(fixed, v));
+	}
+	return max;
 }
 
 describe("toDataUri", () => {
@@ -204,17 +253,6 @@ describe("PowerPoint Live glyph geometry", () => {
 	// half, the grid was solid where PowerPoint Live draws outlines, and refresh
 	// had one arrow where it has two. Geometry, not eyeballing, so a future
 	// icon swap cannot quietly reintroduce any of them.
-	const SIZE = 288;
-
-	function sampler(key: string): (x: number, y: number) => number {
-		const img = new Resvg(renderGlyph(key, "on"), {
-			fitTo: { mode: "width", value: SIZE }
-		}).render();
-		const px = img.pixels;
-		// Alpha: "is there ink here", regardless of the tone it was drawn in.
-		return (fx, fy) =>
-			px[(Math.round(fy * img.height) * img.width + Math.round(fx * img.width)) * 4 + 3];
-	}
 
 	it("fills the left half of the contrast circle, as PowerPoint Live does", () => {
 		const at = sampler("pptContrast");
@@ -283,19 +321,13 @@ describe("presenter view key", () => {
 	});
 
 	it("actually draws a slash on one and not the other", () => {
-		const SIZE = 288;
+		// The slash runs corner to corner, clear of the podium itself.
 		const ink = (key: string) => {
-			const img = new Resvg(renderGlyph(key, "on"), {
-				fitTo: { mode: "width", value: SIZE }
-			}).render();
-			const px = img.pixels;
-			const at = (fx: number, fy: number) =>
-				px[(Math.round(fy * img.height) * img.width + Math.round(fx * img.width)) * 4 + 3];
-			// The slash runs corner to corner, clear of the podium itself.
-			let max = 0;
-			for (let v = 0.12; v <= 0.30; v += 0.004) max = Math.max(max, at(v, 0.18));
-			for (let v = 0.70; v <= 0.88; v += 0.004) max = Math.max(max, at(v, 0.78));
-			return max;
+			const at = sampler(key);
+			return Math.max(
+				maxAlong(at, "x", 0.18, 0.12, 0.3),
+				maxAlong(at, "x", 0.78, 0.7, 0.88)
+			);
 		};
 
 		expect(ink("pptHidePresenterView")).toBeGreaterThan(200);
@@ -316,18 +348,13 @@ describe("private view key", () => {
 	});
 
 	it("actually draws a slash on the disabled one and not the enabled one", () => {
-		const SIZE = 288;
+		// Same diagonal as the presenter-view pair, clear of the eye itself.
 		const ink = (key: string) => {
-			const img = new Resvg(renderGlyph(key, "on"), {
-				fitTo: { mode: "width", value: SIZE }
-			}).render();
-			const px = img.pixels;
-			const at = (fx: number, fy: number) =>
-				px[(Math.round(fy * img.height) * img.width + Math.round(fx * img.width)) * 4 + 3];
-			let max = 0;
-			for (let v = 0.12; v <= 0.30; v += 0.004) max = Math.max(max, at(v, 0.18));
-			for (let v = 0.70; v <= 0.88; v += 0.004) max = Math.max(max, at(v, 0.78));
-			return max;
+			const at = sampler(key);
+			return Math.max(
+				maxAlong(at, "x", 0.18, 0.12, 0.3),
+				maxAlong(at, "x", 0.78, 0.7, 0.88)
+			);
 		};
 
 		expect(ink("pptPrivateViewOff")).toBeGreaterThan(200);
