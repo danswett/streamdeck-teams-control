@@ -1606,7 +1606,15 @@ public sealed class TeamsClient : IDisposable
         var arrows = _config.PowerPointLive.ArrowOptionRegex;
         var thickness = _config.PowerPointLive.InkThicknessRegex;
 
-        foreach (var scope in SearchScopes(win))
+        // The flyout renders inside the meeting window, so that is searched on
+        // its own first. Walking every Teams window costs roughly double and
+        // this runs in a loop with a dial waiting on it.
+        var scopes = SearchScopes(win);
+        var ordered = scopes.Length > 1 && ReferenceEquals(scopes[0], win)
+            ? scopes
+            : new[] { win }.Concat(scopes.Where(s => !ReferenceEquals(s, win))).ToArray();
+
+        foreach (var scope in ordered)
         {
             AutomationElement[] all;
             try
@@ -1673,24 +1681,23 @@ public sealed class TeamsClient : IDisposable
             var swatches = new List<AutomationElement>();
 
             /*
-                Expanding is not reliable enough to do once. Teams hides the
-                slide-show toolbar when the pointer is away and rebuilds it on
-                demand, and the expand can land on a tool that is mid-rebuild
-                and quietly do nothing - observed as a flyout that read back
-                empty after two and a half seconds of looking. Asking again
-                costs one more open and turns an intermittent failure into a
-                slower success.
+                Re-found and re-expanded on every attempt, never just
+                re-expanded. Teams hides the slide-show toolbar when the pointer
+                is away and rebuilds it on demand, which leaves the element this
+                started from pointing at a control that is no longer in the
+                tree - and expanding a dead element does nothing, silently.
+                Retrying on the same stale element is what turned a 450ms change
+                into a 3.6s one, because the whole read loop had to time out
+                before anything else was tried.
             */
-            for (var attempt = 0; attempt < 2 && slider is null && swatches.Count == 0; attempt++)
+            for (var attempt = 0; attempt < 3 && slider is null && swatches.Count == 0; attempt++)
             {
-                if (!TryExpand(tool)) return (false, "could not open the drawing tool's options");
+                var live = attempt == 0 ? tool : SelectedInkTool(win, out _) ?? tool;
+                if (!TryExpand(live)) return (false, "could not open the drawing tool's options");
 
-                // The flyout renders after the expand returns, so wait for the
-                // part about to be used rather than for a fixed interval - but
-                // bounded, because a dial is waiting on the answer.
-                for (var i = 0; i < 6; i++)
+                for (var i = 0; i < 3; i++)
                 {
-                    Thread.Sleep(i == 0 ? 250 : 150);
+                    Thread.Sleep(i == 0 ? 120 : 90);
                     (slider, swatches) = ReadInkFlyout(win);
                     if (wantThickness ? slider is not null : swatches.Count > 0) break;
                 }
@@ -1701,7 +1708,7 @@ public sealed class TeamsClient : IDisposable
                     $"ink: read flyout in {Environment.TickCount64 - startedAt}ms " +
                     $"(slider={(slider is not null)}, swatches={swatches.Count})");
 
-            return wantThickness ? SetInkThickness(slider, arg) : StepInkColor(swatches, key, arg);
+            return wantThickness ? SetInkThickness(slider, arg) : StepInkColor(win, swatches, key, arg);
         }
         finally
         {
@@ -1760,7 +1767,7 @@ public sealed class TeamsClient : IDisposable
         return (true, null);
     }
 
-    private (bool ok, string? error) StepInkColor(List<AutomationElement> swatches, string key, string? arg)
+    private (bool ok, string? error) StepInkColor(AutomationElement win, List<AutomationElement> swatches, string key, string? arg)
     {
         if (swatches.Count == 0) return (false, "this tool has no colors");
 
@@ -1784,12 +1791,28 @@ public sealed class TeamsClient : IDisposable
         var count = swatches.Count;
         var wanted = ((at + step) % count + count) % count;
 
-        try { swatches[wanted].Patterns.SelectionItem.Pattern.Select(); }
-        catch
+        // A swatch can go stale between being read and being chosen - the
+        // palette is rebuilt underneath this more often than it looks - so a
+        // failure is retried against a freshly read flyout before giving up.
+        if (SelectSwatch(swatches[wanted])) return (true, null);
+
+        var again = ReadInkFlyout(win).swatches;
+        if (again.Count == count && SelectSwatch(again[wanted])) return (true, null);
+
+        return (false, "could not select the color");
+    }
+
+    private bool SelectSwatch(AutomationElement swatch)
+    {
+        try
         {
-            if (!Press(swatches[wanted])) return (false, "could not select the color");
+            swatch.Patterns.SelectionItem.Pattern.Select();
+            return true;
         }
-        return (true, null);
+        catch { }
+
+        try { return Press(swatch); }
+        catch { return false; }
     }
 
     /// <summary>
@@ -1804,23 +1827,42 @@ public sealed class TeamsClient : IDisposable
     {
         var root = _config.PowerPointLive.RootAutomationId;
 
-        for (var attempt = 0; attempt < 4; attempt++)
+        bool Back(int waitMs)
         {
-            if (FindAnywhere(win, root) is not null) return;
-
-            TryCollapse(tool);
-            for (var i = 0; i < 8; i++)
+            var until = Environment.TickCount64 + waitMs;
+            do
             {
-                if (FindAnywhere(win, root) is not null) return;
-                Thread.Sleep(70);
-            }
-
-            // Collapse can be refused once the element behind it has gone stale.
-            // Clicking away is what a user would do, and the toolbar comes back.
-            if (attempt >= 1) TryClickAway(win);
+                if (FindAnywhere(win, root) is not null) return true;
+                Thread.Sleep(60);
+            } while (Environment.TickCount64 < until);
+            return false;
         }
 
+        if (Back(0)) return;
+
+        // Collapse on a fresh lookup: the element the pattern came from is
+        // usually stale by now, because the flyout took its subtree with it.
+        TryCollapse(FindAnywhere(win, NameOfTool(tool)) ?? tool);
+        if (Back(400)) return;
+
+        // Clicking away is what a user would do, and it is the mechanism the
+        // rest of the plugin already uses to dismiss a Teams flyout. Reached
+        // quickly rather than as a last resort, because a palette often stays
+        // up after a swatch is chosen and Collapse will not take it down.
+        TryClickAway(win);
+        if (Back(600)) return;
+
+        TryCollapse(FindAnywhere(win, NameOfTool(tool)) ?? tool);
+        if (Back(400)) return;
+
         Console.Error.WriteLine("ink flyout would not close; the slide-show surface may read as missing");
+    }
+
+    /// <summary>The AutomationId of a tool, for re-finding it once it has gone stale.</summary>
+    private static string NameOfTool(AutomationElement tool)
+    {
+        try { return tool.Properties.AutomationId.ValueOrDefault ?? ""; }
+        catch { return ""; }
     }
 
     /// <summary>Caches a looked-up element under a key, re-finding it once it dies.</summary>

@@ -70,6 +70,7 @@ export abstract class TeamsDialAction<T extends JsonObject = JsonObject> extends
 
 		const layout = this.layout();
 		const dial = ev.action;
+		logger.info(`${this.manifestId ?? "dial"} appeared on ${dial.id}, layout ${layout ?? "(manifest)"}`);
 		if (layout === undefined) {
 			void this.#paint(dial, bridge.state);
 			return;
@@ -79,7 +80,7 @@ export abstract class TeamsDialAction<T extends JsonObject = JsonObject> extends
 		// previous layout has nowhere to land and the slot stays blank.
 		void dial
 			.setFeedbackLayout(layout)
-			.catch((err) => logger.debug(`setFeedbackLayout failed: ${String(err)}`))
+			.catch((err) => logger.warn(`setFeedbackLayout failed: ${String(err)}`))
 			.then(() => this.#paint(dial, bridge.state));
 	}
 
@@ -121,9 +122,10 @@ export abstract class TeamsDialAction<T extends JsonObject = JsonObject> extends
 
 		try {
 			await dial.setFeedback(payload);
+			logger.debug(`${this.manifestId ?? "dial"} painted ${signature.length} bytes`);
 		} catch (err) {
 			this.#painted.delete(dial.id);
-			logger.debug(`setFeedback failed: ${String(err)}`);
+			logger.warn(`setFeedback failed: ${String(err)}`);
 		}
 	}
 }
