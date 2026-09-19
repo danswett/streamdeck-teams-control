@@ -1,5 +1,8 @@
 /**
- * Builds the three bundled Stream Deck profiles the plugin switches between.
+ * Builds the bundled Stream Deck profiles the plugin switches between.
+ *
+ * Three states - meeting, watching a deck, presenting one - built for each deck
+ * the plugin ships a layout for, so the file count is states x devices.
  *
  * A plugin may only switch to a profile it ships itself - the SDK cannot touch
  * user-made profiles - so any layout the plugin wants to show has to be built
@@ -33,11 +36,80 @@ const PLUGIN_DIR = path.join(ROOT, "com.bad-duck.teamscontrol.sdPlugin");
 const PLUGIN_UUID = "com.bad-duck.teamscontrol";
 const PLUGIN_NAME = "Teams Meeting Controls";
 
-/** Stream Deck MK.2 / standard 15-key. Matches manifest DeviceType 0. */
-const DEVICE_MODEL = "20GBA9901";
-
 type Key = { action: string; name: string; settings?: object };
-type Profile = { name: string; uuid: string; page: string; layout: Record<string, Key> };
+type Layout = Record<string, Key>;
+
+type Device = {
+	/** Value for the manifest's `Profiles[].DeviceType`. */
+	deviceType: number;
+	/**
+	 * `Device.Model` in the profile, which is how Stream Deck decides the
+	 * profile belongs to the deck in front of it. Read off the profiles Stream
+	 * Deck and Elgato's own plugins write, not guessed: the names are close
+	 * enough to swap by accident - 20GAT9901 is the XL, 20GBX9901 the + XL.
+	 */
+	model: string;
+	columns: number;
+	rows: number;
+	/** Dials, which need a second controller in every page. Zero if it has none. */
+	encoders: number;
+	/**
+	 * Appended to the profile and file name so one plugin can ship a layout per
+	 * deck. Empty for the 15-key, whose files shipped before there was a second
+	 * device and must keep the names Stream Deck already installed.
+	 */
+	suffix: string;
+};
+
+/** Stream Deck MK.2 / standard 15-key. Matches manifest DeviceType 0. */
+const STREAM_DECK: Device = {
+	deviceType: 0,
+	model: "20GBA9901",
+	columns: 5,
+	rows: 3,
+	encoders: 0,
+	suffix: ""
+};
+
+/** Stream Deck + XL: 36 keys in a 9x4 grid, plus six dials. Manifest DeviceType 13. */
+const PLUS_XL: Device = {
+	deviceType: 13,
+	model: "20GBX9901",
+	columns: 9,
+	rows: 4,
+	encoders: 6,
+	suffix: " (+ XL)"
+};
+
+type Profile = { name: string; device: Device; uuid: string; page: string; layout: Layout };
+
+/**
+ * The meeting half of the + XL, identical in all three of its profiles.
+ *
+ * Nine columns is wide enough to stop treating a profile switch as a redraw of
+ * the whole deck: the left four columns are the meeting and never move, so
+ * mute is under the same finger whether or not anyone is presenting, and only
+ * the right five columns change. Leave sits in the far corner, diagonally
+ * opposite mute, because the two worst keys to confuse are those.
+ */
+const XL_MEETING: Layout = {
+	"0,0": { action: "mute", name: "Mute" },
+	"1,0": { action: "camera", name: "Camera" },
+	"2,0": { action: "blur", name: "Background Blur" },
+	"3,0": { action: "share", name: "Share Screen" },
+
+	"0,1": { action: "hand", name: "Raise Hand" },
+	"1,1": { action: "chat", name: "Chat" },
+	"2,1": { action: "people", name: "People" },
+
+	"0,2": { action: "react-like", name: "React: Like" },
+	"1,2": { action: "react-love", name: "React: Love" },
+	"2,2": { action: "react-applause", name: "React: Applause" },
+	"3,2": { action: "react-laugh", name: "React: Laugh" },
+
+	"0,3": { action: "react-wow", name: "React: Wow" },
+	"3,3": { action: "leave", name: "Leave" }
+};
 
 /**
  * Fixed rather than random: regenerating must not orphan the copy Stream Deck
@@ -46,6 +118,7 @@ type Profile = { name: string; uuid: string; page: string; layout: Record<string
 const PROFILES: Profile[] = [
 	{
 		name: "Teams Meeting",
+		device: STREAM_DECK,
 		uuid: "1F4B6C2E-8A57-4D39-9E10-3C7B2A6F5D84",
 		page: "a1b2c3d4-0001-4e85-a0b7-2f6c1e5d8a34",
 		// The meeting itself. Shown from the moment you join until you leave,
@@ -70,6 +143,7 @@ const PROFILES: Profile[] = [
 	},
 	{
 		name: "PowerPoint Live (Attendee)",
+		device: STREAM_DECK,
 		uuid: "2E5C7D3F-9B68-4E4A-8F21-4D8C3B7A6E95",
 		page: "a1b2c3d4-0002-4e85-a0b7-2f6c1e5d8a34",
 		// Watching someone else's deck. Navigation moves your own view only, so
@@ -100,6 +174,7 @@ const PROFILES: Profile[] = [
 	},
 	{
 		name: "PowerPoint Live (Presenter)",
+		device: STREAM_DECK,
 		uuid: "3D6E8A4B-1C79-4F5B-9A32-5E9D4C8B7F06",
 		page: "a1b2c3d4-0003-4e85-a0b7-2f6c1e5d8a34",
 		// Driving the deck. The drawing tools get their own row because they are
@@ -126,6 +201,84 @@ const PROFILES: Profile[] = [
 				name: "PPT Presenter: Stop Presenting"
 			}
 		}
+	},
+
+	/* --------------------------------------------------------------------- *
+	 * Stream Deck + XL
+	 *
+	 * Nine columns wide, so the meeting stops competing with the presentation
+	 * for space: XL_MEETING owns the left four columns in all three profiles
+	 * and never moves, and the right five carry whatever is happening now. In
+	 * the meeting profile they carry nothing, and a dark right-hand side is a
+	 * fair description of a meeting with no deck in it.
+	 * --------------------------------------------------------------------- */
+	{
+		name: "Teams Meeting",
+		device: PLUS_XL,
+		uuid: "4A7C9E1D-2B83-4F6A-8D45-6E1F0C3B9A72",
+		page: "a1b2c3d4-0011-4e85-a0b7-2f6c1e5d8a34",
+		layout: { ...XL_MEETING }
+	},
+	{
+		name: "PowerPoint Live (Attendee)",
+		device: PLUS_XL,
+		uuid: "5B8D0F2E-3C94-4A7B-9E56-7F2A1D4C8B63",
+		page: "a1b2c3d4-0012-4e85-a0b7-2f6c1e5d8a34",
+		layout: {
+			...XL_MEETING,
+
+			// Watching someone else's deck. Navigation moves your own view
+			// only, so Sync sits directly under it to get back to the presenter.
+			"4,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
+			"5,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
+			"6,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
+			"7,0": { action: "ppt-grid", name: "PPT Live: Grid View" },
+			"8,0": { action: "ppt-high-contrast", name: "PPT Live: High Contrast" },
+
+			"4,1": { action: "ppt-sync", name: "PPT Attendee: Sync" },
+			"5,1": { action: "ppt-popout", name: "PPT Live: Pop Out" },
+			// Taking control makes you the presenter, which swaps this whole
+			// profile out for the presenter one.
+			"6,1": { action: "ppt-take-control", name: "PPT Attendee: Take Control" }
+		}
+	},
+	{
+		name: "PowerPoint Live (Presenter)",
+		device: PLUS_XL,
+		uuid: "6C9E1A3F-4D05-4B8C-8F67-8A3B2E5D9C74",
+		page: "a1b2c3d4-0013-4e85-a0b7-2f6c1e5d8a34",
+		layout: {
+			...XL_MEETING,
+
+			"4,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
+			"5,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
+			"6,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
+			"7,0": { action: "ppt-grid", name: "PPT Live: Grid View" },
+			"8,0": { action: "ppt-refresh", name: "PPT Presenter: Present Latest" },
+
+			// All five drawing tools in one unbroken row. They are a
+			// single-select group - picking one drops the last - so they should
+			// read as one control rather than as five scattered keys, which is
+			// the whole reason nine columns is worth having.
+			"4,1": { action: "ppt-cursor", name: "PPT Presenter: Cursor" },
+			"5,1": { action: "ppt-laser", name: "PPT Presenter: Laser Pointer" },
+			"6,1": { action: "ppt-pen", name: "PPT Presenter: Pen" },
+			"7,1": { action: "ppt-highlighter", name: "PPT Presenter: Highlighter" },
+			"8,1": { action: "ppt-eraser", name: "PPT Presenter: Eraser" },
+
+			"4,2": { action: "ppt-private-view", name: "PPT Presenter: Private Viewing" },
+			"5,2": { action: "ppt-hide-presenter-view", name: "PPT Presenter: Presenter View" },
+			"6,2": { action: "ppt-copy-link", name: "PPT Presenter: Copy Link" },
+			"7,2": { action: "ppt-layout-content", name: "PPT Presenter: Content Only" },
+			"8,2": { action: "ppt-layout-cameo", name: "PPT Presenter: Layout Cameo" },
+
+			// Alone in the far corner. It ends the presentation for everyone,
+			// and nothing else should be within a mis-tap of it.
+			"8,3": {
+				action: "ppt-stop-presenting",
+				name: "PPT Presenter: Stop Presenting"
+			}
+		}
 	}
 ];
 
@@ -136,19 +289,44 @@ function actionId(profile: string, position: string): string {
 }
 
 /** Every profile needs an empty page to fall back to; Stream Deck writes one. */
-const emptyPage = () => ({ Controllers: [{ Actions: null, Type: "Keypad" }], Icon: "", Name: "" });
+const emptyPage = (device: Device) => ({ Controllers: controllers(null, device), Icon: "", Name: "" });
+
+/**
+ * The controller list for one page.
+ *
+ * A deck with dials carries a second, empty Encoder controller even when the
+ * plugin puts nothing on them, because that is what Stream Deck writes for a
+ * page with no dial actions - and a profile that is almost right installs and
+ * then quietly does nothing.
+ */
+function controllers(actions: Record<string, object> | null, device: Device): object[] {
+	const list: object[] = [{ Actions: actions, Type: "Keypad" }];
+	if (device.encoders > 0) list.push({ Actions: null, Type: "Encoder" });
+	return list;
+}
 
 const outDir = path.join(PLUGIN_DIR, "profiles");
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 
 for (const profile of PROFILES) {
+	const device = profile.device;
+	// The 15-key files shipped before there was a second deck, so its suffix is
+	// empty and its ids keep hashing to exactly what is already installed.
+	const title = `${profile.name}${device.suffix}`;
 	const defaultPage = `${profile.page.slice(0, -1)}f`;
 
 	const actions: Record<string, object> = {};
 	for (const [position, key] of Object.entries(profile.layout)) {
+		const [col, row] = position.split(",").map(Number);
+		if (col >= device.columns || row >= device.rows) {
+			throw new Error(
+				`${title}: ${position} is off a ${device.columns}x${device.rows} deck`
+			);
+		}
+
 		actions[position] = {
-			ActionID: actionId(profile.name, position),
+			ActionID: actionId(title, position),
 			LinkedTitle: true,
 			Name: key.name,
 			Plugin: { Name: PLUGIN_NAME, UUID: PLUGIN_UUID },
@@ -174,14 +352,14 @@ for (const profile of PROFILES) {
 
 	const root = {
 		Device: {
-			Model: DEVICE_MODEL,
+			Model: device.model,
 			// Blank so it installs against whichever matching device is attached.
 			UUID: ""
 		},
 		InstalledByPluginUUID: PLUGIN_UUID,
-		Name: profile.name,
+		Name: title,
 		Pages: { Current: profile.page, Default: defaultPage, Pages: [profile.page] },
-		PreconfiguredName: profile.name,
+		PreconfiguredName: title,
 		Version: "3.0"
 	};
 
@@ -199,12 +377,12 @@ for (const profile of PROFILES) {
 	writeFileSync(path.join(profileDir, "manifest.json"), JSON.stringify(root), "utf8");
 	writeFileSync(
 		path.join(pageDir, "manifest.json"),
-		JSON.stringify({ Controllers: [{ Actions: actions, Type: "Keypad" }], Icon: "", Name: "" }),
+		JSON.stringify({ Controllers: controllers(actions, device), Icon: "", Name: "" }),
 		"utf8"
 	);
-	writeFileSync(path.join(defaultDir, "manifest.json"), JSON.stringify(emptyPage()), "utf8");
+	writeFileSync(path.join(defaultDir, "manifest.json"), JSON.stringify(emptyPage(device)), "utf8");
 
-	const out = path.join(outDir, `${profile.name}.streamDeckProfile`);
+	const out = path.join(outDir, `${title}.streamDeckProfile`);
 	const zip = new AdmZip();
 	zip.addLocalFolder(profileDir, `${profile.uuid}.sdProfile`);
 	zip.writeZip(out);

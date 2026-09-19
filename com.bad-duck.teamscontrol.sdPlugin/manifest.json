@@ -48,6 +48,24 @@
 			"DeviceType": 0,
 			"Readonly": false,
 			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/Teams Meeting (+ XL)",
+			"DeviceType": 13,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Attendee) (+ XL)",
+			"DeviceType": 13,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Presenter) (+ XL)",
+			"DeviceType": 13,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
 		}
 	],
 	"Actions": [

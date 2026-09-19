@@ -20,15 +20,34 @@ import { bridge, type TeamsState } from "./bridge";
 const logger = streamDeck.logger.createScope("Profiles");
 
 /**
- * Must match the manifest's `Profiles[].Name`, which the schema defines as the
- * path to the .streamDeckProfile with the extension omitted.
+ * Base names of the bundled profiles.
+ *
+ * The manifest's `Profiles[].Name` is the path to the .streamDeckProfile with
+ * the extension omitted, and each deck gets a file of its own, so a name is
+ * only a path once the device is known - see {@link profilePath}.
  */
-export const MEETING = "profiles/Teams Meeting";
-export const ATTENDEE = "profiles/PowerPoint Live (Attendee)";
-export const PRESENTER = "profiles/PowerPoint Live (Presenter)";
+export const MEETING = "Teams Meeting";
+export const ATTENDEE = "PowerPoint Live (Attendee)";
+export const PRESENTER = "PowerPoint Live (Presenter)";
 
-/** The layouts are built for the 15-key grid, so they only fit this device. */
-const SUPPORTED: DeviceType = DeviceType.StreamDeck;
+/**
+ * Decks that have a bundled layout, and the suffix their files carry.
+ *
+ * The 15-key shipped before there was a second deck, so its files are
+ * unsuffixed and must stay that way; anything added since names itself. A
+ * device that is not listed here is left alone entirely, because switching it
+ * to a layout built for a different grid would push keys off the edge of it.
+ */
+const SUPPORTED = new Map<DeviceType, string>([
+	[DeviceType.StreamDeck, ""],
+	[DeviceType.StreamDeckPlusXL, " (+ XL)"]
+]);
+
+/** Where a profile lives for a given deck, or null if that deck has no layout. */
+export function profilePath(base: string, device: DeviceType): string | null {
+	const suffix = SUPPORTED.get(device);
+	return suffix === undefined ? null : `profiles/${base}${suffix}`;
+}
 
 export type ProfileSettings = {
 	/** Follow the meeting between the bundled profiles. */
@@ -82,11 +101,17 @@ class ProfileSwitcher {
 		const wanted = profileFor(state);
 
 		for (const device of streamDeck.devices) {
-			if (!device.isConnected || device.type !== SUPPORTED) continue;
-			if (wanted === (this.#current.get(device.id) ?? null)) continue;
+			if (!device.isConnected) continue;
 
-			if (wanted === null) void this.#restore(device.id);
-			else void this.#switch(device.id, wanted);
+			const target = wanted === null ? null : profilePath(wanted, device.type);
+			// A connected deck the plugin ships no layout for keeps whatever it
+			// is showing; it was never taken over, so there is nothing to give
+			// back either.
+			if (wanted !== null && target === null) continue;
+			if (target === (this.#current.get(device.id) ?? null)) continue;
+
+			if (target === null) void this.#restore(device.id);
+			else void this.#switch(device.id, target);
 		}
 	}
 

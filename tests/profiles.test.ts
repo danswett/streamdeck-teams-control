@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import AdmZip from "adm-zip";
+import { DeviceType } from "@elgato/streamdeck";
 
-import { ATTENDEE, MEETING, PRESENTER, profileFor } from "../src/profiles";
+import { ATTENDEE, MEETING, PRESENTER, profileFor, profilePath } from "../src/profiles";
 import { EMPTY_STATE, type TeamsState } from "../src/protocol";
 
 function state(over: Partial<TeamsState>): TeamsState {
@@ -65,21 +66,54 @@ describe("the bundled profiles", () => {
 	const PLUGIN = "com.bad-duck.teamscontrol.sdPlugin";
 	const manifest = JSON.parse(readFileSync(path.join(PLUGIN, "manifest.json"), "utf8")) as {
 		Actions: { UUID: string }[];
-		Profiles: { Name: string }[];
+		Profiles: { Name: string; DeviceType: number }[];
 	};
 
-	const names = [MEETING, ATTENDEE, PRESENTER];
+	/**
+	 * Every deck with a bundled layout, and the grid it has to fit inside.
+	 * A key outside the grid is one the owner of that deck would never see.
+	 */
+	const DECKS = [
+		{ label: "15-key", suffix: "", deviceType: 0, columns: 5, rows: 3, dials: 0 },
+		{ label: "+ XL", suffix: " (+ XL)", deviceType: 13, columns: 9, rows: 4, dials: 6 }
+	];
 
-	it("are all registered in the manifest", () => {
-		for (const name of names) {
-			expect(manifest.Profiles.map((p) => p.Name)).toContain(name);
+	const bases = [MEETING, ATTENDEE, PRESENTER];
+	const bundled = DECKS.flatMap((deck) =>
+		bases.map((base) => ({ deck, base, name: `profiles/${base}${deck.suffix}` }))
+	);
+
+	/** The page holding this plugin's keys, as Stream Deck stores it. */
+	function keyPage(name: string): { Controllers: { Actions: Record<string, { UUID: string; Settings?: Record<string, unknown> }> | null; Type: string }[] } {
+		const entry = new AdmZip(path.join(PLUGIN, `${name}.streamDeckProfile`))
+			.getEntries()
+			.find(
+				(e) =>
+					e.entryName.includes("/Profiles/") &&
+					e.entryName.endsWith("manifest.json") &&
+					e.getData().toString("utf8").includes("teamscontrol")
+			);
+		expect(entry, `${name} has no page holding any keys`).toBeDefined();
+		return JSON.parse(entry!.getData().toString("utf8"));
+	}
+
+	const keypad = (name: string): Record<string, { UUID: string; Settings?: Record<string, unknown> }> => {
+		const c = keyPage(name).Controllers.find((x) => x.Type === "Keypad");
+		expect(c?.Actions, `${name} has no keypad actions`).toBeTruthy();
+		return c!.Actions!;
+	};
+
+	it("are all registered in the manifest, against the right deck", () => {
+		for (const { name, deck } of bundled) {
+			const entry = manifest.Profiles.find((p) => p.Name === name);
+			expect(entry, `${name} is not in the manifest`).toBeDefined();
+			expect(entry!.DeviceType, `${name} targets the wrong deck`).toBe(deck.deviceType);
 		}
-		expect(manifest.Profiles).toHaveLength(names.length);
+		expect(manifest.Profiles).toHaveLength(bundled.length);
 	});
 
-	it.each(names)("%s ships a profile file laid out for the deck", (name) => {
-		const file = path.join(PLUGIN, `${name}.streamDeckProfile`);
-		const entries = new AdmZip(file).getEntries();
+	it.each(bundled.map((b) => [b.name, b] as const))("%s ships a profile laid out for its deck", (_label, b) => {
+		const entries = new AdmZip(path.join(PLUGIN, `${b.name}.streamDeckProfile`)).getEntries();
 
 		const root = entries.find((e) => e.entryName.endsWith(".sdProfile/manifest.json"));
 		expect(root, "no profile manifest").toBeDefined();
@@ -90,25 +124,18 @@ describe("the bundled profiles", () => {
 		expect(profile.Version).toBe("3.0");
 		expect(profile.Pages.Default, "needs a default page to fall back to").toBeTruthy();
 
-		const page = entries.find(
-			(e) => e.entryName.includes("/Profiles/") && e.entryName.endsWith("manifest.json") &&
-				e.getData().toString("utf8").includes("teamscontrol")
-		);
-		expect(page, "no page holds any keys").toBeDefined();
+		// The model is what Stream Deck matches against the hardware, and the
+		// XL and + XL model names differ by one letter.
+		expect(profile.Device.Model).toBe(b.deck.deviceType === 13 ? "20GBX9901" : "20GBA9901");
 
-		const actions = JSON.parse(page!.getData().toString("utf8")).Controllers[0].Actions as Record<
-			string,
-			{ UUID: string }
-		>;
+		const actions = keypad(b.name);
 		const positions = Object.keys(actions);
 		expect(positions.length).toBeGreaterThan(0);
 
-		// A 15-key deck is 5 columns by 3 rows; anything outside that is a key
-		// the user would never see.
 		for (const pos of positions) {
 			const [col, row] = pos.split(",").map(Number);
-			expect(col, `${pos} is off the deck`).toBeLessThan(5);
-			expect(row, `${pos} is off the deck`).toBeLessThan(3);
+			expect(col, `${pos} is off a ${b.deck.label} deck`).toBeLessThan(b.deck.columns);
+			expect(row, `${pos} is off a ${b.deck.label} deck`).toBeLessThan(b.deck.rows);
 		}
 
 		// Every key must point at an action this plugin actually ships.
@@ -118,26 +145,24 @@ describe("the bundled profiles", () => {
 		}
 	});
 
-	it.each(names)("%s ships no key that ignores a normal press", (name) => {
+	it.each(bundled.filter((b) => b.deck.dials > 0).map((b) => [b.name, b] as const))(
+		"%s carries the encoder controller its deck expects",
+		(_label, b) => {
+			// Stream Deck writes an Encoder controller into every page on a deck
+			// that has dials, even an empty one. A profile that is almost right
+			// installs and then quietly does nothing.
+			const types = keyPage(b.name).Controllers.map((c) => c.Type);
+			expect(types, `${b.name} is missing the Encoder controller`).toContain("Encoder");
+		}
+	);
+
+	it.each(bundled.map((b) => [b.name] as const))("%s ships no key that ignores a normal press", (name) => {
 		// requireHold makes a tap do nothing. That is a reasonable thing to opt
 		// into, but a bundled profile is what someone meets first, and a key
 		// that appears dead reads as a broken plugin rather than as a guard -
 		// which is exactly how it was reported. Opting in stays a choice made in
 		// the inspector, never one made for them.
-		const zip = new AdmZip(path.join(PLUGIN, `${name}.streamDeckProfile`));
-		const page = zip
-			.getEntries()
-			.find(
-				(e) => e.entryName.includes("/Profiles/") && e.entryName.endsWith("manifest.json") &&
-					e.getData().toString("utf8").includes("teamscontrol")
-			);
-
-		const actions = JSON.parse(page!.getData().toString("utf8")).Controllers[0].Actions as Record<
-			string,
-			{ UUID: string; Settings?: Record<string, unknown> }
-		>;
-
-		for (const [pos, action] of Object.entries(actions)) {
+		for (const [pos, action] of Object.entries(keypad(name))) {
 			expect(
 				action.Settings?.requireHold,
 				`${pos} (${action.UUID}) ships with requireHold on`
@@ -146,12 +171,47 @@ describe("the bundled profiles", () => {
 	});
 
 	it("puts mute on every profile, so it is never more than one press away", () => {
-		for (const name of names) {
-			const zip = new AdmZip(path.join(PLUGIN, `${name}.streamDeckProfile`));
-			const page = zip
-				.getEntries()
-				.find((e) => e.entryName.includes("/Profiles/") && e.getData().toString("utf8").includes("teamscontrol"));
-			expect(page!.getData().toString("utf8")).toContain("com.bad-duck.teamscontrol.mute");
+		for (const { name } of bundled) {
+			const uuids = Object.values(keypad(name)).map((a) => a.UUID);
+			expect(uuids, `${name} has no mute key`).toContain("com.bad-duck.teamscontrol.mute");
 		}
+	});
+
+	it("keeps the meeting keys in the same place across the + XL profiles", () => {
+		// The point of nine columns: the left four are the meeting and never
+		// move, so a profile switch mid-meeting does not move mute out from
+		// under the finger reaching for it.
+		const meetingHalf = (name: string) =>
+			Object.entries(keypad(name))
+				.filter(([pos]) => Number(pos.split(",")[0]) < 4)
+				.map(([pos, a]) => `${pos}=${a.UUID}`)
+				.sort()
+				.join(" ");
+
+		const reference = meetingHalf(`profiles/${MEETING} (+ XL)`);
+		expect(reference).not.toBe("");
+		for (const base of [ATTENDEE, PRESENTER]) {
+			expect(meetingHalf(`profiles/${base} (+ XL)`), `${base} moved the meeting keys`).toBe(reference);
+		}
+	});
+});
+
+describe("picking the file for a deck", () => {
+	it("uses the unsuffixed files for the 15-key, which shipped first", () => {
+		expect(profilePath(MEETING, DeviceType.StreamDeck)).toBe("profiles/Teams Meeting");
+	});
+
+	it("uses the suffixed files for the + XL", () => {
+		expect(profilePath(PRESENTER, DeviceType.StreamDeckPlusXL)).toBe(
+			"profiles/PowerPoint Live (Presenter) (+ XL)"
+		);
+	});
+
+	it("leaves a deck with no bundled layout alone", () => {
+		// Switching a Mini or a Pedal to a layout built for a bigger grid would
+		// push most of the keys off the edge of it.
+		expect(profilePath(MEETING, DeviceType.StreamDeckMini)).toBeNull();
+		expect(profilePath(MEETING, DeviceType.StreamDeckXL)).toBeNull();
+		expect(profilePath(MEETING, DeviceType.StreamDeckPedal)).toBeNull();
 	});
 });
