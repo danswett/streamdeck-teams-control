@@ -136,6 +136,32 @@ describe("identifiers", () => {
 		expect(new Set(uuids).size).toBe(uuids.length);
 	});
 
+	it("declares every action the code registers, and registers every action it declares", () => {
+		// The SDK throws on connect when an @action UUID is not in the manifest
+		// - "manifestId was not found within the manifest" - which takes the
+		// whole plugin down before a single key appears. Nothing else catches
+		// it: the manifest validates, the code compiles, and the two are only
+		// compared at runtime. A slide dial shipped named one thing in the
+		// decorator and another in the manifest exactly this way.
+		const dir = path.join("src", "actions");
+		const declared = new Set<string>();
+		for (const file of readdirSync(dir)) {
+			if (!file.endsWith(".ts")) continue;
+			const source = readFileSync(path.join(dir, file), "utf8");
+			for (const m of source.matchAll(/@action\(\{\s*UUID:\s*"([^"]+)"/g)) declared.add(m[1]);
+		}
+
+		expect(declared.size, "no @action decorators found; has the layout changed?").toBeGreaterThan(0);
+
+		const inManifest = new Set(manifest.Actions.map((a) => a.UUID));
+		for (const uuid of declared) {
+			expect(inManifest.has(uuid), `${uuid} is registered in code but missing from the manifest`).toBe(true);
+		}
+		for (const uuid of inManifest) {
+			expect(declared.has(uuid), `${uuid} is in the manifest but no code registers it`).toBe(true);
+		}
+	});
+
 	it("keeps action names concise", () => {
 		// The guidelines ask for roughly 30 characters or fewer.
 		for (const action of manifest.Actions) {

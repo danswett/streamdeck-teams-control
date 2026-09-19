@@ -259,7 +259,14 @@ const PROFILES: Profile[] = [
 		device: PLUS_XL,
 		uuid: "6C9E1A3F-4D05-4B8C-8F67-8A3B2E5D9C74",
 		page: "a1b2c3d4-0013-4e85-a0b7-2f6c1e5d8a34",
-		dials: { "2,0": { action: "ppt-slide-dial", name: "PPT Live: Slide Dial" } },
+		// Slide stays where it is in the attendee profile, so the dial under
+		// that finger does the same thing in both. The ink dials only appear
+		// here, because only a presenter can draw on the deck.
+		dials: {
+			"2,0": { action: "ppt-slide-dial", name: "PPT Live: Slide Dial" },
+			"3,0": { action: "ppt-ink-thickness-dial", name: "PPT Presenter: Ink Thickness" },
+			"4,0": { action: "ppt-ink-color-dial", name: "PPT Presenter: Ink Colour" }
+		},
 		layout: {
 			...XL_MEETING,
 

@@ -46,6 +46,11 @@ const ACTIONS: Record<string, { glyph: string; danger?: boolean }> = {
 	"ppt-copy-link": { glyph: "pptCopyLink" },
 	"ppt-layout-content": { glyph: "pptLayoutContent" },
 	"ppt-layout-cameo": { glyph: "pptLayoutCameo" },
+	// The ink dials act on whichever tool is selected, so they borrow a tool
+	// glyph for the action list rather than shipping one of their own; at
+	// runtime they draw the tool that is actually active.
+	"ppt-ink-color-dial": { glyph: "pptPen" },
+	"ppt-ink-thickness-dial": { glyph: "pptHighlighter" },
 	"ppt-stop-presenting": { glyph: "pptStopPresenting", danger: true }
 };
 

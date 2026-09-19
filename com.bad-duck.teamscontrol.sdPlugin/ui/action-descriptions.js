@@ -53,6 +53,12 @@ globalThis.ACTION_DESCRIPTIONS = {
 	"com.bad-duck.teamscontrol.ppt-status":
 		"Shows the current slide and the deck length, such as 3 / 19. Display only - pressing it does nothing. It holds the last known position while Teams hides its toolbar or a flyout is open, rather than going blank.",
 
+	"com.bad-duck.teamscontrol.ppt-ink-color-dial":
+		"Turns the selected pen, highlighter or laser through its colours. The palette belongs to the tool rather than to Teams - the pen and the highlighter offer different sets - so the dial reads whichever one is in front of it, and wraps at the ends. Turning shows the colour you are heading for; it is applied when you stop. Goes quiet for the cursor and the eraser, which have no colour.",
+
+	"com.bad-duck.teamscontrol.ppt-ink-thickness-dial":
+		"Sets how thick the selected pen or highlighter draws, over Teams' own range of 1 to 6. Turning shows the thickness you are heading for; it is applied when you stop. Goes quiet for the laser, the cursor and the eraser, none of which have a thickness.",
+
 	"com.bad-duck.teamscontrol.ppt-slide-dial":
 		"Moves through the deck from a dial. Turn for previous and next, press for grid view, tap the touch strip to sync back to the presenter. The strip shows the slide you are turning towards and how far through the deck it is. Turning quickly does not queue a press per click: the slides are sent once you stop, so a long spin cannot go on moving the deck after you let go.",
 

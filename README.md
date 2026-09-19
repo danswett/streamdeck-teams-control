@@ -179,6 +179,57 @@ node tools/build-profile.ts
 node tools/check-profile.mjs "com.bad-duck.teamscontrol.sdPlugin/profiles/Teams Meeting (+ XL).streamDeckProfile"
 ```
 
+#### Dials
+
+The + XL has six, and the PowerPoint Live profiles use three of them:
+
+| dial | turn | press | touch |
+|---|---|---|---|
+| **Slide** | previous / next slide | grid view | sync to presenter |
+| **Ink thickness** | 1 to 6, Teams' own range | — | — |
+| **Ink colour** | through the tool's palette, wrapping | — | — |
+
+The ink dials act on whichever drawing tool is selected rather than owning one,
+so picking the pen points both of them at the pen. They go quiet for tools that
+have nothing to set: the laser has a colour but no thickness, and the cursor and
+eraser have neither.
+
+**A dial is not a key with a different shape.** A key press is one discrete
+request, and `TeamsAction` already refuses a second while one is in flight. A
+dial produces a stream of ticks, and everything behind this plugin is a UI
+Automation walk. One press per tick would queue a whole spin and go on driving
+the deck long after the user let go, which is the failure `#inFlight` exists to
+stop. So turning and pressing are kept apart: ticks accumulate into a local
+offset, the touch strip shows where the dial thinks it is straight away, and the
+work that makes it true is issued once the dial goes still.
+
+The two kinds of dial settle differently, because what is behind them differs.
+Slides are a press each, so the offset is walked down one press at a time;
+past 25 the extra ticks are dropped, since arriving at slide 40 a minute later
+is worse than not going. Colour and thickness are each a single call, so the
+whole gesture collapses into one command.
+
+Ink colour and thickness turned out to be proper UI Automation patterns rather
+than menu items — thickness is a slider carrying `RangeValue` over 1..6, and
+every colour is a radio button carrying `SelectionItem` — so neither needs a
+posted click, and a change measures around 375 ms against the ~4.5 s a flyout
+walk costs. `sidecar/probe-ink-flyout.ps1` is what established that, and will
+re-establish it when Teams moves something.
+
+Three things about that flyout are worth knowing before touching it:
+
+- **The palette belongs to the tool.** The pen offers Dark yellow, Magenta and
+  Dark red where the highlighter offers Pink, Faded green, Faded blue and Faded
+  red. `inkColorNames` in `selectors.json` is a union of both and matches
+  neither, so the open flyout is always the authority; what was seen is
+  published as `ppt.palette.<tool>` for the dial to preview.
+- **Expanding a tool is not reliable once.** Teams hides the slide-show toolbar
+  when the pointer is away and rebuilds it on demand, and an expand landing
+  mid-rebuild does nothing at all. The sidecar asks twice.
+- **An open flyout unmounts the whole slide-show subtree.** A deck that is still
+  being presented then looks exactly like one that has stopped, so the flyout is
+  always closed again and the close is confirmed by watching the subtree return.
+
 ### Artwork
 
 Icons are Microsoft's own **Fluent UI System Icons** and **Fluent Emoji**, both

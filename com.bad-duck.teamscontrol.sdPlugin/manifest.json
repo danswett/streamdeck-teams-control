@@ -536,6 +536,58 @@
 			]
 		},
 		{
+			"Name": "PPT Presenter: Ink Colour",
+			"UUID": "com.bad-duck.teamscontrol.ppt-ink-color-dial",
+			"Icon": "imgs/actions/ppt-ink-color-dial/icon",
+			"Tooltip": "Turn a dial through the selected pen's colours",
+			"Controllers": [
+				"Encoder"
+			],
+			"SupportedInMultiActions": false,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-ink-color-dial/key",
+					"TitleAlignment": "bottom"
+				}
+			],
+			"Encoder": {
+				"Icon": "imgs/actions/ppt-ink-color-dial/icon",
+				"layout": "$A1",
+				"StackColor": "#6264A7",
+				"TriggerDescription": {
+					"Rotate": "Previous / next colour"
+				}
+			}
+		},
+		{
+			"Name": "PPT Presenter: Ink Thickness",
+			"UUID": "com.bad-duck.teamscontrol.ppt-ink-thickness-dial",
+			"Icon": "imgs/actions/ppt-ink-thickness-dial/icon",
+			"Tooltip": "Turn a dial to set how thick the selected pen draws",
+			"Controllers": [
+				"Encoder"
+			],
+			"SupportedInMultiActions": false,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-ink-thickness-dial/key",
+					"TitleAlignment": "bottom"
+				}
+			],
+			"Encoder": {
+				"Icon": "imgs/actions/ppt-ink-thickness-dial/icon",
+				"layout": "$B1",
+				"StackColor": "#6264A7",
+				"TriggerDescription": {
+					"Rotate": "Thinner / thicker"
+				}
+			}
+		},
+		{
 			"Name": "PPT Presenter: Cursor",
 			"UUID": "com.bad-duck.teamscontrol.ppt-cursor",
 			"Icon": "imgs/actions/ppt-cursor/icon",
