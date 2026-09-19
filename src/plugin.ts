@@ -38,6 +38,7 @@ import {
 	PptTakeControlAction
 } from "./actions/powerpoint";
 import { bridge } from "./bridge";
+import { SlideDialAction } from "./actions/dials";
 import { profileSwitcher } from "./profiles";
 
 streamDeck.logger.setLevel("info");
@@ -79,6 +80,10 @@ streamDeck.actions.registerAction(new PptCopyLinkAction());
 streamDeck.actions.registerAction(new PptLayoutContentAction());
 streamDeck.actions.registerAction(new PptLayoutCameoAction());
 streamDeck.actions.registerAction(new PptStopPresentingAction());
+
+// Dials, on the decks that have them. Nothing registers per device: Stream Deck
+// only ever raises these for a dial the user has actually placed.
+streamDeck.actions.registerAction(new SlideDialAction());
 
 bridge.start();
 profileSwitcher.start();

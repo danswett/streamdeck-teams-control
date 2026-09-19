@@ -81,7 +81,15 @@ const PLUS_XL: Device = {
 	suffix: " (+ XL)"
 };
 
-type Profile = { name: string; device: Device; uuid: string; page: string; layout: Layout };
+type Profile = {
+	name: string;
+	device: Device;
+	uuid: string;
+	page: string;
+	layout: Layout;
+	/** Dials, addressed "0,0".."N,0". Only meaningful on a deck that has them. */
+	dials?: Layout;
+};
 
 /**
  * The meeting half of the + XL, identical in all three of its profiles.
@@ -224,6 +232,10 @@ const PROFILES: Profile[] = [
 		device: PLUS_XL,
 		uuid: "5B8D0F2E-3C94-4A7B-9E56-7F2A1D4C8B63",
 		page: "a1b2c3d4-0012-4e85-a0b7-2f6c1e5d8a34",
+		// Third dial along, which is where it stays in every profile that has
+		// it. The first two are left for the audio dials rather than letting
+		// this one sit at the end and move later.
+		dials: { "2,0": { action: "ppt-slide-dial", name: "PPT Live: Slide Dial" } },
 		layout: {
 			...XL_MEETING,
 
@@ -247,6 +259,7 @@ const PROFILES: Profile[] = [
 		device: PLUS_XL,
 		uuid: "6C9E1A3F-4D05-4B8C-8F67-8A3B2E5D9C74",
 		page: "a1b2c3d4-0013-4e85-a0b7-2f6c1e5d8a34",
+		dials: { "2,0": { action: "ppt-slide-dial", name: "PPT Live: Slide Dial" } },
 		layout: {
 			...XL_MEETING,
 
@@ -283,50 +296,47 @@ const PROFILES: Profile[] = [
 ];
 
 /** Stable per-key id, so rebuilding does not churn the file. */
-function actionId(profile: string, position: string): string {
-	const h = createHash("sha1").update(`${profile}:${position}`).digest("hex");
+function actionId(profile: string, position: string, controller: string): string {
+	// Keypad is unqualified so the ids already installed for the 15-key deck
+	// keep hashing to the same value. A dial has to be qualified, or a key and
+	// a dial sharing coordinates - "2,0" is both - would collide.
+	const seed = controller === "Keypad" ? `${profile}:${position}` : `${profile}:${controller}:${position}`;
+	const h = createHash("sha1").update(seed).digest("hex");
 	return [h.slice(0, 8), h.slice(8, 12), `4${h.slice(13, 16)}`, `a${h.slice(17, 20)}`, h.slice(20, 32)].join("-");
 }
 
 /** Every profile needs an empty page to fall back to; Stream Deck writes one. */
-const emptyPage = (device: Device) => ({ Controllers: controllers(null, device), Icon: "", Name: "" });
+const emptyPage = (device: Device) => ({ Controllers: controllers(null, null, device), Icon: "", Name: "" });
 
 /**
  * The controller list for one page.
  *
- * A deck with dials carries a second, empty Encoder controller even when the
- * plugin puts nothing on them, because that is what Stream Deck writes for a
- * page with no dial actions - and a profile that is almost right installs and
- * then quietly does nothing.
+ * A deck with dials carries an Encoder controller even when the plugin puts
+ * nothing on them, because that is what Stream Deck writes for a page with no
+ * dial actions - and a profile that is almost right installs and then quietly
+ * does nothing.
  */
-function controllers(actions: Record<string, object> | null, device: Device): object[] {
-	const list: object[] = [{ Actions: actions, Type: "Keypad" }];
-	if (device.encoders > 0) list.push({ Actions: null, Type: "Encoder" });
+function controllers(
+	keys: Record<string, object> | null,
+	dials: Record<string, object> | null,
+	device: Device
+): object[] {
+	const list: object[] = [{ Actions: keys, Type: "Keypad" }];
+	if (device.encoders > 0) list.push({ Actions: dials, Type: "Encoder" });
 	return list;
 }
 
-const outDir = path.join(PLUGIN_DIR, "profiles");
-rmSync(outDir, { recursive: true, force: true });
-mkdirSync(outDir, { recursive: true });
-
-for (const profile of PROFILES) {
-	const device = profile.device;
-	// The 15-key files shipped before there was a second deck, so its suffix is
-	// empty and its ids keep hashing to exactly what is already installed.
-	const title = `${profile.name}${device.suffix}`;
-	const defaultPage = `${profile.page.slice(0, -1)}f`;
-
+/** One controller's worth of placed actions, checked against the deck's shape. */
+function place(layout: Layout, title: string, controller: string, limit: (c: number, r: number) => string | null) {
 	const actions: Record<string, object> = {};
-	for (const [position, key] of Object.entries(profile.layout)) {
+
+	for (const [position, key] of Object.entries(layout)) {
 		const [col, row] = position.split(",").map(Number);
-		if (col >= device.columns || row >= device.rows) {
-			throw new Error(
-				`${title}: ${position} is off a ${device.columns}x${device.rows} deck`
-			);
-		}
+		const complaint = limit(col, row);
+		if (complaint) throw new Error(`${title}: ${position} ${complaint}`);
 
 		actions[position] = {
-			ActionID: actionId(title, position),
+			ActionID: actionId(title, position, controller),
 			LinkedTitle: true,
 			Name: key.name,
 			Plugin: { Name: PLUGIN_NAME, UUID: PLUGIN_UUID },
@@ -349,6 +359,33 @@ for (const profile of PROFILES) {
 			UUID: `${PLUGIN_UUID}.${key.action}`
 		};
 	}
+
+	return Object.keys(actions).length > 0 ? actions : null;
+}
+
+const outDir = path.join(PLUGIN_DIR, "profiles");
+
+/** Fixed timestamp for every zip entry, so a rebuild is byte-for-byte stable. */
+const EPOCH = new Date(Date.UTC(2020, 0, 1, 0, 0, 0));
+
+rmSync(outDir, { recursive: true, force: true });
+mkdirSync(outDir, { recursive: true });
+
+for (const profile of PROFILES) {
+	const device = profile.device;
+	// The 15-key files shipped before there was a second deck, so its suffix is
+	// empty and its ids keep hashing to exactly what is already installed.
+	const title = `${profile.name}${device.suffix}`;
+	const defaultPage = `${profile.page.slice(0, -1)}f`;
+
+	const actions = place(profile.layout, title, "Keypad", (c, r) =>
+		c >= device.columns || r >= device.rows ? `is off a ${device.columns}x${device.rows} deck` : null
+	);
+
+	const dials = place(profile.dials ?? {}, title, "Encoder", (c, r) =>
+		// Dials are a single row; Stream Deck always addresses them at row 0.
+		c >= device.encoders || r !== 0 ? `is not one of ${device.encoders} dials` : null
+	);
 
 	const root = {
 		Device: {
@@ -377,7 +414,7 @@ for (const profile of PROFILES) {
 	writeFileSync(path.join(profileDir, "manifest.json"), JSON.stringify(root), "utf8");
 	writeFileSync(
 		path.join(pageDir, "manifest.json"),
-		JSON.stringify({ Controllers: controllers(actions, device), Icon: "", Name: "" }),
+		JSON.stringify({ Controllers: controllers(actions, dials, device), Icon: "", Name: "" }),
 		"utf8"
 	);
 	writeFileSync(path.join(defaultDir, "manifest.json"), JSON.stringify(emptyPage(device)), "utf8");
@@ -385,10 +422,23 @@ for (const profile of PROFILES) {
 	const out = path.join(outDir, `${title}.streamDeckProfile`);
 	const zip = new AdmZip();
 	zip.addLocalFolder(profileDir, `${profile.uuid}.sdProfile`);
+
+	// A ZIP records each entry's modification time, so rebuilding an unchanged
+	// profile still produces different bytes and git reports six files touched
+	// when nothing about them moved. These are generated artefacts committed to
+	// the repository, so that noise hides the one file that did change. Pinning
+	// the time makes the build reproducible; Stream Deck reads the contents and
+	// does not care what it says.
+	for (const entry of zip.getEntries()) entry.header.time = EPOCH;
+
 	zip.writeZip(out);
 	rmSync(staging, { recursive: true, force: true });
 
-	console.log(`${path.relative(ROOT, out)}  (${Object.keys(profile.layout).length} keys)`);
+	const dialCount = Object.keys(profile.dials ?? {}).length;
+	console.log(
+		`${path.relative(ROOT, out)}  (${Object.keys(profile.layout).length} keys` +
+			`${dialCount ? `, ${dialCount} dials` : ""})`
+	);
 }
 
 rmSync(path.join(ROOT, "node_modules", ".cache", "sdprofile"), { recursive: true, force: true });

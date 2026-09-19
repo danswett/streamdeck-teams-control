@@ -346,6 +346,34 @@
 			]
 		},
 		{
+			"Name": "PPT Live: Slide Dial",
+			"UUID": "com.bad-duck.teamscontrol.ppt-slide-dial",
+			"Icon": "imgs/actions/ppt-slide-dial/icon",
+			"Tooltip": "Turn a dial to move through a PowerPoint Live deck",
+			"Controllers": [
+				"Encoder"
+			],
+			"SupportedInMultiActions": false,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-slide-dial/key",
+					"TitleAlignment": "bottom"
+				}
+			],
+			"Encoder": {
+				"Icon": "imgs/actions/ppt-slide-dial/icon",
+				"layout": "$B1",
+				"StackColor": "#6264A7",
+				"TriggerDescription": {
+					"Rotate": "Previous / next slide",
+					"Push": "Grid view",
+					"Touch": "Sync to presenter"
+				}
+			}
+		},
+		{
 			"Name": "PPT Live: Grid View",
 			"UUID": "com.bad-duck.teamscontrol.ppt-grid",
 			"Icon": "imgs/actions/ppt-grid/icon",

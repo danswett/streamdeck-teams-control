@@ -156,6 +156,48 @@ describe("the bundled profiles", () => {
 		}
 	);
 
+	it.each(bundled.filter((b) => b.deck.dials > 0).map((b) => [b.name, b] as const))(
+		"%s puts its dials on actions that are actually dials",
+		(_label, b) => {
+			const encoder = keyPage(b.name).Controllers.find((c) => c.Type === "Encoder");
+			const placed = encoder?.Actions ?? {};
+
+			const byUuid = new Map(
+				(manifest.Actions as { UUID: string; Controllers?: string[] }[]).map((a) => [a.UUID, a])
+			);
+
+			for (const [pos, a] of Object.entries(placed)) {
+				const [col, row] = pos.split(",").map(Number);
+				expect(col, `${pos} is not one of ${b.deck.dials} dials`).toBeLessThan(b.deck.dials);
+				// Stream Deck addresses dials as a single row and always reports
+				// row 0 for them, whatever the column.
+				expect(row, `${pos} is not on the dial row`).toBe(0);
+
+				const declared = byUuid.get(a.UUID);
+				expect(declared, `${a.UUID} is not an action`).toBeDefined();
+				expect(
+					declared!.Controllers ?? [],
+					`${a.UUID} is on a dial but does not declare the Encoder controller`
+				).toContain("Encoder");
+			}
+		}
+	);
+
+	it("never puts an encoder-only action on a key", () => {
+		const encoderOnly = new Set(
+			(manifest.Actions as { UUID: string; Controllers?: string[] }[])
+				.filter((a) => (a.Controllers ?? ["Keypad"]).every((c) => c === "Encoder"))
+				.map((a) => a.UUID)
+		);
+		expect(encoderOnly.size, "no encoder actions to check").toBeGreaterThan(0);
+
+		for (const { name } of bundled) {
+			for (const [pos, a] of Object.entries(keypad(name))) {
+				expect(encoderOnly.has(a.UUID), `${name} ${pos} puts a dial action on a key`).toBe(false);
+			}
+		}
+	});
+
 	it.each(bundled.map((b) => [b.name] as const))("%s ships no key that ignores a normal press", (name) => {
 		// requireHold makes a tap do nothing. That is a reasonable thing to opt
 		// into, but a bundled profile is what someone meets first, and a key
