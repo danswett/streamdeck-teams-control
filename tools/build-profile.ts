@@ -103,10 +103,47 @@ type Profile = {
 	 * delete, because a plugin cannot remove one.
 	 */
 	revision?: number;
+	/**
+	 * Fingerprint of the layout as it was last published, from
+	 * {@link layoutFingerprint}.
+	 *
+	 * The revision is what Stream Deck reacts to, and nothing stops a layout
+	 * being changed without it being bumped - the result is an update that
+	 * reaches nobody, silently. So the build recomputes this and refuses to
+	 * run when it has moved and the revision has not, which turns the one
+	 * mistake this scheme invites into a failed build.
+	 *
+	 * Deliberately not the plugin version: that changes on every release,
+	 * including the ones that do not touch a layout, and each change would
+	 * hand every user a new profile and strand whatever they had customised on
+	 * the old one.
+	 */
+	layoutHash?: string;
 	layout: Layout;
 	/** Dials, addressed "0,0".."N,0". Only meaningful on a deck that has them. */
 	dials?: Layout;
 };
+
+/**
+ * What a profile actually puts in front of the user: the deck it is for, and
+ * every key and dial on it. Deliberately excludes the name, the revision and
+ * the ids, because none of those change what is on the hardware.
+ */
+function layoutFingerprint(profile: Profile): string {
+	const placed = (layout: Layout, kind: string) =>
+		Object.entries(layout)
+			.map(([pos, key]) => `${kind} ${pos} ${key.action} ${JSON.stringify(key.settings ?? {})}`)
+			.sort();
+
+	const parts = [
+		profile.device.model,
+		`${profile.device.columns}x${profile.device.rows}+${profile.device.encoders}`,
+		...placed(profile.layout, "key"),
+		...placed(profile.dials ?? {}, "dial")
+	];
+
+	return createHash("sha1").update(parts.join("\n")).digest("hex").slice(0, 8);
+}
 
 /**
  * The meeting half of the + XL, identical in all three of its profiles.
@@ -145,6 +182,7 @@ const PROFILES: Profile[] = [
 		name: "Teams Meeting",
 		device: STREAM_DECK,
 		uuid: "1F4B6C2E-8A57-4D39-9E10-3C7B2A6F5D84",
+		layoutHash: "72941c2d",
 		page: "a1b2c3d4-0001-4e85-a0b7-2f6c1e5d8a34",
 		// The meeting itself. Shown from the moment you join until you leave,
 		// and returned to whenever a presentation ends.
@@ -170,6 +208,7 @@ const PROFILES: Profile[] = [
 		name: "PowerPoint Live (Attendee)",
 		device: STREAM_DECK,
 		uuid: "2E5C7D3F-9B68-4E4A-8F21-4D8C3B7A6E95",
+		layoutHash: "39c73331",
 		page: "a1b2c3d4-0002-4e85-a0b7-2f6c1e5d8a34",
 		// Watching someone else's deck. Navigation moves your own view only, so
 		// Sync sits directly under it to get back to the presenter.
@@ -201,6 +240,7 @@ const PROFILES: Profile[] = [
 		name: "PowerPoint Live (Presenter)",
 		device: STREAM_DECK,
 		uuid: "3D6E8A4B-1C79-4F5B-9A32-5E9D4C8B7F06",
+		layoutHash: "32fe1499",
 		page: "a1b2c3d4-0003-4e85-a0b7-2f6c1e5d8a34",
 		// Driving the deck. The drawing tools get their own row because they are
 		// a single-select group and read as one control.
@@ -241,6 +281,7 @@ const PROFILES: Profile[] = [
 		name: "Teams Meeting",
 		device: PLUS_XL,
 		uuid: "4A7C9E1D-2B83-4F6A-8D45-6E1F0C3B9A72",
+		layoutHash: "32fda4bc",
 		page: "a1b2c3d4-0011-4e85-a0b7-2f6c1e5d8a34",
 		layout: { ...XL_MEETING }
 	},
@@ -248,6 +289,7 @@ const PROFILES: Profile[] = [
 		name: "PowerPoint Live (Attendee)",
 		device: PLUS_XL,
 		uuid: "5B8D0F2E-3C94-4A7B-9E56-7F2A1D4C8B63",
+		layoutHash: "d2f421a7",
 		page: "a1b2c3d4-0012-4e85-a0b7-2f6c1e5d8a34",
 		layout: {
 			...XL_MEETING,
@@ -271,6 +313,7 @@ const PROFILES: Profile[] = [
 		name: "PowerPoint Live (Presenter)",
 		device: PLUS_XL,
 		uuid: "6C9E1A3F-4D05-4B8C-8F67-8A3B2E5D9C74",
+		layoutHash: "9364bf31",
 		page: "a1b2c3d4-0013-4e85-a0b7-2f6c1e5d8a34",
 		dials: {
 			"2,0": { action: "ppt-ink-thickness-dial", name: "PPT Presenter: Ink Thickness" },
@@ -384,6 +427,12 @@ const outDir = path.join(PLUGIN_DIR, "profiles");
 /** What the manifest will declare, collected as each profile is written. */
 const registered: object[] = [];
 
+/** Profiles whose layout moved without the revision being bumped. */
+const drifted: string[] = [];
+
+/** Profiles with no fingerprint recorded yet, so one can be pasted in. */
+const unrecorded: string[] = [];
+
 /** Fixed timestamp for every zip entry, so a rebuild is byte-for-byte stable. */
 const EPOCH = new Date(Date.UTC(2020, 0, 1, 0, 0, 0));
 
@@ -467,6 +516,16 @@ for (const profile of PROFILES) {
 		Readonly: false,
 		DontAutoSwitchWhenInstalled: true
 	});
+
+	const fingerprint = layoutFingerprint(profile);
+	if (profile.layoutHash === undefined) unrecorded.push(`  ${title}: layoutHash: "${fingerprint}"`);
+	else if (profile.layoutHash !== fingerprint) {
+		drifted.push(
+			`  ${title}\n` +
+				`      layout changed but revision is still ${profile.revision ?? 1}\n` +
+				`      bump revision to ${(profile.revision ?? 1) + 1}, and set layoutHash: "${fingerprint}"`
+		);
+	}
 }
 
 rmSync(path.join(ROOT, "node_modules", ".cache", "sdprofile"), { recursive: true, force: true });
@@ -488,4 +547,19 @@ if (JSON.stringify(registered) !== before) {
 	// Tabs and whatever ending the file already has, matching order-actions.ts.
 	writeFileSync(manifestPath, JSON.stringify(manifest, null, "\t") + (raw.endsWith("\n") ? "\n" : ""), "utf8");
 	console.log(`\nmanifest.json: ${registered.length} profiles registered`);
+}
+
+if (unrecorded.length) {
+	console.log(`\n${unrecorded.length} profile(s) have no layoutHash recorded. Add:`);
+	for (const line of unrecorded) console.log(line);
+}
+
+if (drifted.length) {
+	console.error(
+		`\n${drifted.length} profile(s) changed without a revision bump.\n\n` +
+			`Stream Deck installs a bundled profile once and identifies it by its path,\n` +
+			`so a changed layout under the same path reaches nobody who already has it.\n\n` +
+			drifted.join("\n\n")
+	);
+	process.exit(1);
 }

@@ -199,6 +199,28 @@ so the revision never reaches the user; only the file changes. Their previous
 copy stays behind as an ordinary profile they can delete, because a plugin
 cannot remove one.
 
+Forgetting to bump it is the one mistake this scheme invites, and the failure
+is silent — the update simply reaches nobody. So each profile records a
+`layoutHash`, a fingerprint of the deck it targets and every key and dial on
+it, and **the build fails** when that moves and the revision does not:
+
+```
+1 profile(s) changed without a revision bump.
+
+  PowerPoint Live (Presenter) (+ XL)
+      layout changed but revision is still 1
+      bump revision to 2, and set layoutHash: "211ff6d3"
+```
+
+`npm run build` runs the profile builder, so this is enforced before anything
+is packaged, in CI as well as locally.
+
+The fingerprint deliberately ignores the plugin version. Tying the path to the
+version would change it on every release, including the many that never touch
+a layout, and each change hands every user a new profile and strands whatever
+they had customised on the old one. It covers what the user actually sees:
+positions, actions and settings.
+
 The manifest's `Profiles` list is written by the same tool, so the declared
 path and the file on disk cannot drift apart, and `src/profiles.ts` reads the
 path back out of the manifest rather than rebuilding it — two places deciding
