@@ -214,6 +214,16 @@ const INK_TOOLS = ["ppt-cursor", "ppt-laser", "ppt-pen", "ppt-highlighter", "ppt
 const HAS_COLOR = new Set(["ppt-laser", "ppt-pen", "ppt-highlighter"]);
 const HAS_THICKNESS = new Set(["ppt-pen", "ppt-highlighter"]);
 
+/**
+ * The tools that change what is on the slide.
+ *
+ * Holding one of these is the clearest sign the picture is about to go stale,
+ * so a live thumbnail watches closely while one is selected. The laser is left
+ * out deliberately: it moves constantly and leaves nothing behind, so chasing
+ * it would spend the budget redrawing a dot. The cursor marks nothing at all.
+ */
+const MARKS_SLIDE = new Set(["ppt-pen", "ppt-highlighter", "ppt-eraser"]);
+
 /** How each tool is named on the strip when it has nothing to offer a dial. */
 const TOOL_LABEL: Record<string, string> = {
 	"ppt-cursor": "Cursor",
@@ -595,4 +605,362 @@ export class InkColorDialAction extends InkDialAction {
 	#palette(state: TeamsState, tool: string): string[] {
 		return (state.context[`ppt.palette.${tool}`] ?? "").split("|").filter(Boolean);
 	}
+}
+
+/* ------------------------------------------------------------------------- *
+ * Slide thumbnails
+ *
+ * PowerPoint Live publishes the name of a slide and nothing else, so the
+ * picture comes off the Teams window itself - see SlideCapture in the sidecar.
+ * The source is the presenter-view filmstrip rather than the slide surface:
+ * its items are already 16:9 and the selected one is the current slide, which
+ * makes "the next slide" simply the one after it. Presenter view therefore has
+ * to be open for either of these to show anything.
+ *
+ * Capturing is not free, so it happens when the slide changes rather than on
+ * every snapshot, and the last picture is held while nothing moves.
+ * ------------------------------------------------------------------------- */
+
+/** How long to sit on a slide change before capturing it. */
+const CAPTURE_SETTLE_MS = 250;
+
+/**
+ * How long to leave a slide alone after a capture of it failed.
+ *
+ * A failure is usually presenter view being closed, which is a thing the user
+ * fixes rather than a thing that fixes itself - so retrying is worth doing, but
+ * not on every snapshot. Without this a presenter working without the filmstrip
+ * open would have the plugin asking Teams for a picture several times a second
+ * for the length of the meeting.
+ */
+const CAPTURE_RETRY_MS = 5000;
+
+/**
+ * How many frames to dissolve one slide into the next over, and how long each
+ * one stays up.
+ *
+ * Six frames at 40ms is a quarter-second fade. The frames are JPEG and about
+ * 6 KiB each, so a transition costs roughly 40 KiB on the wire - cheap enough
+ * to be worth it, but not so many frames that a fast clicker queues them up.
+ */
+const FADE_FRAMES = 6;
+const FADE_FRAME_MS = 40;
+
+/**
+ * How often to re-read a slide that is still on screen.
+ *
+ * A build fires without moving the deck on, so the live slot cannot wait for
+ * the slide number to change. A capture costs about 80ms, which is why this
+ * runs fast only while something is demonstrably happening and idles slowly
+ * the rest of the time.
+ */
+const POLL_FAST_MS = 700;
+const POLL_IDLE_MS = 3000;
+const POLL_ACTIVE_FOR_MS = 12_000;
+
+/**
+ * How often to re-read the slide while a marking tool is selected.
+ *
+ * Ink appears under the presenter's hand, so this is the one case where the
+ * thumbnail is being watched as it changes rather than glanced at. It is the
+ * most expensive rate by some way, which is why it is tied to a tool being
+ * held rather than to the deck being up.
+ */
+const POLL_INK_MS = 250;
+
+abstract class SlideThumbDialAction extends TeamsDialAction {
+	/** Which slide to show; sent straight to the sidecar. */
+	protected abstract readonly which: "current" | "next";
+
+	/**
+	 * Whether this slot changes while the slide number does not.
+	 *
+	 * The live surface does - a build firing repaints it without moving the
+	 * deck on - so it has to be watched. A filmstrip thumbnail of a slide that
+	 * has not been reached yet does not.
+	 */
+	protected abstract readonly live: boolean;
+
+	/** The picture on the strip now, held while nothing changes. */
+	#image: string | undefined;
+
+	/** What the deck looked like when that picture was taken. */
+	#capturedAt: string | undefined;
+
+	/** Set once the deck runs out of slides, so the slot says so. */
+	#ended = false;
+
+	/** Why there is no picture, when the sidecar gave a reason worth showing. */
+	#reason: string | undefined;
+
+	/** The slide a pending capture should be labelled with. */
+	#wanted: string | undefined;
+
+	/** When a capture last failed, so retries are paced rather than spun. */
+	#failedAt: string | undefined;
+	#failedWhen = 0;
+
+	/** When the picture last actually changed, which sets the polling rate. */
+	#changedAt = 0;
+
+	#timer: NodeJS.Timeout | undefined;
+	#fade: NodeJS.Timeout | undefined;
+	#busy = false;
+
+	protected override layout(): string {
+		return INK_LAYOUT;
+	}
+
+	protected override draw(state: TeamsState): Feedback {
+		// Asking from draw keeps the two in step: every repaint is a chance to
+		// notice the deck moved, and the capture that follows repaints again.
+		this.#considerCapture(state);
+
+		if (this.#image !== undefined) return { canvas: this.#image };
+
+		if (this.#ended) return { canvas: toPixmap(renderStripIdle("End of show", "no slide after this one")) };
+
+		return {
+			canvas: toPixmap(
+				renderStripIdle(
+					this.which === "next" ? "Next slide" : "Current slide",
+					pptLive(state) ? (this.#reason ?? "waiting for the slide") : "no deck"
+				)
+			)
+		};
+	}
+
+	/** Where the deck is, as a value that changes exactly when the picture must. */
+	#position(state: TeamsState): string | undefined {
+		if (!pptLive(state)) return undefined;
+		const slide = state.context["ppt.slide"];
+		return slide === undefined ? undefined : `${slide}/${state.context["ppt.slides"] ?? ""}`;
+	}
+
+	#considerCapture(state: TeamsState): void {
+		const at = this.#position(state);
+
+		if (at === undefined) {
+			// The deck stopped. Drop the picture rather than leaving a slide on
+			// the strip after the presentation has ended.
+			this.#stopWatching();
+			this.#image = undefined;
+			this.#capturedAt = undefined;
+			this.#failedAt = undefined;
+			this.#wanted = undefined;
+			this.#ended = false;
+			this.#reason = undefined;
+			return;
+		}
+
+		this.#at = at;
+
+		const inking = MARKS_SLIDE.has(activeInkTool(state) ?? "");
+		if (inking !== this.#inking) {
+			// Re-armed rather than left to the next tick: picking up a pen has
+			// to speed the slot up now, not up to three seconds from now.
+			this.#inking = inking;
+			this.#stopWatching();
+		}
+		this.#watch();
+
+		if (at === this.#capturedAt || this.#busy || this.#fade !== undefined) return;
+
+		this.#wanted = at;
+		if (this.#timer !== undefined) return;
+
+		this.#timer = setTimeout(() => {
+			this.#timer = undefined;
+			const target = this.#wanted;
+			if (target !== undefined) void this.#capture(target, true);
+		}, this.#waitFor(at));
+	}
+
+	/** The deck's position as of the last snapshot, for the watch loop to use. */
+	#at: string | undefined;
+
+	/** Whether a drawing tool is selected, which means ink may be appearing. */
+	#inking = false;
+
+	#loop: NodeJS.Timeout | undefined;
+
+	/**
+	 * Keeps a live slot re-reading the slide on its own clock.
+	 *
+	 * This cannot hang off the state subscription the way a slide change does.
+	 * Drawing on a slide changes nothing Teams reports - not the slide number,
+	 * not any control's state - so no snapshot arrives, and a slot waiting for
+	 * one would sit on a picture without the ink until the deck moved. The same
+	 * goes for a build firing. So the slot asks, rather than waiting to be told.
+	 */
+	#watch(): void {
+		if (!this.live || this.#loop !== undefined) return;
+
+		const tick = (): void => {
+			// Nothing on the strip to paint. The loop ends here rather than
+			// being cancelled from onWillDisappear, because a snapshot only
+			// arrives when something in Teams changes - so a loop stopped on
+			// the way out might have nothing to start it again.
+			if (!this.#onStrip()) {
+				this.#loop = undefined;
+				return;
+			}
+
+			this.#loop = setTimeout(tick, this.#interval());
+			const at = this.#at;
+			if (at === undefined || this.#busy || this.#fade !== undefined) return;
+			void this.#capture(at, false);
+		};
+
+		this.#loop = setTimeout(tick, this.#interval());
+	}
+
+	#onStrip(): boolean {
+		for (const a of this.actions) if (a.isDial()) return true;
+		return false;
+	}
+
+	#stopWatching(): void {
+		if (this.#loop) clearTimeout(this.#loop);
+		this.#loop = undefined;
+	}
+
+	/**
+	 * How long to leave it before re-reading a slide that has not moved.
+	 *
+	 * Ink and builds both arrive without warning, so the only way to catch them
+	 * is to look. Looking costs about 80ms, so it is done often while there is
+	 * reason to think the slide is changing - a pen in hand, or something that
+	 * moved in the last few seconds - and rarely the rest of the time.
+	 */
+	#interval(): number {
+		if (this.#inking) return POLL_INK_MS;
+		return Date.now() - this.#changedAt < POLL_ACTIVE_FOR_MS ? POLL_FAST_MS : POLL_IDLE_MS;
+	}
+
+	#waitFor(at: string): number {
+		// Teams animates a slide change, so capturing the instant the number
+		// moves catches the transition rather than the slide.
+
+		if (at === this.#failedAt) {
+			const since = Date.now() - this.#failedWhen;
+			if (since < CAPTURE_RETRY_MS) return CAPTURE_RETRY_MS - since;
+		}
+		return CAPTURE_SETTLE_MS;
+	}
+
+	async #capture(at: string, moved: boolean): Promise<void> {
+		if (this.#busy) return;
+		this.#busy = true;
+		try {
+			// Only a change worth watching is faded; a poll that found a build
+			// half-drawn should land immediately rather than dissolve into it.
+			const shot = await bridge.capture(this.which, moved ? FADE_FRAMES : 0);
+
+			if (shot.end) {
+				// Off the end of the deck. Unlike a failure this has to clear
+				// the picture: the slide it shows is one the presenter has
+				// already moved past, and leaving it there is a lie.
+				this.#image = undefined;
+				this.#capturedAt = at;
+				this.#ended = true;
+				this.#failedAt = undefined;
+				this.repaintAll();
+				return;
+			}
+
+			if (!shot.ok || shot.image === undefined) {
+				/*
+					A stale picture is only honest while the deck has not moved.
+					Once it has, whatever is on the strip is a slide the
+					presenter has already left - the same complaint as running
+					off the end of the deck - so the slot goes back to saying
+					what it is rather than showing the wrong slide.
+				*/
+				if (moved) {
+					this.#image = undefined;
+					this.#reason = shot.error;
+					this.repaintAll();
+				}
+
+				// Remembered so the next snapshot does not immediately ask
+				// again; the slide is retried, just not on every tick.
+				this.#failedAt = at;
+				this.#failedWhen = Date.now();
+				logger.debug(`${this.which} slide: ${shot.error ?? "no image"}`);
+				return;
+			}
+
+			this.#failedAt = undefined;
+			this.#ended = false;
+			this.#reason = undefined;
+			this.#capturedAt = at;
+
+			// An unchanged slide is the common case when polling, and repainting
+			// it would only spend bytes on the strip to draw what is already there.
+			if (shot.image === this.#image) return;
+
+			this.#changedAt = Date.now();
+			this.#play(shot.frames ?? [], shot.image);
+		} finally {
+			this.#busy = false;
+		}
+	}
+
+	/** Runs the fade frames out, then settles on the capture itself. */
+	#play(frames: string[], final: string): void {
+		if (frames.length === 0) {
+			this.#image = final;
+			this.repaintAll();
+			return;
+		}
+
+		let i = 0;
+		const step = (): void => {
+			if (i < frames.length) {
+				this.#image = frames[i++];
+				this.repaintAll();
+				this.#fade = setTimeout(step, FADE_FRAME_MS);
+				return;
+			}
+			this.#fade = undefined;
+			this.#image = final;
+			this.repaintAll();
+		};
+		step();
+	}
+
+	override onWillDisappear(ev: WillDisappearEvent<JsonObject>): void {
+		if (this.#timer) clearTimeout(this.#timer);
+		if (this.#fade) clearTimeout(this.#fade);
+		this.#timer = undefined;
+		this.#fade = undefined;
+		super.onWillDisappear(ev);
+	}
+}
+
+/**
+ * The slide being shown, bordered in red the way Teams marks the live one.
+ *
+ * Taken off the slide surface rather than the filmstrip, so a slide part-way
+ * through its animations looks here the way it looks to the room. That also
+ * means this one works without presenter view open.
+ */
+@action({ UUID: "com.bad-duck.teamscontrol.ppt-slide-current" })
+export class SlideCurrentDialAction extends SlideThumbDialAction {
+	protected override readonly which = "current" as const;
+	protected override readonly live = true;
+}
+
+/**
+ * The slide after it, so you can see what is coming without leaving this one.
+ *
+ * This is the next *slide*, not the next build: a slide that has not been
+ * reached has no live render to read, only the fully built thumbnail Teams puts
+ * in the filmstrip - which is also why this one needs presenter view open.
+ */
+@action({ UUID: "com.bad-duck.teamscontrol.ppt-slide-next" })
+export class SlideNextDialAction extends SlideThumbDialAction {
+	protected override readonly which = "next" as const;
+	protected override readonly live = false;
 }

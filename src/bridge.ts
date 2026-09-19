@@ -26,6 +26,31 @@ type Pending = {
 	timer: NodeJS.Timeout;
 };
 
+/** A captured slide, ready to be drawn on the touch strip. */
+export type Thumbnail = {
+	ok: boolean;
+	image?: string;
+	name?: string;
+	error?: string;
+	/** The deck has no slide after this one, so there is nothing to show. */
+	end?: boolean;
+	/** Frames fading the previous picture into this one, oldest first. */
+	frames?: string[];
+};
+
+type PendingThumb = {
+	resolve: (v: Thumbnail) => void;
+	timer: NodeJS.Timeout;
+};
+
+/**
+ * How long to wait for a slide thumbnail.
+ *
+ * Shorter than a press, because nothing is driven by it: a thumbnail that does
+ * not arrive is a slot that keeps the last picture, not an action that failed.
+ */
+const CAPTURE_TIMEOUT_MS = 4_000;
+
 /**
  * Owns the single sidecar process and fans its state out to every action.
  *
@@ -37,6 +62,7 @@ class Bridge {
 	#buffer = "";
 	#nextId = 1;
 	#pending = new Map<number, Pending>();
+	#thumbs = new Map<number, PendingThumb>();
 	#listeners = new Set<(s: TeamsState) => void>();
 	#state: TeamsState = EMPTY_STATE;
 	#restartDelay = 1000;
@@ -155,6 +181,24 @@ class Bridge {
 				break;
 			}
 
+			case "thumb": {
+				const id = Number(msg["id"]);
+				const pending = this.#thumbs.get(id);
+				if (pending) {
+					clearTimeout(pending.timer);
+					this.#thumbs.delete(id);
+					pending.resolve({
+						ok: Boolean(msg["ok"]),
+						image: msg["image"] as string | undefined,
+						name: msg["name"] as string | undefined,
+						error: msg["error"] as string | undefined,
+						end: Boolean(msg["end"]),
+						frames: Array.isArray(msg["frames"]) ? (msg["frames"] as string[]) : undefined
+					});
+				}
+				break;
+			}
+
 			case "error":
 				logger.warn(`Sidecar error: ${String(msg["message"])}`);
 				break;
@@ -178,6 +222,14 @@ class Bridge {
 			p.resolve({ ok: false, error: reason });
 		}
 		this.#pending.clear();
+
+		// Captures too, or a dial waiting on a thumbnail when the sidecar died
+		// would sit on its timeout rather than being told.
+		for (const [, t] of this.#thumbs) {
+			clearTimeout(t.timer);
+			t.resolve({ ok: false, error: reason });
+		}
+		this.#thumbs.clear();
 	}
 
 	#send(payload: Record<string, unknown>): boolean {
@@ -204,6 +256,18 @@ class Bridge {
 	 * was still working on it, and then it landed anyway, which read as a key
 	 * firing long after it was pressed.
 	 */
+	/**
+	 * Presses a Teams control. Resolves with the outcome so keys can show
+	 * feedback.
+	 *
+	 * The timeout is generous because the work behind a press is not uniform: a
+	 * slide advance is one posted click, but a flyout-nested control has to open
+	 * a menu, wait for it to populate, press an item and then make sure the menu
+	 * closed again — measured at up to ~4.5s on a live meeting. At the old 5s a
+	 * press queued behind one of those was reported as failed while the sidecar
+	 * was still working on it, and then it landed anyway, which read as a key
+	 * firing long after it was pressed.
+	 */
 	invoke(target: string, arg?: string): Promise<{ ok: boolean; error?: string }> {
 		const id = this.#nextId++;
 		if (!this.#send({ id, cmd: "invoke", target, arg: arg ?? "" })) {
@@ -216,6 +280,29 @@ class Bridge {
 				resolve({ ok: false, error: "timed out" });
 			}, INVOKE_TIMEOUT_MS);
 			this.#pending.set(id, { resolve, timer });
+		});
+	}
+
+	/**
+	 * Captures the current slide, or the one after it.
+	 *
+	 * Its own channel rather than part of the state, because it carries a
+	 * picture: on the state channel a thumbnail would ride along with every
+	 * key's availability, and a stale one would be replayed to anything that
+	 * subscribed later.
+	 */
+	capture(which: "current" | "next", fade = 0): Promise<Thumbnail> {
+		const id = this.#nextId++;
+		if (!this.#send({ id, cmd: "thumb", arg: which, fade })) {
+			return Promise.resolve({ ok: false, error: "sidecar not running" });
+		}
+
+		return new Promise((resolve) => {
+			const timer = setTimeout(() => {
+				this.#thumbs.delete(id);
+				resolve({ ok: false, error: "timed out" });
+			}, CAPTURE_TIMEOUT_MS);
+			this.#thumbs.set(id, { resolve, timer });
 		});
 	}
 }

@@ -12,7 +12,7 @@ namespace TeamsBridge;
 /// </summary>
 public static class Program
 {
-    private sealed record WorkItem(int Id, string Cmd, string? Target, string? Menu, string? Arg = null)
+    private sealed record WorkItem(int Id, string Cmd, string? Target, string? Menu, string? Arg = null, int Fade = 0)
     {
         /// <summary>
         /// When the request arrived. A menu walk takes seconds, so a handful of
@@ -173,9 +173,11 @@ public static class Program
                 var target = root.TryGetProperty("target", out var t) ? t.GetString() : null;
                 var menu = root.TryGetProperty("menu", out var m) ? m.GetString() : null;
                 var arg = root.TryGetProperty("arg", out var a) ? a.GetString() : null;
+                var fade = root.TryGetProperty("fade", out var f) && f.ValueKind == JsonValueKind.Number
+                    && f.TryGetInt32(out var fv) ? fv : 0;
 
                 if (cmd == "shutdown") { _running = false; break; }
-                Queue.Add(new WorkItem(id, cmd, target, menu, arg));
+                Queue.Add(new WorkItem(id, cmd, target, menu, arg, fade));
             }
             catch (Exception ex)
             {
@@ -407,8 +409,34 @@ public static class Program
                 break;
             }
 
-            case "discover":
+            case "thumb":
             {
+                // Its own message type rather than a result, because it carries
+                // a picture: keeping it off the state channel means a thumbnail
+                // never rides along with every key's availability, and a stale
+                // one is never replayed.
+                var (ok, err, image, name, end, frames) = client.CaptureSlide(item.Arg ?? "current", item.Fade);
+                Emit(w =>
+                {
+                    w.WriteString("type", "thumb");
+                    w.WriteNumber("id", item.Id);
+                    w.WriteBoolean("ok", ok);
+                    w.WriteString("which", item.Arg ?? "current");
+                    w.WriteBoolean("end", end);
+                    if (name is not null) w.WriteString("name", name);
+                    if (image is not null) w.WriteString("image", image);
+                    if (err is not null) w.WriteString("error", err);
+                    if (frames.Count > 0)
+                    {
+                        w.WriteStartArray("frames");
+                        foreach (var f in frames) w.WriteStringValue(f);
+                        w.WriteEndArray();
+                    }
+                });
+                break;
+            }
+
+            case "discover":            {
                 var rows = client.Discover(item.Menu);
                 Emit(w =>
                 {

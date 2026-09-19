@@ -1560,6 +1560,184 @@ public sealed class TeamsClient : IDisposable
     }
 
     /* ------------------------------------------------------------------- *
+     * Slide thumbnails
+     *
+     * PowerPoint Live publishes the name of a slide and nothing else - there
+     * is no image of one anywhere in the tree - so a thumbnail has to be taken
+     * off the screen.
+     *
+     * The presenter-view filmstrip is the right source rather than the slide
+     * surface: its items are already 16:9, they are the size a thumbnail wants
+     * to be, and the one that is selected is the current slide, which makes
+     * "the next slide" simply the item after it. The slide surface only ever
+     * shows the current slide, and is letterboxed inside its container.
+     *
+     * It follows that this needs presenter view open. With it closed there is
+     * no filmstrip and no next slide to show.
+     * ------------------------------------------------------------------- */
+
+    /// <summary>Smallest a list item can be and still be a slide rather than a tool.</summary>
+    private const int MinThumbWidth = 100;
+    private const int MinThumbHeight = 60;
+
+    /// <summary>The filmstrip, left to right, or empty when presenter view is closed.</summary>
+    private List<AutomationElement> Filmstrip(AutomationElement win)
+    {
+        var found = new List<(double X, AutomationElement El)>();
+        try
+        {
+            foreach (var item in win.FindAllDescendants(cf => cf.ByControlType(ControlType.ListItem)))
+            {
+                try
+                {
+                    var r = item.BoundingRectangle;
+                    // The five ink tools are list items too, and much smaller.
+                    if (r.Width < MinThumbWidth || r.Height < MinThumbHeight) continue;
+                    found.Add((r.X, item));
+                }
+                catch { }
+            }
+        }
+        catch { }
+
+        return found.OrderBy(f => f.X).Select(f => f.El).ToList();
+    }
+
+    /// <summary>
+    /// The rectangle the slide is actually being drawn in, right now.
+    ///
+    /// Not the same thing as the filmstrip thumbnail of the same slide. The
+    /// filmstrip shows a slide fully built; this is the live render, so a slide
+    /// part-way through its animations looks here the way it looks to the room.
+    ///
+    /// The container Teams names after the current slide is a 4:3-ish box with
+    /// the slide letterboxed inside it, so the container's own rectangle is too
+    /// big. The slide is the 16:9 image within, which is matched on shape
+    /// rather than on a name or id, because it has neither.
+    /// </summary>
+    private static (System.Drawing.Rectangle rect, string? name)? LiveSlide(AutomationElement win)
+    {
+        AutomationElement? container;
+        try
+        {
+            container = win.FindFirstDescendant(cf => cf.ByAutomationId("slideshow-app-container"));
+        }
+        catch { return null; }
+        if (container is null) return null;
+
+        string? name = null;
+        try { name = container.Name; } catch { }
+
+        AutomationElement[] images;
+        try { images = container.FindAllDescendants(cf => cf.ByControlType(ControlType.Image)); }
+        catch { return null; }
+
+        foreach (var img in images)
+        {
+            try
+            {
+                var r = img.BoundingRectangle;
+                if (r.Width < MinThumbWidth || r.Height < MinThumbHeight) continue;
+                if (Math.Abs((double)r.Width / r.Height - 16.0 / 9.0) > 0.02) continue;
+
+                return (new System.Drawing.Rectangle((int)r.X, (int)r.Y, (int)r.Width, (int)r.Height), name);
+            }
+            catch { }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Captures the slide being shown, or the one after it.
+    ///
+    /// The two come from different places on purpose. "Current" is the live
+    /// slide surface, so it matches what the room is looking at, animations and
+    /// all, and it works whether or not presenter view is open. "Next" can only
+    /// come from the presenter-view filmstrip, which means it needs presenter
+    /// view - and it shows that slide fully built, because a slide that has not
+    /// been reached has no live render to read.
+    /// </summary>
+    public (bool ok, string? error, string? image, string? name, bool end, List<string> frames) CaptureSlide(string which, int fadeFrames = 0)
+    {
+        var none = new List<string>();
+        var win = ResolveMeetingWindow();
+        if (win is null) return (false, "not in a meeting", null, null, false, none);
+
+        System.Drawing.Rectangle rect;
+        string? name;
+
+        if (which != "next")
+        {
+            var live = LiveSlide(win);
+            if (live is null) return (false, "no slide is being shown", null, null, false, none);
+            (rect, name) = (live.Value.rect, live.Value.name);
+        }
+        else
+        {
+            var strip = Filmstrip(win);
+            if (strip.Count == 0) return (false, "no slide thumbnails; presenter view is closed", null, null, false, none);
+
+            var at = -1;
+            for (var i = 0; i < strip.Count; i++)
+            {
+                try
+                {
+                    if (strip[i].Patterns.SelectionItem.Pattern.IsSelected.ValueOrDefault) { at = i; break; }
+                }
+                catch { }
+            }
+            if (at < 0) return (false, "no slide is selected in the filmstrip", null, null, false, none);
+
+            // The end of the deck is reported as its own thing rather than as a
+            // failure, because the two want opposite handling: a failure should
+            // leave the last picture alone and try again, whereas running off
+            // the end means the picture is now wrong and has to go.
+            if (at + 1 >= strip.Count)
+            {
+                SlideCapture.ForgetPrevious(which);
+                return (false, "no next slide; this is the last one", null, null, true, none);
+            }
+
+            var target = strip[at + 1];
+
+            // Off the end of the visible strip: the rectangle would still be
+            // reported, but what is at those coordinates on screen is something
+            // else entirely, and a thumbnail of the wrong thing is worse than none.
+            try
+            {
+                if (target.Properties.IsOffscreen.ValueOrDefault)
+                    return (false, "that slide is scrolled out of view", null, null, false, none);
+            }
+            catch { }
+
+            try
+            {
+                var r = target.BoundingRectangle;
+                if (r.Width <= 0 || r.Height <= 0) return (false, "that slide has no size on screen", null, null, false, none);
+                rect = new System.Drawing.Rectangle((int)r.X, (int)r.Y, (int)r.Width, (int)r.Height);
+            }
+            catch { return (false, "could not measure that slide", null, null, false, none); }
+
+            name = NameOf(target);
+        }
+
+        var (image, frames) = SlideCapture.GrabSequence(
+            which, WindowHandleOf(win), rect.X, rect.Y, rect.Width, rect.Height,
+            border: which != "next", fadeFrames: fadeFrames);
+        if (image is null) return (false, "could not capture that slide", null, null, false, none);
+
+        return (true, null, image, name, false, frames);
+    }
+
+    /// <summary>The window handle behind an automation element, or zero.</summary>
+    private static IntPtr WindowHandleOf(AutomationElement el)
+    {
+        try { return el.Properties.NativeWindowHandle.ValueOrDefault; }
+        catch { return IntPtr.Zero; }
+    }
+
+    /* ------------------------------------------------------------------- *
      * Setting ink color and thickness
      *
      * Both live in the flyout a drawing tool opens, and both turned out to be

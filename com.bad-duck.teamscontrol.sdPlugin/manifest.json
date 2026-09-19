@@ -62,7 +62,7 @@
 			"DontAutoSwitchWhenInstalled": true
 		},
 		{
-			"Name": "profiles/PowerPoint Live (Presenter) (+ XL) r2",
+			"Name": "profiles/PowerPoint Live (Presenter) (+ XL) r3",
 			"DeviceType": 13,
 			"Readonly": false,
 			"DontAutoSwitchWhenInstalled": true
@@ -344,6 +344,52 @@
 					"TitleAlignment": "bottom"
 				}
 			]
+		},
+		{
+			"Name": "PPT Live: Current Slide",
+			"UUID": "com.bad-duck.teamscontrol.ppt-slide-current",
+			"Icon": "imgs/actions/ppt-slide-current/icon",
+			"Tooltip": "Shows the slide being presented on the touch strip",
+			"Controllers": [
+				"Encoder"
+			],
+			"SupportedInMultiActions": false,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-slide-current/key",
+					"TitleAlignment": "bottom"
+				}
+			],
+			"Encoder": {
+				"layout": "layouts/ink.json",
+				"StackColor": "#6264A7",
+				"TriggerDescription": {}
+			}
+		},
+		{
+			"Name": "PPT Live: Next Slide",
+			"UUID": "com.bad-duck.teamscontrol.ppt-slide-next",
+			"Icon": "imgs/actions/ppt-slide-next/icon",
+			"Tooltip": "Shows the slide after the one being presented",
+			"Controllers": [
+				"Encoder"
+			],
+			"SupportedInMultiActions": false,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/ppt.html",
+			"States": [
+				{
+					"Image": "imgs/actions/ppt-slide-next/key",
+					"TitleAlignment": "bottom"
+				}
+			],
+			"Encoder": {
+				"layout": "layouts/ink.json",
+				"StackColor": "#6264A7",
+				"TriggerDescription": {}
+			}
 		},
 		{
 			"Name": "PPT Live: Grid View",

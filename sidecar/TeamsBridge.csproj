@@ -62,6 +62,18 @@
       desktop runtime, which keeps the published sidecar small and trimmable.
     -->
     <PackageReference Include="FlaUI.UIA3" Version="5.0.0" />
+
+    <!--
+      Slide thumbnails are captured from the screen and encoded as PNG. GDI+ is
+      the smallest thing that does both; the alternative was a hand-rolled PNG
+      encoder, which is a lot of surface area to get subtly wrong for no gain
+      on a Windows-only process.
+
+      Deliberately not a FrameworkReference on Microsoft.WindowsDesktop.App,
+      which would pull the whole desktop runtime in and undo the reason FlaUI
+      was chosen over a WPF-based automation library.
+    -->
+    <PackageReference Include="System.Drawing.Common" Version="8.0.10" />
   </ItemGroup>
 
 </Project>

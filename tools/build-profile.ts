@@ -330,10 +330,14 @@ const PROFILES: Profile[] = [
 		name: "PowerPoint Live (Presenter)",
 		device: PLUS_XL,
 		uuid: "6C9E1A3F-4D05-4B8C-8F67-8A3B2E5D9C74",
-		layoutHash: "6fc7d259",
-		revision: 2,
+		layoutHash: "972e66ae",
+		revision: 3,
 		page: "a1b2c3d4-0013-4e85-a0b7-2f6c1e5d8a34",
 		dials: {
+			// Positions 1 and 2: the slide being presented and the one after it.
+			"0,0": { action: "ppt-slide-current", name: "PPT Live: Current Slide" },
+			"1,0": { action: "ppt-slide-next", name: "PPT Live: Next Slide" },
+
 			"2,0": { action: "ppt-ink-thickness-dial", name: "PPT Presenter: Ink Thickness" },
 			"3,0": { action: "ppt-ink-color-dial", name: "PPT Presenter: Ink Color" },
 

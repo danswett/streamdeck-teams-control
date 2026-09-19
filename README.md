@@ -244,13 +244,15 @@ node tools/check-profile.mjs "com.bad-duck.teamscontrol.sdPlugin/profiles/Teams 
 
 #### Dials
 
-The + XL has six, and the PowerPoint Live profiles use three of them:
+The + XL has six. The presenter layout uses four and leaves the last two to
+Elgato's own Volume Controller:
 
-| dial | turn | press | touch |
-|---|---|---|---|
-| **Slide** | previous / next slide | grid view | sync to presenter |
-| **Ink thickness** | 1 to 6, Teams' own range | — | — |
-| **Ink color** | through the tool's palette, wrapping | — | — |
+| dial | shows | turn |
+|---|---|---|
+| **Current slide** | the slide being presented, bordered red | — |
+| **Next slide** | the slide after it | — |
+| **Ink thickness** | 1 to 6, Teams' own range | sets it |
+| **Ink color** | the tool's palette, wrapping | sets it |
 
 The ink dials act on whichever drawing tool is selected rather than owning one,
 so picking the pen points both of them at the pen. They go quiet for tools that
@@ -264,13 +266,8 @@ Automation walk. One press per tick would queue a whole spin and go on driving
 the deck long after the user let go, which is the failure `#inFlight` exists to
 stop. So turning and pressing are kept apart: ticks accumulate into a local
 offset, the touch strip shows where the dial thinks it is straight away, and the
-work that makes it true is issued once the dial goes still.
-
-The two kinds of dial settle differently, because what is behind them differs.
-Slides are a press each, so the offset is walked down one press at a time;
-past 25 the extra ticks are dropped, since arriving at slide 40 a minute later
-is worse than not going. Color and thickness are each a single call, so the
-whole gesture collapses into one command.
+work that makes it true is issued once the dial goes still. Color and thickness
+are each a single call, so a whole gesture collapses into one command.
 
 Ink color and thickness turned out to be proper UI Automation patterns rather
 than menu items — thickness is a slider carrying `RangeValue` over 1..6, and
@@ -292,6 +289,66 @@ Three things about that flyout are worth knowing before touching it:
 - **An open flyout unmounts the whole slide-show subtree.** A deck that is still
   being presented then looks exactly like one that has stopped, so the flyout is
   always closed again and the close is confirmed by watching the subtree return.
+
+#### Slide thumbnails
+
+The two leftmost dials show the deck itself. PowerPoint Live exposes no image of
+a slide anywhere in the accessibility tree — only its name — so the picture is
+taken off the Teams window with `PrintWindow(PW_RENDERFULLCONTENT)`, which draws
+the window on request and is therefore occlusion-proof. `CopyFromScreen` was
+tried first and captured whatever happened to be on top.
+
+**This is the one part of the plugin that reads meeting content rather than
+controls**, and it is deliberately narrow: a rectangle inside the Teams window,
+scaled straight into the 200 × 100 slot it will occupy, never written to disk
+and never logged.
+
+The two slots come from different places, which is the whole point:
+
+- **Current slide** is the live slide surface — the 16:9 image inside
+  `slideshow-app-container`, matched on shape because it carries neither name
+  nor id. Being the live render, it shows the slide *as the room sees it*: a
+  build that has not fired yet is missing here too, and ink appears as it is
+  drawn. It does not need presenter view.
+- **Next slide** can only come from the presenter-view filmstrip, so it needs
+  presenter view open, and it shows that slide **fully built** — a slide that has
+  not been reached has no live render to read. It is the next *slide*, not the
+  next build.
+
+Running off the end of the deck is reported as its own signal rather than as a
+failure, because the two want opposite handling. A failure should leave the last
+picture alone and retry; running out of slides means the picture is now of a
+slide the presenter has already left, so it has to go. The same rule applies to
+any failed capture once the deck has moved — **a stale thumbnail is only honest
+while the slide has not changed.**
+
+##### Watching a slide that is not moving
+
+Ink and builds both change the slide without changing anything Teams reports —
+not the slide number, not any control's state. The sidecar emits state **only on
+change**, so a thumbnail waiting to be told would sit on a picture without the
+ink until the deck moved. Measured: one state message in fifteen seconds while
+sitting on a slide.
+
+So the live slot keeps its own clock. A capture costs about 80 ms, so the rate
+is tied to whether there is any reason to expect a change:
+
+| when | re-read every |
+|---|---|
+| a pen, highlighter or eraser is selected | 250 ms |
+| something changed in the last 12 s | 700 ms |
+| otherwise | 3 s |
+
+Selecting a marking tool re-arms the timer immediately rather than waiting out
+the slow interval. The laser is deliberately excluded: it moves constantly and
+leaves nothing behind, so following it would spend the whole budget redrawing a
+dot. An unchanged slide encodes byte-identical, so idling costs no traffic to
+the deck.
+
+Slide changes cross-fade — six JPEG frames of about 6 KiB, blended in the
+sidecar where the bitmaps already are, at 40 ms each. Polled re-reads land
+immediately instead: ink should appear under the presenter's hand, not dissolve
+into view.
 
 ### Artwork
 

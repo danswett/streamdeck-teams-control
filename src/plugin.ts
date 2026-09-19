@@ -38,7 +38,7 @@ import {
 	PptTakeControlAction
 } from "./actions/powerpoint";
 import { bridge } from "./bridge";
-import { InkColorDialAction, InkThicknessDialAction } from "./actions/dials";
+import { InkColorDialAction, InkThicknessDialAction, SlideCurrentDialAction, SlideNextDialAction } from "./actions/dials";
 import { profileSwitcher } from "./profiles";
 
 streamDeck.logger.setLevel("info");
@@ -85,6 +85,8 @@ streamDeck.actions.registerAction(new PptStopPresentingAction());
 // only ever raises these for a dial the user has actually placed.
 streamDeck.actions.registerAction(new InkColorDialAction());
 streamDeck.actions.registerAction(new InkThicknessDialAction());
+streamDeck.actions.registerAction(new SlideCurrentDialAction());
+streamDeck.actions.registerAction(new SlideNextDialAction());
 
 bridge.start();
 profileSwitcher.start();
