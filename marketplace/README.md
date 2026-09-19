@@ -137,7 +137,25 @@ The first-release notes are kept further down for reference only — they descri
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
 
-### Version 1.8.2 — the notes for this submission
+### Version 1.8.3 — the notes for this submission
+
+Submitted after 1.8.2 is live, so these describe only what changed on top of
+it. Everything about PowerPoint Live and the profiles is in the 1.8.2 notes
+below, which is what people will already have.
+
+```
+Matches the icon shown on this page.
+
+The plugin icon inside Stream Deck was still the one from before PowerPoint Live, so this page and the installed plugin showed different marks. Both are now drawn from the same source and cannot drift apart again.
+
+The plugin's own description, which Stream Deck shows and search engines index, now mentions PowerPoint Live instead of describing a meetings-only plugin.
+
+No keys changed, and nothing about how the plugin works changed.
+```
+
+473 characters.
+
+### Version 1.8.2 — submitted, in review
 
 Marketplace shows plain text, so this is the GitHub release rewritten for
 someone who has the plugin installed but has never read a commit.
