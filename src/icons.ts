@@ -97,6 +97,19 @@ export function toDataUri(svg: string): string {
 	return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
+/**
+ * Encodes an SVG for a touch-strip `pixmap`.
+ *
+ * Base64, not the percent-encoded form {@link toDataUri} produces. setImage
+ * accepts either, so the keys never cared; a pixmap takes only base64 and
+ * silently draws nothing when handed the other, with no error anywhere - the
+ * strip simply stays dark while every call reports success.
+ */
+export function toPixmap(svg: string): string {
+	if (svg.startsWith("data:")) return svg;
+	return `data:image/svg+xml;base64,${Buffer.from(svg, "utf8").toString("base64")}`;
+}
+
 /** Renders a monochrome control glyph in the given tone. */
 export function renderGlyph(key: string, tone: Tone): string {
 	const def = CONTROL_GLYPHS[key];

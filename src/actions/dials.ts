@@ -28,7 +28,7 @@ import streamDeck from "@elgato/streamdeck";
 import type { JsonObject } from "@elgato/utils";
 
 import { bridge, type TeamsState } from "../bridge";
-import { renderInkColor, renderInkThickness, renderStripIdle, toDataUri, toolColor } from "../icons";
+import { renderInkColor, renderInkThickness, renderStripIdle, toPixmap, toolColor } from "../icons";
 import { pptLive } from "./powerpoint";
 
 const logger = streamDeck.logger.createScope("Dial");
@@ -70,7 +70,7 @@ export abstract class TeamsDialAction<T extends JsonObject = JsonObject> extends
 
 		const layout = this.layout();
 		const dial = ev.action;
-		logger.info(`${this.manifestId ?? "dial"} appeared on ${dial.id}, layout ${layout ?? "(manifest)"}`);
+		logger.debug(`${this.manifestId ?? "dial"} appeared on ${dial.id}, layout ${layout ?? "(manifest)"}`);
 		if (layout === undefined) {
 			void this.#paint(dial, bridge.state);
 			return;
@@ -196,6 +196,15 @@ const INK_TOOLS = ["ppt-cursor", "ppt-laser", "ppt-pen", "ppt-highlighter", "ppt
 const HAS_COLOR = new Set(["ppt-laser", "ppt-pen", "ppt-highlighter"]);
 const HAS_THICKNESS = new Set(["ppt-pen", "ppt-highlighter"]);
 
+/** How each tool is named on the strip when it has nothing to offer a dial. */
+const TOOL_LABEL: Record<string, string> = {
+	"ppt-cursor": "Cursor",
+	"ppt-laser": "Laser",
+	"ppt-pen": "Pen",
+	"ppt-highlighter": "Highlighter",
+	"ppt-eraser": "Eraser"
+};
+
 /** Teams' own range for the ink thickness slider. */
 const THICKNESS_MIN = 1;
 const THICKNESS_MAX = 6;
@@ -270,24 +279,35 @@ abstract class InkDialAction extends TeamsDialAction {
 		return INK_LAYOUT;
 	}
 
-	/** The tool the slot is about: the live one, or the last one it was about. */
+	/**
+	 * The tool the slot is about, or undefined when it has nothing to show.
+	 *
+	 * Knowing the selected tool has no thickness is not the same as not
+	 * knowing what is selected. The laser has a color and no thickness, and the
+	 * cursor has neither, so those dials go quiet rather than showing some
+	 * other tool's setting and inviting a turn that would do nothing.
+	 *
+	 * Reporting nothing at all is the other case: Teams unmounts the whole
+	 * slide-show subtree while any flyout is open, and the slot should hold
+	 * what it was showing instead of blinking out every time one opens.
+	 */
 	protected displayTool(state: TeamsState): string | undefined {
 		const active = activeInkTool(state);
-		if (active !== null && this.capable(active)) {
+		if (active !== null) {
+			if (!this.capable(active)) return undefined;
 			this.#lastTool = active;
 			return active;
 		}
-		if (this.#lastTool !== undefined) return this.#lastTool;
+		return this.#lastTool;
+	}
 
-		// Nothing this dial can act on has been selected yet, which is the
-		// normal way a meeting starts - the cursor is the default tool. Show
-		// whichever capable tool Teams has already reported a value for, so the
-		// slot arrives with the real setting on it instead of waiting for the
-		// user to go and pick a pen first.
-		for (const tool of INK_TOOLS) {
-			if (this.capable(tool) && this.reported(state, tool) !== "") return tool;
-		}
-		return undefined;
+	/** Why the slot has nothing to show, in the user's terms. */
+	protected idleReason(state: TeamsState): string {
+		if (!pptLive(state)) return "no deck";
+
+		const active = activeInkTool(state);
+		if (active === null) return "no pen selected";
+		return `${TOOL_LABEL[active] ?? "this tool"} has none`;
 	}
 
 	/** True when a turn would actually reach Teams right now. */
@@ -433,7 +453,7 @@ export class InkThicknessDialAction extends InkDialAction {
 		const tool = this.displayTool(state);
 		if (tool === undefined) {
 			return {
-				canvas: toDataUri(renderStripIdle("Thickness", pptLive(state) ? "no pen selected" : "no deck"))
+				canvas: toPixmap(renderStripIdle("Thickness", this.idleReason(state)))
 			};
 		}
 
@@ -444,7 +464,7 @@ export class InkThicknessDialAction extends InkDialAction {
 		const color = dialledColor.get(tool) ?? state.context[`ppt.color.${tool}`];
 
 		return {
-			canvas: toDataUri(
+			canvas: toPixmap(
 				renderInkThickness(
 					toolColor(tool, color),
 					Number.isFinite(value) ? value : THICKNESS_MIN,
@@ -530,7 +550,7 @@ export class InkColorDialAction extends InkDialAction {
 		const tool = this.displayTool(state);
 		if (tool === undefined) {
 			return {
-				canvas: toDataUri(renderStripIdle("Ink color", pptLive(state) ? "no pen selected" : "no deck"))
+				canvas: toPixmap(renderStripIdle("Ink color", this.idleReason(state)))
 			};
 		}
 
@@ -539,7 +559,7 @@ export class InkColorDialAction extends InkDialAction {
 		// the slot keeps the color Teams last reported.
 		const name = shown.startsWith(BLIND) ? this.reported(state, tool) : shown;
 
-		return { canvas: toDataUri(renderInkColor(toolColor(tool, name), name)) };
+		return { canvas: toPixmap(renderInkColor(toolColor(tool, name), name)) };
 	}
 
 	protected override claim(tool: string, value: string): void {
