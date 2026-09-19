@@ -80,7 +80,13 @@ describe("the bundled profiles", () => {
 
 	const bases = [MEETING, ATTENDEE, PRESENTER];
 	const bundled = DECKS.flatMap((deck) =>
-		bases.map((base) => ({ deck, base, name: `profiles/${base}${deck.suffix}` }))
+		bases.map((base) => {
+			// Asked for rather than rebuilt here: a layout revision changes the
+			// file name, and the resolver is what the plugin itself uses.
+			const name = profilePath(base, deck.deviceType as DeviceType);
+			expect(name, `${base} has no profile for a ${deck.label}`).not.toBeNull();
+			return { deck, base, name: name! };
+		})
 	);
 
 	/** The page holding this plugin's keys, as Stream Deck stores it. */
@@ -230,10 +236,12 @@ describe("the bundled profiles", () => {
 				.sort()
 				.join(" ");
 
-		const reference = meetingHalf(`profiles/${MEETING} (+ XL)`);
+		const xl = (base: string) => profilePath(base, DeviceType.StreamDeckPlusXL)!;
+
+		const reference = meetingHalf(xl(MEETING));
 		expect(reference).not.toBe("");
 		for (const base of [ATTENDEE, PRESENTER]) {
-			expect(meetingHalf(`profiles/${base} (+ XL)`), `${base} moved the meeting keys`).toBe(reference);
+			expect(meetingHalf(xl(base)), `${base} moved the meeting keys`).toBe(reference);
 		}
 	});
 });
@@ -244,9 +252,31 @@ describe("picking the file for a deck", () => {
 	});
 
 	it("uses the suffixed files for the + XL", () => {
-		expect(profilePath(PRESENTER, DeviceType.StreamDeckPlusXL)).toBe(
-			"profiles/PowerPoint Live (Presenter) (+ XL)"
+		expect(profilePath(ATTENDEE, DeviceType.StreamDeckPlusXL)).toBe(
+			"profiles/PowerPoint Live (Attendee) (+ XL)"
 		);
+	});
+
+	it("follows a layout revision rather than assuming the original file", () => {
+		// Stream Deck installs a bundled profile once and never revisits it, so
+		// a changed layout ships under a new file name. Working the name out
+		// from the base would quietly keep asking for the retired one, and a
+		// switch to a profile that is not declared is accepted and does
+		// nothing - which is exactly how it fails in the wild.
+		const manifest = JSON.parse(
+			readFileSync(path.join("com.bad-duck.teamscontrol.sdPlugin", "manifest.json"), "utf8")
+		) as { Profiles: { Name: string; DeviceType: number }[] };
+
+		for (const base of [MEETING, ATTENDEE, PRESENTER]) {
+			for (const device of [DeviceType.StreamDeck, DeviceType.StreamDeckPlusXL]) {
+				const resolved = profilePath(base, device);
+				expect(resolved, `${base} on ${device} resolved to nothing`).not.toBeNull();
+				expect(
+					manifest.Profiles.some((p) => p.Name === resolved && p.DeviceType === device),
+					`${resolved} is not declared in the manifest`
+				).toBe(true);
+			}
+		}
 	});
 
 	it("leaves a deck with no bundled layout alone", () => {

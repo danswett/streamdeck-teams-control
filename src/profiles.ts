@@ -14,6 +14,9 @@
  * tools/build-profile.ts exists; a user-made profile cannot be targeted.
  */
 import streamDeck, { DeviceType } from "@elgato/streamdeck";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { bridge, type TeamsState } from "./bridge";
 
@@ -43,10 +46,52 @@ const SUPPORTED = new Map<DeviceType, string>([
 	[DeviceType.StreamDeckPlusXL, " (+ XL)"]
 ]);
 
+/**
+ * The profiles the manifest declares, which is the authority on where a layout
+ * actually lives.
+ *
+ * Stream Deck installs a bundled profile once and never revisits it, so
+ * tools/build-profile.ts appends a revision to the file name when a layout
+ * changes - a path it has not seen is the only thing it treats as new. Working
+ * the path out here as well would mean two places that have to agree about
+ * which revision shipped, and the failure when they disagree is silent: the
+ * switch is accepted and simply does nothing.
+ */
+const declared = readDeclaredProfiles();
+
+function readDeclaredProfiles(): { Name: string; DeviceType: number }[] {
+	const here = path.dirname(fileURLToPath(import.meta.url));
+	const candidates = [
+		// The bundle runs from <plugin>/bin, so the manifest is one level up.
+		path.resolve(here, "..", "manifest.json"),
+		// Running from source, as the tests do.
+		path.resolve(here, "..", "com.bad-duck.teamscontrol.sdPlugin", "manifest.json")
+	];
+
+	for (const file of candidates) {
+		try {
+			const manifest = JSON.parse(readFileSync(file, "utf8")) as { Profiles?: unknown };
+			if (Array.isArray(manifest.Profiles)) {
+				return manifest.Profiles as { Name: string; DeviceType: number }[];
+			}
+		} catch {
+			// Try the next one; a missing manifest is only fatal if none resolve.
+		}
+	}
+
+	logger.error("Could not read the manifest; meeting profiles will not switch");
+	return [];
+}
 /** Where a profile lives for a given deck, or null if that deck has no layout. */
 export function profilePath(base: string, device: DeviceType): string | null {
 	const suffix = SUPPORTED.get(device);
-	return suffix === undefined ? null : `profiles/${base}${suffix}`;
+	if (suffix === undefined) return null;
+
+	const unrevised = `profiles/${base}${suffix}`;
+	const match = declared.find(
+		(p) => p.DeviceType === device && (p.Name === unrevised || p.Name.startsWith(`${unrevised} r`))
+	);
+	return match?.Name ?? null;
 }
 
 /**
@@ -98,6 +143,10 @@ class ProfileSwitcher {
 	#queue: Promise<void> = Promise.resolve();
 
 	start(): void {
+		logger.debug(
+			`Declared profiles: ${declared.length ? declared.map((p) => p.Name).join(", ") : "(none found)"}`
+		);
+
 		void streamDeck.settings.getGlobalSettings<ProfileSettings>().then((s) => {
 			this.#enabled = s.pptAutoProfile ?? false;
 			// The meeting may already be under way when the plugin starts, in

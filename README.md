@@ -170,6 +170,47 @@ attempt shipped 2.0, which Stream Deck offered to install and then silently
 ignored. A deck with dials also needs an `Encoder` controller in every page,
 even an empty one, which is the same class of quiet failure.
 
+##### Shipping a changed layout
+
+**Stream Deck installs a bundled profile once and never looks at the shipped
+copy again.** Change a layout, publish the update, and every existing user
+stays on the old one — the switch still succeeds, so nothing is reported
+anywhere. It was found only by noticing that a + XL was sitting on a profile
+whose `Encoder` controller was `null` long after dials had been added.
+
+It identifies an installed profile by the plugin that installed it and the
+**path** it came from, which it writes into the installed copy's
+`PreconfiguredName`. A path it has not seen is the only thing it treats as new.
+
+So a profile carries a `revision`, and `tools/build-profile.ts` appends it to
+the file name once it is above 1:
+
+```ts
+{
+    name: "PowerPoint Live (Presenter)",
+    device: PLUS_XL,
+    revision: 2,          // -> profiles/PowerPoint Live (Presenter) (+ XL) r2
+    ...
+}
+```
+
+**Bump it whenever keys or dials move.** The profile's own name is left alone,
+so the revision never reaches the user; only the file changes. Their previous
+copy stays behind as an ordinary profile they can delete, because a plugin
+cannot remove one.
+
+The manifest's `Profiles` list is written by the same tool, so the declared
+path and the file on disk cannot drift apart, and `src/profiles.ts` reads the
+path back out of the manifest rather than rebuilding it — two places deciding
+which revision shipped is exactly the disagreement this is meant to prevent.
+
+Verified end to end: bumping a revision produced
+`Profile profiles/PowerPoint Live (Presenter) (+ XL) r2 installed for
+@(1)[4057/198/...]` in Stream Deck's log, and the new layout appeared. Note
+that Stream Deck re-reads the manifest when the **application** starts, not
+when plugin files change on disk, so a development install needs the app
+restarting before a newly declared profile is noticed.
+
 `tools/check-profile.mjs` compares a generated profile against one Stream Deck
 wrote itself for the same model, which is the only way to catch a profile that
 is almost right:

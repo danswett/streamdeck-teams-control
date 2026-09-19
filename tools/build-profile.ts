@@ -25,7 +25,7 @@
  * Run with: node tools/build-profile.ts
  */
 import { createHash } from "node:crypto";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -86,6 +86,23 @@ type Profile = {
 	device: Device;
 	uuid: string;
 	page: string;
+	/**
+	 * Layout revision, appended to the file name when above 1.
+	 *
+	 * Stream Deck installs a bundled profile the first time it is switched to
+	 * and never looks at the shipped copy again: changing the layout and
+	 * updating the plugin leaves every existing user on the old one, with
+	 * nothing reported anywhere. It identifies an installed profile by the
+	 * plugin that installed it and the path it came from - the path is written
+	 * into the installed copy's PreconfiguredName, which is how this was
+	 * established - so a changed path is the only thing it treats as new.
+	 *
+	 * Bump this whenever keys or dials move. The profile's own name is left
+	 * alone, so the revision is invisible to the user; only the file changes.
+	 * The previous copy stays on their machine as an ordinary profile they can
+	 * delete, because a plugin cannot remove one.
+	 */
+	revision?: number;
 	layout: Layout;
 	/** Dials, addressed "0,0".."N,0". Only meaningful on a deck that has them. */
 	dials?: Layout;
@@ -364,6 +381,9 @@ function place(layout: Layout, title: string, controller: string, limit: (c: num
 
 const outDir = path.join(PLUGIN_DIR, "profiles");
 
+/** What the manifest will declare, collected as each profile is written. */
+const registered: object[] = [];
+
 /** Fixed timestamp for every zip entry, so a rebuild is byte-for-byte stable. */
 const EPOCH = new Date(Date.UTC(2020, 0, 1, 0, 0, 0));
 
@@ -375,6 +395,8 @@ for (const profile of PROFILES) {
 	// The 15-key files shipped before there was a second deck, so its suffix is
 	// empty and its ids keep hashing to exactly what is already installed.
 	const title = `${profile.name}${device.suffix}`;
+	// What the user sees stays clean; only the file carries the revision.
+	const file = (profile.revision ?? 1) > 1 ? `${title} r${profile.revision}` : title;
 	const defaultPage = `${profile.page.slice(0, -1)}f`;
 
 	const actions = place(profile.layout, title, "Keypad", (c, r) =>
@@ -418,7 +440,7 @@ for (const profile of PROFILES) {
 	);
 	writeFileSync(path.join(defaultDir, "manifest.json"), JSON.stringify(emptyPage(device)), "utf8");
 
-	const out = path.join(outDir, `${title}.streamDeckProfile`);
+	const out = path.join(outDir, `${file}.streamDeckProfile`);
 	const zip = new AdmZip();
 	zip.addLocalFolder(profileDir, `${profile.uuid}.sdProfile`);
 
@@ -438,6 +460,32 @@ for (const profile of PROFILES) {
 		`${path.relative(ROOT, out)}  (${Object.keys(profile.layout).length} keys` +
 			`${dialCount ? `, ${dialCount} dials` : ""})`
 	);
+
+	registered.push({
+		Name: `profiles/${file}`,
+		DeviceType: device.deviceType,
+		Readonly: false,
+		DontAutoSwitchWhenInstalled: true
+	});
 }
 
 rmSync(path.join(ROOT, "node_modules", ".cache", "sdprofile"), { recursive: true, force: true });
+
+/*
+	The manifest's list is written from the same source that built the files,
+	rather than kept in step by hand. The path in the manifest is the profile's
+	identity to Stream Deck, and a path that names a file which is not there
+	installs nothing and says nothing - so the two must not be able to disagree.
+*/
+const manifestPath = path.join(PLUGIN_DIR, "manifest.json");
+const raw = readFileSync(manifestPath, "utf8");
+const manifest = JSON.parse(raw) as { Profiles: unknown[] };
+
+const before = JSON.stringify(manifest.Profiles);
+manifest.Profiles = registered;
+
+if (JSON.stringify(registered) !== before) {
+	// Tabs and whatever ending the file already has, matching order-actions.ts.
+	writeFileSync(manifestPath, JSON.stringify(manifest, null, "\t") + (raw.endsWith("\n") ? "\n" : ""), "utf8");
+	console.log(`\nmanifest.json: ${registered.length} profiles registered`);
+}
