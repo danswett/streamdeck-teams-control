@@ -79,6 +79,9 @@ class ProfileSwitcher {
 	start(): void {
 		void streamDeck.settings.getGlobalSettings<ProfileSettings>().then((s) => {
 			this.#enabled = s.pptAutoProfile ?? false;
+			// The meeting may already be under way when the plugin starts, in
+			// which case no state change is coming to act on.
+			this.#apply();
 		});
 
 		streamDeck.settings.onDidReceiveGlobalSettings<ProfileSettings>((ev) => {
@@ -91,9 +94,26 @@ class ProfileSwitcher {
 			// Turned off while it had the deck: give the profile back rather
 			// than stranding the user on a layout they just disabled.
 			if (!enabled) void this.#restoreAll();
+			// Turned on mid-meeting: act now rather than waiting for the next
+			// thing to happen in Teams, which may be minutes away.
+			else this.#apply();
 		});
 
+		/*
+			A deck that arrives after the last state change would otherwise
+			never be given a profile. Nothing re-evaluates on its own: the
+			sidecar only reports when something in Teams changes, so a Stream
+			Deck restarted mid-presentation sat on the wrong profile until the
+			presenter happened to do something.
+		*/
+		streamDeck.devices.onDeviceDidConnect(() => this.#apply());
+
 		bridge.subscribe((state) => this.#onState(state));
+	}
+
+	/** Re-evaluates against the state already in hand. */
+	#apply(): void {
+		this.#onState(bridge.state);
 	}
 
 	#onState(state: TeamsState): void {
