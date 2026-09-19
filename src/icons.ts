@@ -566,7 +566,67 @@ function wrapText(text: string, size: number, maxWidth: number, maxLines: number
 /** The widest a caption may be before it starts touching the edge of the slot. */
 const STRIP_TEXT_WIDTH = 186;
 
-/** A dial with nothing to act on: says so, centred, rather than going blank. */
+/**
+ * The next slide by name, for when there is no picture of it to show.
+ *
+ * Teams scrolls the filmstrip so the current slide sits at its trailing edge,
+ * so a presenter moving forward never has the next slide drawn anywhere on
+ * screen - there are no pixels to capture, and no amount of waiting produces
+ * any. The name is in the accessibility tree either way, so the slot says what
+ * is coming rather than going blank.
+ *
+ * Drawn as a slide rather than as a caption: a thin frame and a title, so it
+ * reads as the same kind of thing as the thumbnail it stands in for.
+ */
+export function renderStripNext(title: string, label = "NEXT"): string {
+	const text = title.trim();
+
+	// Three lines is most of the slot, so it steps down rather than truncating
+	// - a slide called "Questions?" and one called "Tea Brewing Techniques and
+	// Pairings" both have to land inside the frame.
+	const width = 164;
+	// Fitted against the height as well as the width. Wrapping alone chose a
+	// size that fitted across and then ran three lines of it up into the label
+	// above, so the band below that label is part of the constraint.
+	const band = 50;
+	let size = 20;
+	let lines: string[] | null = null;
+
+	for (const candidate of [20, 18, 16, 14, 12]) {
+		const wrapped = wrapText(text, candidate, width, 3);
+		if (wrapped === null) continue;
+
+		const height = wrapped.length * candidate + (wrapped.length - 1) * 3;
+		if (height > band) continue;
+
+		size = candidate;
+		lines = wrapped;
+		break;
+	}
+	lines ??= [text];
+
+	const step = size + 3;
+	const first = 40 + size + (band - (lines.length * size + (lines.length - 1) * 3)) / 2;
+	const body = lines
+		.map(
+			(line, i) =>
+				`<text x="100" y="${first + i * step}" text-anchor="middle" ` +
+				`font-family="Segoe UI, system-ui, sans-serif" font-size="${size}" ` +
+				`font-weight="600" fill="#E8E8EC">${escapeText(line)}</text>`
+		)
+		.join("");
+
+	return strip(
+		// A slide-shaped frame, so the slot still reads as a slide rather than
+		// as an error message. Deliberately not the red Teams draws around the
+		// live slide: this is the one after it.
+		`<rect x="8" y="8" width="184" height="84" rx="5" fill="#1B1B1F" ` +
+			`stroke="#3A3A42" stroke-width="1.5" />` +
+			`<text x="100" y="30" text-anchor="middle" font-family="Segoe UI, system-ui, sans-serif" ` +
+			`font-size="12" font-weight="700" letter-spacing="1.6" fill="#7E7E88">${escapeText(label)}</text>` +
+			body
+	);
+}
 export function renderStripIdle(label: string, detail: string): string {
 	// Stepped down and wrapped rather than trusted to fit. These captions carry
 	// whatever reason the sidecar gave, so their length is not knowable here.

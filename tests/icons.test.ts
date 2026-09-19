@@ -15,6 +15,7 @@ import {
 	renderReactionFrame,
 	renderSimple,
 	renderStripIdle,
+	renderStripNext,
 	renderToggle,
 	renderTool,
 	toDataUri,
@@ -488,5 +489,49 @@ describe("touch-strip captions", () => {
 	it("leaves a caption that already fits on one line", () => {
 		const svg = renderStripIdle("Next slide", "scrolled out of view");
 		expect((svg.match(/<text/g) ?? []).length).toBe(2);
+	});
+});
+
+describe("next-slide title cards", () => {
+	// Real slide names from the test deck, plus the shapes that break layout:
+	// one word, one very long word, and a title that needs all three lines.
+	const TITLES = [
+		"Tea Temperature",
+		"Conclusion",
+		"Questions?",
+		"Welcome to Blissful Brews",
+		"Hibiscus Flower and Lavender Tea",
+		"Tea Brewing Techniques and Pairings",
+		"Internationalisation",
+		"A",
+		"Q4 FY26 Revenue Attainment by Segment and Region"
+	];
+
+	it.each(TITLES)("fits %s inside the slot", (title) => {
+		const svg = renderStripNext(title);
+		expectSvg(svg);
+
+		const box = inkBox(svg);
+		expect(box.right).toBeGreaterThan(0);
+		expect(box.left).toBeGreaterThanOrEqual(1);
+		expect(box.right).toBeLessThanOrEqual(198);
+		expect(box.top).toBeGreaterThanOrEqual(1);
+		expect(box.bottom).toBeLessThanOrEqual(98);
+	});
+
+	it("keeps the title clear of the label above it", () => {
+		// Three lines at the largest size used to run up into "NEXT".
+		const svg = renderStripNext("Tea Brewing Techniques and Pairings");
+		const ys = [...svg.matchAll(/<text[^>]*y="([\d.]+)"/g)].map((m) => Number(m[1]));
+
+		// First is the label; every title line sits below it with room to spare.
+		const [label, ...body] = ys;
+		expect(body.length).toBeGreaterThan(1);
+		for (const y of body) expect(y).toBeGreaterThan(label + 8);
+	});
+
+	it("says whose slide it is", () => {
+		expect(renderStripNext("Conclusion")).toContain(">NEXT<");
+		expect(renderStripNext("Conclusion", "NOW")).toContain(">NOW<");
 	});
 });

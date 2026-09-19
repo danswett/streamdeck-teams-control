@@ -29,7 +29,7 @@ import streamDeck from "@elgato/streamdeck";
 import type { JsonObject } from "@elgato/utils";
 
 import { bridge, type TeamsState } from "../bridge";
-import { renderInkColor, renderInkThickness, renderStripIdle, toPixmap, toolColor } from "../icons";
+import { renderInkColor, renderInkThickness, renderStripIdle, renderStripNext, toPixmap, toolColor } from "../icons";
 import { pptLive } from "./powerpoint";
 
 const logger = streamDeck.logger.createScope("Dial");
@@ -726,6 +726,9 @@ abstract class SlideThumbDialAction extends TeamsDialAction<ThumbSettings & Json
 	/** Why there is no picture, when the sidecar gave a reason worth showing. */
 	#reason: string | undefined;
 
+	/** The slide's name, shown when there is no picture of it to be had. */
+	#slideName: string | undefined;
+
 	/** The slide a pending capture should be labelled with. */
 	#wanted: string | undefined;
 
@@ -774,8 +777,7 @@ abstract class SlideThumbDialAction extends TeamsDialAction<ThumbSettings & Json
 
 		this.#wanted = undefined;
 		this.#image = undefined;
-		this.#capturedAt = undefined;
-		this.#failedAt = undefined;
+		this.#slideName = undefined;
 
 		// The sidecar keeps the last frame to fade out of, so ask it to drop
 		// that too rather than leaving a slide resident in a process that
@@ -817,6 +819,12 @@ abstract class SlideThumbDialAction extends TeamsDialAction<ThumbSettings & Json
 
 		if (this.#ended) return { canvas: toPixmap(renderStripIdle("End of show", "no slide after this one")) };
 
+		// No picture, but a name. The ordinary case for the next slide once the
+		// filmstrip has scrolled past it.
+		if (this.#slideName !== undefined) {
+			return { canvas: toPixmap(renderStripNext(this.#slideName, this.which === "next" ? "NEXT" : "NOW")) };
+		}
+
 		return {
 			canvas: toPixmap(
 				renderStripIdle(
@@ -851,6 +859,7 @@ abstract class SlideThumbDialAction extends TeamsDialAction<ThumbSettings & Json
 			this.#capturedAt = undefined;
 			this.#failedAt = undefined;
 			this.#wanted = undefined;
+			this.#slideName = undefined;
 			this.#ended = false;
 			this.#reason = undefined;
 			if (had) bridge.forget(this.which);
@@ -982,13 +991,23 @@ abstract class SlideThumbDialAction extends TeamsDialAction<ThumbSettings & Json
 				if (moved) {
 					this.#image = undefined;
 					this.#reason = shot.error;
+					this.#slideName = shot.name;
+
+					// A name without a picture is the ordinary case for the
+					// next slide, not a failure: it is off the end of the
+					// filmstrip and will not come back into view by waiting. So
+					// the position counts as drawn, and nothing retries it.
+					if (this.#slideName !== undefined) this.#capturedAt = at;
+
 					this.repaintAll();
 				}
 
-				// Remembered so the next snapshot does not immediately ask
-				// again; the slide is retried, just not on every tick.
-				this.#failedAt = at;
-				this.#failedWhen = Date.now();
+				if (this.#slideName === undefined) {
+					// Remembered so the next snapshot does not immediately ask
+					// again; the slide is retried, just not on every tick.
+					this.#failedAt = at;
+					this.#failedWhen = Date.now();
+				}
 				logger.debug(`${this.which} slide: ${shot.error ?? "no image"}`);
 				return;
 			}
@@ -996,6 +1015,7 @@ abstract class SlideThumbDialAction extends TeamsDialAction<ThumbSettings & Json
 			this.#failedAt = undefined;
 			this.#ended = false;
 			this.#reason = undefined;
+			this.#slideName = undefined;
 			this.#capturedAt = at;
 
 			// An unchanged slide is the common case when polling, and repainting

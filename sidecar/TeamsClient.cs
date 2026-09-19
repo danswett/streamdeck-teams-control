@@ -1753,27 +1753,35 @@ public sealed class TeamsClient : IDisposable
 
             var target = strip[at + 1];
 
-            // Off the end of the visible strip: the rectangle would still be
-            // reported, but what is at those coordinates on screen is something
-            // else entirely, and a thumbnail of the wrong thing is worse than none.
+            /*
+                Teams scrolls the filmstrip so the current slide sits at its
+                trailing edge, which means a presenter moving forward never has
+                the next slide drawn anywhere - it is always just past the end
+                of the strip. There is nothing to capture and no amount of
+                waiting produces anything.
+
+                So the name goes back even when the picture cannot, and the slot
+                shows what is coming rather than an apology. The name is in the
+                tree whatever the scroll position.
+            */
             try
             {
                 if (target.Properties.IsOffscreen.ValueOrDefault)
-                    return (false, "scrolled out of view", null, null, false, none);
+                    return (false, "scrolled out of view", null, NameOf(target), false, none);
             }
             catch { }
 
             try
             {
                 var r = target.BoundingRectangle;
-                if (r.Width <= 0 || r.Height <= 0) return (false, "slide has no size", null, null, false, none);
+                if (r.Width <= 0 || r.Height <= 0) return (false, "slide has no size", null, NameOf(target), false, none);
                 rect = new System.Drawing.Rectangle((int)r.X, (int)r.Y, (int)r.Width, (int)r.Height);
             }
             catch { return (false, "could not measure it", null, null, false, none); }
 
             // Partly scrolled counts as out of view too; see VisiblePart.
             var shown = VisiblePart(target, rect);
-            if (shown is null) return (false, "scrolled out of view", null, null, false, none);
+            if (shown is null) return (false, "scrolled out of view", null, NameOf(target), false, none);
             rect = shown.Value;
 
             name = NameOf(target);
