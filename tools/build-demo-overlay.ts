@@ -28,8 +28,10 @@ import { Resvg } from "@resvg/resvg-js";
 import {
 	renderEmoji,
 	renderGlyph,
+	renderHandFrame,
 	renderLabelled,
 	renderReaction,
+	renderReactionFrame,
 	renderSimple,
 	renderToggle,
 	renderTool
@@ -38,9 +40,23 @@ import {
 const args = process.argv.slice(2);
 const endFlag = args.indexOf("--end");
 const END = endFlag > -1 ? Number(args[endFlag + 1]) : Infinity;
-// The value after --end is not a positional; without this it is taken as the
+const logFlag = args.indexOf("--log");
+const LOG =
+	logFlag > -1
+		? args[logFlag + 1]
+		: path.join(
+				process.env.APPDATA ?? "",
+				"Elgato",
+				"StreamDeck",
+				"Plugins",
+				"com.bad-duck.teamscontrol.sdPlugin",
+				"logs",
+				"com.bad-duck.teamscontrol.0.log"
+			);
+// Values after a flag are not positionals; without this they are taken as the
 // output directory and the frames land in a folder called "104".
-const positional = args.filter((a, i) => !a.startsWith("--") && i !== endFlag + 1);
+const skip = new Set([endFlag + 1, logFlag + 1].filter((i) => i > 0));
+const positional = args.filter((a, i) => !a.startsWith("--") && !skip.has(i));
 
 const CAPTURE = path.resolve(positional[0] ?? "");
 const OUT = path.resolve(positional[1] ?? path.join(CAPTURE, "overlay"));
@@ -81,6 +97,33 @@ for (const line of readText(path.join(CAPTURE, "states.jsonl")).split(/\r?\n/)) 
 	});
 }
 raw.sort((a, b) => a.at - b.at);
+
+/**
+ * Presses, from the plugin's own log.
+ *
+ * This is the part a state stream cannot supply. A snapshot says what Teams
+ * looks like, which is identical whether the deck did it or the user clicked
+ * in Teams directly - so flashing on state change lit keys up for things the
+ * deck never touched. The sidecar logs each invoke it receives, and the plugin
+ * writes its stderr to this log, so these are presses and nothing else.
+ */
+type Press = { at: number; target: string };
+const presses: Press[] = [];
+if (existsSync(LOG)) {
+	// The plugin logs each press it sends. Matched on the plugin's own scope
+	// rather than the sidecar's, because the sidecar exe could not be replaced
+	// while Stream Deck held it open - and the plugin is the better source
+	// anyway: it is the thing the key was pressed on.
+	const rx = /^(\S+)\s+INFO\s+Action: press (\S+)\s*$/;
+	for (const line of readText(LOG).split(/\r?\n/)) {
+		const m = rx.exec(line);
+		if (!m) continue;
+		const at = (Date.parse(m[1]) - t0) / 1000;
+		if (at < -1 || at > meta.seconds + 1) continue;
+		presses.push({ at, target: m[2] });
+	}
+}
+console.log(`${presses.length} presses from the plugin log`);
 
 const KEY = 96;
 const GAP = 12;
@@ -158,7 +201,7 @@ function cells(s: Snap): Cell[] {
 	if (s.context["ppt.role"] === "attendee") {
 		return [
 			...nav,
-			{ id: "ppt-contrast", svg: renderSimple("pptContrast", true) },
+			{ id: "ppt-high-contrast", svg: renderSimple("pptContrast", true) },
 			{ id: "ppt-sync", svg: renderSimple("pptSync", true) },
 			{ id: "ppt-popout", svg: renderSimple("pptPopout", true) },
 			{ id: "ppt-take-control", svg: renderSimple("pptTakeControl", true) },
@@ -182,46 +225,59 @@ function cells(s: Snap): Cell[] {
 		{ id: "ppt-eraser", svg: toolArt("ppt-eraser", on("ppt-eraser"), col("ppt-eraser")) },
 		mic,
 		cam,
-		{ id: "ppt-presenter-view", svg: renderGlyph("pptHidePresenterView", "on") },
+		{ id: "ppt-hide-presenter-view", svg: renderGlyph("pptHidePresenterView", "on") },
 		{ id: "ppt-private-view", svg: renderGlyph("pptPrivateView", "on") },
-		{ id: "ppt-stop", svg: renderSimple("pptStopPresenting", true, "danger") }
+		{ id: "ppt-stop-presenting", svg: renderSimple("pptStopPresenting", true, "danger") }
 	];
 }
 
 /** Everything the overlay draws, so two snapshots can be compared. */
 const shape = (s: Snap) => JSON.stringify(cells(s).map((c) => (c ? [c.id, c.svg] : null)));
 
-// Collapse repeats, then move each change back to the midpoint of the window
-// it could have happened in.
+// Collapse repeats, then decide when each change actually happened.
 const snaps: Snap[] = [];
 for (const s of raw) {
 	const last = snaps.at(-1);
 	if (last && shape(last) === shape(s)) continue;
 	if (last) {
 		const missed = raw.filter((r) => r.at < s.at).at(-1)?.at ?? last.at;
-		s.at = Math.max(last.at, (missed + s.at) / 2);
+		// A press is the moment the change was made, so anchor to it when one
+		// sits in the window this change could have come from. Otherwise the
+		// change was made in Teams directly and the midpoint is the best guess
+		// available - it halves the error rather than always erring late.
+		const cause = presses.filter((p) => p.at > last.at && p.at <= s.at).at(-1);
+		s.at = cause ? Math.min(s.at, cause.at + 0.12) : Math.max(last.at, (missed + s.at) / 2);
 	}
 	snaps.push(s);
 }
 console.log(`${raw.length} snapshots -> ${snaps.length} distinct states`);
 
-/** Which keys changed between two states, so they can be flashed. */
-function changed(a: Snap | undefined, b: Snap): Set<string> {
+const FLASH = 0.4;
+
+/** Keys to light at this instant: presses only, never state changes. */
+function litAt(t: number): Set<string> {
 	const out = new Set<string>();
-	if (!a) return out;
-	const ca = cells(a);
-	const cb = cells(b);
-	// A layout swap is not a press; flashing the whole deck would be noise.
-	if (ca.length !== cb.length || ca.some((c, i) => c?.id !== cb[i]?.id)) return out;
-	cb.forEach((c, i) => {
-		if (c && ca[i] && ca[i]!.svg !== c.svg) out.add(c.id);
-	});
+	for (const p of presses) if (t >= p.at && t - p.at < FLASH) out.add(p.target);
 	return out;
 }
 
-const FLASH = 0.45;
+/**
+ * Reactions and raise hand animate on the key when pressed, the way they do in
+ * Teams - the plugin plays 620ms of frames. Teams itself only floats the emoji
+ * over a video tile, so with cameras off the key is the only place the reaction
+ * is visible at all, which makes drawing it here worth the trouble.
+ */
+const ANIM_MS = 620;
+function animAt(t: number): { target: string; progress: number } | null {
+	for (const p of presses) {
+		if (!/^react-/.test(p.target) && p.target !== "hand") continue;
+		const dt = (t - p.at) * 1000;
+		if (dt >= 0 && dt < ANIM_MS) return { target: p.target, progress: Math.max(0.05, dt / ANIM_MS) };
+	}
+	return null;
+}
 
-function panel(s: Snap, flash: Set<string>): string {
+function panel(s: Snap, flash: Set<string>, anim: { target: string; progress: number } | null): string {
 	let body = `<rect x="0" y="0" width="${W}" height="${H}" rx="18" fill="#0E0E10" fill-opacity="0.92"/>`;
 	body += `<text x="${W / 2}" y="26" fill="#9A9AA2" font-family="Segoe UI, sans-serif" font-size="17" font-weight="600" text-anchor="middle" letter-spacing="1.2">STREAM DECK</text>`;
 
@@ -229,7 +285,13 @@ function panel(s: Snap, flash: Set<string>): string {
 		const x = PAD + (i % COLS) * (KEY + GAP);
 		const y = 34 + PAD + Math.floor(i / COLS) * (KEY + GAP);
 		body += `<rect x="${x}" y="${y}" width="${KEY}" height="${KEY}" rx="${KEY * 0.13}" fill="#000000"/>`;
-		if (c) body += `<g transform="translate(${x},${y}) scale(${KEY / 144})">${inner(c.svg)}</g>`;
+		const art =
+			c && anim && c.id === anim.target
+				? anim.target === "hand"
+					? renderHandFrame(anim.progress)
+					: renderReactionFrame(anim.target, anim.progress)
+				: c?.svg;
+		if (art) body += `<g transform="translate(${x},${y}) scale(${KEY / 144})">${inner(art)}</g>`;
 		if (c && flash.has(c.id)) {
 			body += `<rect x="${x}" y="${y}" width="${KEY}" height="${KEY}" rx="${KEY * 0.13}" fill="#FFFFFF" fill-opacity="0.18"/>`;
 			body += `<rect x="${x - 3}" y="${y - 3}" width="${KEY + 6}" height="${KEY + 6}" rx="${KEY * 0.15}" fill="none" stroke="#FFFFFF" stroke-width="5"/>`;
@@ -253,12 +315,13 @@ for (let f = 0; f < total; f++) {
 	const t = f / FPS;
 	while (idx + 1 < snaps.length && snaps[idx + 1].at <= t) idx++;
 	const s = snaps[idx] ?? { at: 0, inMeeting: false, states: {}, context: {} };
-	const lit = t - s.at < FLASH ? changed(snaps[idx - 1], s) : new Set<string>();
+	const lit = litAt(t);
+	const anim = animAt(t);
 
-	const key = shape(s) + "|" + [...lit].sort().join(",");
+	const key = shape(s) + "|" + [...lit].sort().join(",") + "|" + (anim ? `${anim.target}:${anim.progress.toFixed(2)}` : "");
 	let png = cache.get(key);
 	if (!png) {
-		png = new Resvg(panel(s, lit), { font: { loadSystemFonts: true } }).render().asPng();
+		png = new Resvg(panel(s, lit, anim), { font: { loadSystemFonts: true } }).render().asPng();
 		cache.set(key, png);
 		rendered++;
 	}
