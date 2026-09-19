@@ -365,12 +365,11 @@ The two slots come from different places, which is the whole point:
   not been reached has no live render to read. It is the next *slide*, not the
   next build.
 
-**There is often no picture of the next slide to be had.** Teams scrolls the
-filmstrip so the *current* slide sits at its trailing edge, so a presenter
-moving forward has the next slide permanently just past the end of the strip —
-never drawn, nothing to capture, and no amount of waiting changes that. It is
-only capturable early in a deck or after the presenter has scrolled the strip by
-hand.
+**There is often no picture of the next slide ready to hand.** Teams scrolls the
+filmstrip so the *current* slide sits at its trailing edge, so a presenter moving
+forward has the next slide permanently just past the end of the strip — never
+drawn, and nothing to capture. It is only already capturable early in a deck or
+after the presenter has scrolled the strip by hand.
 
 The name, though, is in the accessibility tree whatever the scroll position. So
 the slot falls back to the slide's title on a card rather than an apology, which
@@ -379,12 +378,24 @@ sized to fit the frame, and `tests/icons.test.ts` renders a spread of real and
 awkward slide names and fails if any ink escapes the slot or collides with the
 label above it.
 
-Bringing it into view is possible — the items carry `ScrollItem` — and
-deliberately not done. They carry `Invoke` and `SelectionItem` too, and anything
-that scrolls the strip on every slide change is one implementation detail away
-from selecting a slide instead, which would drive the presentation for everyone
-in the meeting. A title is worth less than a thumbnail and much less than that
-risk.
+Bringing it into view is possible — the items carry `ScrollItem` — and that is
+what happens. The strip is already scrolling itself on every slide change, and
+this asks for one more notch of the same thing; the presenter keeps their
+current slide on screen either way. On a fourteen-slide deck one scroll brought
+the rest of the deck into view, so it is not a scroll per slide change: the cost
+is about 1.6s once, against ~90ms for a capture that needs no scroll.
+
+`ScrollItemPattern` only scrolls — it does not select — which matters, because
+these items also carry `Invoke` and `SelectionItem`, and selecting one would
+drive the presentation for everyone in the meeting.
+`sidecar/probe-scroll-safety.ps1` is what established that: it records the
+selected slide and the live slide surface either side of a single
+`ScrollIntoView` and fails loudly if either moves. Run it again whenever Teams
+changes the filmstrip.
+
+The title card is still the fallback, because scrolling cannot always help — the
+strip may refuse, presenter view may be closed, or Teams may be minimised, which
+reports a window rectangle but declines to draw itself.
 
 A filmstrip item reports its whole rectangle whether or not it has been scrolled
 into view, and UI Automation only calls it offscreen once *none* of it is

@@ -1661,27 +1661,9 @@ public sealed class TeamsClient : IDisposable
     /// So the item is clipped to its own list. Anything much short of whole is
     /// refused rather than shown cropped: half a slide is not a useful preview,
     /// and the clipping is only there to absorb a pixel or two of rounding.
-    /// </summary>
-    private static System.Drawing.Rectangle? VisiblePart(AutomationElement item, System.Drawing.Rectangle rect)
-    {
-        System.Drawing.Rectangle view;
-        try
-        {
-            var list = item.Parent;
-            if (list is null) return rect;
-
-            var r = list.BoundingRectangle;
-            if (r.Width <= 0 || r.Height <= 0) return rect;
-            view = new System.Drawing.Rectangle(r.X, r.Y, r.Width, r.Height);
-        }
-        catch { return rect; }
-
-        return ClipToViewport(rect, view);
-    }
-
-    /// <summary>
-    /// The geometry behind <see cref="VisiblePart"/>, split out so it can be
-    /// tested without a running Teams.
+    ///
+    /// Split out from the elements it measures so it can be tested without a
+    /// running Teams.
     /// </summary>
     internal static System.Drawing.Rectangle? ClipToViewport(
         System.Drawing.Rectangle rect,
@@ -1699,6 +1681,82 @@ public sealed class TeamsClient : IDisposable
 
     /// <summary>How much of a slide must be in view before it is worth showing.</summary>
     internal const double MinVisibleFraction = 0.98;
+
+    /// <summary>How long to give the filmstrip to settle after scrolling it.</summary>
+    private const int ScrollSettleMs = 120;
+
+    /// <summary>How many times to look again while the strip is still moving.</summary>
+    private const int ScrollSettleTries = 5;
+
+    /// <summary>
+    /// The rectangle of a filmstrip slide, scrolling it into view if it is not
+    /// already there.
+    ///
+    /// Returns null when it cannot be shown at all, which is the caller's cue
+    /// to fall back to the slide's name.
+    /// </summary>
+    private System.Drawing.Rectangle? ShowInStrip(AutomationElement item)
+    {
+        var shown = MeasureInStrip(item);
+        if (shown is not null) return shown;
+
+        try
+        {
+            item.Patterns.ScrollItem.Pattern.ScrollIntoView();
+        }
+        catch
+        {
+            // No ScrollItem, or the strip refused. Nothing else to try.
+            return null;
+        }
+
+        // The scroll animates, so the first look back is usually mid-flight and
+        // reports a rectangle that is neither where it was nor where it lands.
+        for (var i = 0; i < ScrollSettleTries; i++)
+        {
+            Thread.Sleep(ScrollSettleMs);
+            shown = MeasureInStrip(item);
+            if (shown is not null) return shown;
+        }
+
+        return null;
+    }
+
+    /// <summary>The visible part of a filmstrip slide, or null if it is not in view.</summary>
+    private static System.Drawing.Rectangle? MeasureInStrip(AutomationElement item)
+    {
+        try
+        {
+            if (item.Properties.IsOffscreen.ValueOrDefault) return null;
+        }
+        catch { }
+
+        System.Drawing.Rectangle rect;
+        try
+        {
+            var r = item.BoundingRectangle;
+            if (r.Width <= 0 || r.Height <= 0) return null;
+            rect = new System.Drawing.Rectangle((int)r.X, (int)r.Y, (int)r.Width, (int)r.Height);
+        }
+        catch { return null; }
+
+        return ClipToViewport(rect, ViewportOf(item) ?? rect);
+    }
+
+    /// <summary>The rectangle of the list a filmstrip slide sits in.</summary>
+    private static System.Drawing.Rectangle? ViewportOf(AutomationElement item)
+    {
+        try
+        {
+            var list = item.Parent;
+            if (list is null) return null;
+
+            var r = list.BoundingRectangle;
+            if (r.Width <= 0 || r.Height <= 0) return null;
+            return new System.Drawing.Rectangle(r.X, r.Y, r.Width, r.Height);
+        }
+        catch { return null; }
+    }
 
     /// <summary>
     /// Captures the slide being shown, or the one after it.
@@ -1755,42 +1813,46 @@ public sealed class TeamsClient : IDisposable
 
             /*
                 Teams scrolls the filmstrip so the current slide sits at its
-                trailing edge, which means a presenter moving forward never has
-                the next slide drawn anywhere - it is always just past the end
-                of the strip. There is nothing to capture and no amount of
-                waiting produces anything.
+                trailing edge, which means a presenter moving forward has the
+                next slide permanently just past the end of the strip - never
+                drawn, and nothing to capture.
 
-                So the name goes back even when the picture cannot, and the slot
-                shows what is coming rather than an apology. The name is in the
-                tree whatever the scroll position.
+                So it is scrolled into view. The strip is already scrolling
+                itself on every slide change, and this asks for one more notch
+                of the same thing; the presenter keeps their current slide on
+                screen either way. Measured on a fourteen-slide deck, one scroll
+                brought the rest of the deck into view, so this is not a scroll
+                per slide change.
+
+                ScrollItemPattern only scrolls - it does not select - which
+                matters because these items also carry Invoke and SelectionItem,
+                and selecting one would drive the presentation for everyone in
+                the meeting. probe-scroll-safety.ps1 is what established that,
+                and re-establishes it when Teams changes the strip.
             */
-            try
+            var visible = ShowInStrip(target);
+
+            if (visible is null)
             {
-                if (target.Properties.IsOffscreen.ValueOrDefault)
-                    return (false, "scrolled out of view", null, NameOf(target), false, none);
+                // Still nowhere to be seen. The name is in the tree whatever
+                // the scroll position, so the slot says what is coming rather
+                // than showing an apology.
+                return (false, "scrolled out of view", null, NameOf(target), false, none);
             }
-            catch { }
 
-            try
-            {
-                var r = target.BoundingRectangle;
-                if (r.Width <= 0 || r.Height <= 0) return (false, "slide has no size", null, NameOf(target), false, none);
-                rect = new System.Drawing.Rectangle((int)r.X, (int)r.Y, (int)r.Width, (int)r.Height);
-            }
-            catch { return (false, "could not measure it", null, null, false, none); }
-
-            // Partly scrolled counts as out of view too; see VisiblePart.
-            var shown = VisiblePart(target, rect);
-            if (shown is null) return (false, "scrolled out of view", null, NameOf(target), false, none);
-            rect = shown.Value;
-
+            rect = visible.Value;
             name = NameOf(target);
         }
 
         var (image, frames) = SlideCapture.GrabSequence(
             which, WindowHandleOf(win), rect.X, rect.Y, rect.Width, rect.Height,
             border: which != "next", fadeFrames: fadeFrames);
-        if (image is null) return (false, "could not capture it", null, null, false, none);
+
+        // Minimising Teams lands here: the window reports a rectangle but will
+        // not draw itself, so there is nothing to show. The next slide's name
+        // is worth sending even so; the current slide's is only ever the
+        // container's own "Current slide: N", which says nothing useful.
+        if (image is null) return (false, "could not capture it", null, which == "next" ? name : null, false, none);
 
         return (true, null, image, name, false, frames);
     }
