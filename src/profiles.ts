@@ -110,6 +110,41 @@ export function profilePath(base: string, device: DeviceType): string | null {
 const SWITCH_GAP_MS = 3500;
 
 /**
+ * How long to leave the first ask for a profile path, which is the one that
+ * installs it.
+ *
+ * An install copies a profile into Stream Deck's own store, and it holds the
+ * same lock a switch does for as long as that takes - longer than the 3.5s a
+ * switch was sized for. Two decks coming up together therefore had the second
+ * deck's switch land on top of the first deck's install, and Stream Deck
+ * answered "Another operation is already in progress" and dropped it. The
+ * update then reached nobody, silently, which is the worst shape this failure
+ * could have.
+ *
+ * Only paid once per path per run of the plugin, so the cost is a few seconds
+ * on the first meeting after an update rather than on every switch.
+ */
+const INSTALL_GAP_MS = 9000;
+
+/**
+ * How long to leave a profile alone after asking for it for the first time.
+ *
+ * The first ask for a path is the one that installs it, and an install holds
+ * Stream Deck's profile lock for as long as it takes. The retries below cannot
+ * tell "the request was dropped" from "the install is still running", and
+ * asking again during one is answered with "Another operation is already in
+ * progress" - so a retry meant to rescue a lost switch was landing on top of
+ * the install it was waiting for, and the profile never arrived.
+ *
+ * Long enough to cover an install, and only ever suppresses a *duplicate* ask
+ * for the same path.
+ */
+const INSTALL_QUIET_MS = 30_000;
+
+/** How many times to ask for the same path before giving it up as refused. */
+const INSTALL_TRIES = 3;
+
+/**
  * When to give a newly connected deck its profile, in milliseconds after it
  * announced itself.
  *
@@ -236,9 +271,48 @@ class ProfileSwitcher {
 			else this.#current.set(id, target);
 
 			if (target === null) this.#enqueue(() => this.#restore(id));
-			else this.#enqueue(() => this.#switch(id, target));
+			else {
+				const prev = this.#lastAsk.get(id);
+
+				// Only a repeat of the same ask is a retry. Moving between the
+				// bundled profiles is an ordinary change and must never be
+				// held back, however often the meeting flips between them.
+				if (prev !== undefined && prev.target === target) {
+					const since = Date.now() - prev.at;
+					if (since < INSTALL_QUIET_MS) {
+						logger.debug(`holding off ${id} -> "${target}", asked ${since}ms ago`);
+						continue;
+					}
+					if (prev.tries >= INSTALL_TRIES) {
+						// Stream Deck reports nothing either way, so this is as
+						// far as it can be chased. The keys still work wherever
+						// the deck happens to be.
+						logger.warn(`"${target}" did not take after ${prev.tries} attempts`);
+						continue;
+					}
+					this.#lastAsk.set(id, { target, at: Date.now(), tries: prev.tries + 1 });
+					this.#enqueue(() => this.#switch(id, target), SWITCH_GAP_MS);
+					continue;
+				}
+
+				const installing = !this.#everAsked.has(target);
+				this.#everAsked.add(target);
+				this.#lastAsk.set(id, { target, at: Date.now(), tries: 1 });
+				this.#enqueue(() => this.#switch(id, target), installing ? INSTALL_GAP_MS : SWITCH_GAP_MS);
+			}
 		}
 	}
+
+	/**
+	 * What was last asked for on each device, and how many times running.
+	 *
+	 * Nothing reports whether an install is under way, so this is the only
+	 * thing standing between a retry and the install it would interrupt.
+	 */
+	readonly #lastAsk = new Map<string, { target: string; at: number; tries: number }>();
+
+	/** Paths asked for at least once, so only a genuine first ask pays for an install. */
+	readonly #everAsked = new Set<string>();
 
 	/**
 	 * Runs profile changes one at a time.
@@ -254,10 +328,10 @@ class ProfileSwitcher {
 	 * Two decks is the normal case here, not an edge case: the whole point is
 	 * that each of them gets its own layout.
 	 */
-	#enqueue(task: () => Promise<void>): void {
+	#enqueue(task: () => Promise<void>, gap: number = SWITCH_GAP_MS): void {
 		this.#queue = this.#queue
 			.then(task)
-			.then(() => new Promise<void>((resolve) => setTimeout(resolve, SWITCH_GAP_MS)))
+			.then(() => new Promise<void>((resolve) => setTimeout(resolve, gap)))
 			.catch((err) => {
 				logger.warn(`Profile change failed: ${String(err)}`);
 			});
@@ -277,6 +351,11 @@ class ProfileSwitcher {
 
 	async #restore(id: string): Promise<void> {
 		this.#current.delete(id);
+
+		// Handing the deck back ends the run of asks. Rejoining a meeting wants
+		// the same profile again, and that must count as a fresh ask rather
+		// than as a retry of the one before it.
+		this.#lastAsk.delete(id);
 		try {
 			// No profile name means "whatever was showing before". Only ever
 			// called on leaving a meeting: moving between the bundled profiles

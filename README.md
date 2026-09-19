@@ -215,6 +215,15 @@ it, and **the build fails** when that moves and the revision does not:
 `npm run build` runs the profile builder, so this is enforced before anything
 is packaged, in CI as well as locally.
 
+**Do not retry a switch to a profile that may still be installing.** An install
+holds Stream Deck's profile lock for as long as it takes, and a second ask
+during one is answered with `Another operation is already in progress` — which
+costs the install that was already running. The retries that exist to rescue a
+dropped switch cannot tell the two apart, so they are suppressed for 30s after
+the first ask for a path, and only a genuine change of target asks again
+immediately. On a two-deck machine that took the refusals per app start from two
+to zero.
+
 The fingerprint deliberately ignores the plugin version. Tying the path to the
 version would change it on every release, including the many that never touch
 a layout, and each change hands every user a new profile and strands whatever
@@ -314,6 +323,26 @@ into the 200 × 100 slot it will occupy, sent to the deck on the desk. Nothing i
 uploaded, written to disk, or recorded in any log, and each picture is replaced
 by the next.
 
+Three things make that last claim true rather than merely intended:
+
+- **Turning the setting off tears down everything in flight**, not just the
+  picture — the pending capture, the fade, the watch loop, and the frame the
+  sidecar keeps to fade out of. A capture armed before the box was unticked
+  would otherwise still fire up to five seconds later. `#capture` re-checks
+  consent itself, so every route into reading a slide fails closed.
+- **A slide is never held longer than it is shown.** The sidecar keeps the last
+  frame per slot so a change can cross-fade; `forget` drops it when the deck
+  stops or the setting goes off, rather than leaving meeting content resident in
+  a process that lives for the whole session — where a crash dump would find it.
+- **The log cannot quote the channel.** A thumbnail is the largest message the
+  sidecar sends and is always split across several reads, so a sidecar that dies
+  mid-write leaves half a message in the buffer — and the fields ahead of the
+  image are the slide's own name. The unparsable-line warning reports the shape
+  and length only, and the buffer is dropped when a sidecar is respawned.
+
+Switching a thumbnail on or off is logged at info, so "was this ever on, and
+when" is answerable from an ordinary log.
+
 The two slots come from different places, which is the whole point:
 
 - **Current slide** is the live slide surface — the 16:9 image inside
@@ -378,6 +407,13 @@ Slide changes cross-fade — six JPEG frames of about 6 KiB, blended in the
 sidecar where the bitmaps already are, at 40 ms each. Polled re-reads land
 immediately instead: ink should appear under the presenter's hand, not dissolve
 into view.
+
+`PrintWindow` has to draw the whole Teams window to hand back any part of it, so
+each capture needs a bitmap the size of that window — around 14 MB. Allocating
+one per capture put that straight onto the large object heap four times a second
+while a pen was in hand. It is now reused between captures and released thirty
+seconds after the last one, which measured 17% cheaper per capture and gives the
+memory back when nobody is presenting.
 
 ### Artwork
 

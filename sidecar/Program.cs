@@ -24,6 +24,12 @@ public static class Program
 
     private const int TrimIntervalMs = 60_000;
 
+    /// <summary>Most frames a single fade may ask for; see the clamp on parse.</summary>
+    private const int MaxFadeFrames = 12;
+
+    /// <summary>How long after the last thumbnail to release the capture buffer.</summary>
+    private const int CaptureBufferIdleMs = 30_000;
+
     /// <summary>
     /// How often memory is returned during a meeting. Much rarer than the idle
     /// path because the collection competes with key presses.
@@ -173,8 +179,10 @@ public static class Program
                 var target = root.TryGetProperty("target", out var t) ? t.GetString() : null;
                 var menu = root.TryGetProperty("menu", out var m) ? m.GetString() : null;
                 var arg = root.TryGetProperty("arg", out var a) ? a.GetString() : null;
+                // Clamped at the boundary. Nothing downstream bounds it, and a
+                // fade is a loop that allocates a frame per turn.
                 var fade = root.TryGetProperty("fade", out var f) && f.ValueKind == JsonValueKind.Number
-                    && f.TryGetInt32(out var fv) ? fv : 0;
+                    && f.TryGetInt32(out var fv) ? Math.Clamp(fv, 0, MaxFadeFrames) : 0;
 
                 if (cmd == "shutdown") { _running = false; break; }
                 Queue.Add(new WorkItem(id, cmd, target, menu, arg, fade));
@@ -325,6 +333,13 @@ public static class Program
                 // Give memory back once things have settled, and periodically
                 // thereafter.
                 var sinceTrim = Environment.TickCount64 - lastTrim;
+
+                // Independent of the collection below: the capture buffer is a
+                // single large allocation that only matters while thumbnails
+                // are being taken, and waiting for the meeting trim would hold
+                // it for five minutes after the last one.
+                SlideCapture.TrimBuffer(CaptureBufferIdleMs);
+
                 if (!snap.InMeeting && sinceTrim > TrimIntervalMs)
                 {
                     lastTrim = Environment.TickCount64;
@@ -433,6 +448,14 @@ public static class Program
                         w.WriteEndArray();
                     }
                 });
+                break;
+            }
+
+            case "forget":
+            {
+                // No reply: the plugin sends this to stop the sidecar holding a
+                // slide, and has nothing to do with the answer.
+                SlideCapture.ForgetPrevious(item.Arg);
                 break;
             }
 

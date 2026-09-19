@@ -129,13 +129,27 @@ internal static class SlideCapture
         }
     }
 
-    /// <summary>Forgets the last picture for a slot, so nothing fades out of it.</summary>
-    public static void ForgetPrevious(string key)
+    /// <summary>
+    /// Forgets the last picture for a slot, so nothing fades out of it.
+    ///
+    /// Pass null to forget every slot. The frames are kept only to fade from,
+    /// so once a deck stops - or the user withdraws permission to read it -
+    /// holding a slide in a process that runs for the whole session buys
+    /// nothing and keeps meeting content resident.
+    /// </summary>
+    public static void ForgetPrevious(string? key = null)
     {
         lock (PreviousLock)
         {
-            if (!Previous.Remove(key, out var bmp)) return;
-            bmp.Dispose();
+            if (key is null)
+            {
+                foreach (var bmp in Previous.Values) bmp.Dispose();
+                Previous.Clear();
+                return;
+            }
+
+            if (!Previous.Remove(key, out var one)) return;
+            one.Dispose();
         }
     }
 
@@ -147,20 +161,28 @@ internal static class SlideCapture
     private static Bitmap Blend(Bitmap from, Bitmap to, float alpha)
     {
         var frame = new Bitmap(from.Width, from.Height, PixelFormat.Format32bppArgb);
-        using var g = Graphics.FromImage(frame);
-        g.DrawImage(from, 0, 0, from.Width, from.Height);
+        try
+        {
+            using var g = Graphics.FromImage(frame);
+            g.DrawImage(from, 0, 0, from.Width, from.Height);
 
-        var matrix = new ColorMatrix { Matrix33 = alpha };
-        using var attrs = new ImageAttributes();
-        attrs.SetColorMatrix(matrix);
-        g.DrawImage(
-            to,
-            new Rectangle(0, 0, to.Width, to.Height),
-            0, 0, to.Width, to.Height,
-            GraphicsUnit.Pixel,
-            attrs);
+            var matrix = new ColorMatrix { Matrix33 = alpha };
+            using var attrs = new ImageAttributes();
+            attrs.SetColorMatrix(matrix);
+            g.DrawImage(
+                to,
+                new Rectangle(0, 0, to.Width, to.Height),
+                0, 0, to.Width, to.Height,
+                GraphicsUnit.Pixel,
+                attrs);
 
-        return frame;
+            return frame;
+        }
+        catch
+        {
+            frame.Dispose();
+            throw;
+        }
     }
 
     private static Bitmap? Compose(
@@ -176,6 +198,7 @@ internal static class SlideCapture
         if (width <= 0 || height <= 0) return null;
         if (window == IntPtr.Zero) return null;
 
+        Bitmap? composed = null;
         try
         {
             if (!GetWindowRect(window, out var wr)) return null;
@@ -190,9 +213,15 @@ internal static class SlideCapture
             var ry = y - wr.Top;
             if (rx < 0 || ry < 0 || rx + width > windowWidth || ry + height > windowHeight) return null;
 
-            using var shot = new Bitmap(windowWidth, windowHeight, PixelFormat.Format32bppArgb);
+            var shot = WindowBuffer(windowWidth, windowHeight);
             using (var g = Graphics.FromImage(shot))
             {
+                // Reused between captures, so last time's window is still in
+                // it. PrintWindow redraws the lot, but a window that declines
+                // to draw part of itself would otherwise leave the previous
+                // capture showing through.
+                g.Clear(Color.Black);
+
                 var hdc = g.GetHdc();
                 try
                 {
@@ -221,6 +250,7 @@ internal static class SlideCapture
             var top = (slotHeight - h) / 2;
 
             var slot = new Bitmap(slotWidth, slotHeight, PixelFormat.Format32bppArgb);
+            composed = slot;
             using (var g = Graphics.FromImage(slot))
             {
                 g.Clear(Color.Black);
@@ -252,10 +282,67 @@ internal static class SlideCapture
         }
         catch (Exception ex)
         {
+            // The slot is built before it is returned, so an exception part-way
+            // through leaves one behind - a leak of exactly the thing being
+            // allocated most often.
+            composed?.Dispose();
             Console.Error.WriteLine($"slide capture failed: {ex.Message}");
             return null;
         }
     }
+
+    /// <summary>
+    /// The scratch bitmap PrintWindow draws the whole window into, kept between
+    /// captures.
+    ///
+    /// It is the size of the Teams window - around 14 MB at the sizes people
+    /// actually present at - and a fresh one per capture put that straight onto
+    /// the large object heap several times a second while a pen was in hand.
+    /// Reused while the window keeps its size, and replaced when it does not.
+    ///
+    /// Captures are serialised through the sidecar's work queue, so this is
+    /// only ever touched by one of them at a time; the lock is there to keep
+    /// that true if that ever stops being the case.
+    /// </summary>
+    private static Bitmap WindowBuffer(int width, int height)
+    {
+        lock (BufferLock)
+        {
+            _bufferUsedAt = Environment.TickCount64;
+
+            if (_buffer is not null && _buffer.Width == width && _buffer.Height == height) return _buffer;
+
+            _buffer?.Dispose();
+            _buffer = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+            return _buffer;
+        }
+    }
+
+    /// <summary>
+    /// Hands the window buffer back once captures stop.
+    ///
+    /// Keeping it costs about 14 MB for as long as the sidecar runs, which is
+    /// the whole session - worth paying while a presenter is drawing on a
+    /// slide and not worth paying for the hours either side. Reusing it and
+    /// then releasing it when it goes quiet is cheaper than both the
+    /// allocate-every-time it replaced and the keep-it-forever it would
+    /// otherwise become.
+    /// </summary>
+    public static void TrimBuffer(long idleMs)
+    {
+        lock (BufferLock)
+        {
+            if (_buffer is null) return;
+            if (Environment.TickCount64 - _bufferUsedAt < idleMs) return;
+
+            _buffer.Dispose();
+            _buffer = null;
+        }
+    }
+
+    private static Bitmap? _buffer;
+    private static long _bufferUsedAt;
+    private static readonly object BufferLock = new();
 
     /// <summary>
     /// PNG, base64, with the mime type declared - which is the only form a
@@ -278,10 +365,9 @@ internal static class SlideCapture
     /// </summary>
     private static string EncodeJpeg(Bitmap bitmap)
     {
-        var codec = ImageCodecInfo.GetImageEncoders().FirstOrDefault(c => c.FormatID == ImageFormat.Jpeg.Guid);
         using var buffer = new MemoryStream();
 
-        if (codec is null)
+        if (JpegCodec is null)
         {
             bitmap.Save(buffer, ImageFormat.Jpeg);
         }
@@ -289,9 +375,13 @@ internal static class SlideCapture
         {
             using var parameters = new EncoderParameters(1);
             parameters.Param[0] = new EncoderParameter(Encoder.Quality, 70L);
-            bitmap.Save(buffer, codec, parameters);
+            bitmap.Save(buffer, JpegCodec, parameters);
         }
 
         return $"data:image/jpeg;base64,{Convert.ToBase64String(buffer.ToArray())}";
     }
+
+    /// <summary>Looked up once; the lookup walks every installed encoder.</summary>
+    private static readonly ImageCodecInfo? JpegCodec =
+        ImageCodecInfo.GetImageEncoders().FirstOrDefault(c => c.FormatID == ImageFormat.Jpeg.Guid);
 }

@@ -95,6 +95,11 @@ class Bridge {
 	#spawn(): void {
 		if (this.#stopped) return;
 
+		// Whatever the last sidecar was part-way through writing is not the
+		// start of what this one will write. Left behind, it gets glued to the
+		// new process's first line and corrupts it.
+		this.#buffer = "";
+
 		if (!existsSync(SIDECAR)) {
 			logger.error(`Sidecar missing at ${SIDECAR}. Run "npm run build:sidecar".`);
 			this.#publish({ ...EMPTY_STATE });
@@ -155,7 +160,16 @@ class Bridge {
 		try {
 			msg = JSON.parse(line) as Record<string, unknown>;
 		} catch {
-			logger.warn(`Unparsable sidecar line: ${line.slice(0, 200)}`);
+			/*
+				Deliberately not the line itself. A thumbnail message is the
+				largest thing on this channel and is always split across several
+				reads, so a sidecar that dies mid-write leaves half of one here
+				- and the fields before the image are the slide's own name. The
+				shape is enough to debug with; the content is not ours to write
+				to a log file.
+			*/
+			const type = /"type"\s*:\s*"([a-z]+)"/i.exec(line)?.[1] ?? "unknown";
+			logger.warn(`Unparsable sidecar line (type ${type}, ${line.length} bytes)`);
 			return;
 		}
 
@@ -304,6 +318,18 @@ class Bridge {
 			}, CAPTURE_TIMEOUT_MS);
 			this.#thumbs.set(id, { resolve, timer });
 		});
+	}
+
+	/**
+	 * Tells the sidecar to drop the slide it is holding.
+	 *
+	 * It keeps the last frame per slot so it has something to fade out of, and
+	 * that outlives both the presentation and the setting that allowed it. Sent
+	 * and forgotten: there is nothing useful to do if it does not arrive, and
+	 * the sidecar drops everything when it exits anyway.
+	 */
+	forget(which: "current" | "next"): void {
+		this.#send({ id: this.#nextId++, cmd: "forget", arg: which });
 	}
 }
 

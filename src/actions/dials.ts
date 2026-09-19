@@ -45,7 +45,16 @@ export abstract class TeamsDialAction<T extends JsonObject = JsonObject> extends
 	#unsubscribe: (() => void) | undefined;
 	#visible = 0;
 
-	/** Last payload drawn per dial, so unchanged state costs nothing. */
+	/**
+	 * Fingerprint of the last payload drawn per dial, so unchanged state costs
+	 * nothing.
+	 *
+	 * A fingerprint rather than the payload itself, because a slide thumbnail
+	 * is around 30 KB of base64 and keeping a second copy of every one of them
+	 * alive - for no reason beyond comparing it to the next - is the kind of
+	 * thing that goes unnoticed until a profile has a dozen dials on it. The
+	 * length is carried alongside the hash so a collision has to match both.
+	 */
 	readonly #painted = new Map<string, string>();
 
 	/** The slot's contents for the current state. */
@@ -135,18 +144,29 @@ export abstract class TeamsDialAction<T extends JsonObject = JsonObject> extends
 		const payload = this.draw(state, dial);
 
 		// Stream Deck redraws on every setFeedback, so skip identical frames.
-		const signature = JSON.stringify(payload);
+		const rendered = JSON.stringify(payload);
+		const signature = fingerprint(rendered);
 		if (this.#painted.get(dial.id) === signature) return;
 		this.#painted.set(dial.id, signature);
 
 		try {
 			await dial.setFeedback(payload);
-			logger.debug(`${this.manifestId ?? "dial"} painted ${signature.length} bytes`);
+			logger.debug(`${this.manifestId ?? "dial"} painted ${rendered.length} bytes`);
 		} catch (err) {
 			this.#painted.delete(dial.id);
 			logger.warn(`setFeedback failed: ${String(err)}`);
 		}
 	}
+}
+
+/** FNV-1a, plus the length, so two payloads have to agree on both to collide. */
+function fingerprint(text: string): string {
+	let hash = 0x811c9dc5;
+	for (let i = 0; i < text.length; i++) {
+		hash ^= text.charCodeAt(i);
+		hash = Math.imul(hash, 0x01000193);
+	}
+	return `${text.length}:${(hash >>> 0).toString(36)}`;
 }
 
 
@@ -728,21 +748,54 @@ abstract class SlideThumbDialAction extends TeamsDialAction<ThumbSettings & Json
 	readonly #allowed = new Map<string, boolean>();
 
 	override onWillAppear(ev: WillAppearEvent<ThumbSettings & JsonObject>): void {
-		this.#allowed.set(ev.action.id, ev.payload.settings.capture === true);
+		this.#allow(ev.action.id, ev.payload.settings.capture === true);
 		super.onWillAppear(ev);
 	}
 
 	override onDidReceiveSettings(ev: DidReceiveSettingsEvent<ThumbSettings & JsonObject>): void {
 		const was = this.#on();
-		this.#allowed.set(ev.action.id, ev.payload.settings.capture === true);
+		this.#allow(ev.action.id, ev.payload.settings.capture === true);
 
-		// Turning it off drops the picture rather than leaving the last slide
-		// sitting on the strip after permission was withdrawn.
-		if (was && !this.#on()) {
-			this.#image = undefined;
-			this.#capturedAt = undefined;
-		}
+		// Everything in flight is torn down, not just the picture. A capture
+		// armed before the box was unticked would otherwise still fire - up to
+		// CAPTURE_RETRY_MS later - and read the slide after permission for it
+		// had been withdrawn.
+		if (was && !this.#on()) this.#standDown();
 		this.repaintAll();
+	}
+
+	/** Stops reading the slide, and forgets what was read. */
+	#standDown(): void {
+		if (this.#timer) clearTimeout(this.#timer);
+		if (this.#fade) clearTimeout(this.#fade);
+		this.#timer = undefined;
+		this.#fade = undefined;
+		this.#stopWatching();
+
+		this.#wanted = undefined;
+		this.#image = undefined;
+		this.#capturedAt = undefined;
+		this.#failedAt = undefined;
+
+		// The sidecar keeps the last frame to fade out of, so ask it to drop
+		// that too rather than leaving a slide resident in a process that
+		// outlives the decision.
+		bridge.forget(this.which);
+	}
+
+	/**
+	 * Records whether a dial may read the slide, and says so out loud.
+	 *
+	 * Reading the content of a meeting is the one thing here worth being able
+	 * to account for afterwards, so a change of mind is logged at info rather
+	 * than debug - "was this ever on, and when" should be answerable from an
+	 * ordinary log. Unchanged settings are not logged, because Stream Deck
+	 * replays them on every profile switch.
+	 */
+	#allow(id: string, allowed: boolean): void {
+		if (this.#allowed.get(id) === allowed) return;
+		this.#allowed.set(id, allowed);
+		logger.info(`${this.which} slide capture ${allowed ? "enabled" : "disabled"}`);
 	}
 
 	/** Whether any dial on the strip has been allowed to read the slide. */
@@ -790,7 +843,9 @@ abstract class SlideThumbDialAction extends TeamsDialAction<ThumbSettings & Json
 
 		if (at === undefined) {
 			// The deck stopped. Drop the picture rather than leaving a slide on
-			// the strip after the presentation has ended.
+			// the strip after the presentation has ended, and have the sidecar
+			// drop its copy too.
+			const had = this.#image !== undefined || this.#capturedAt !== undefined;
 			this.#stopWatching();
 			this.#image = undefined;
 			this.#capturedAt = undefined;
@@ -798,6 +853,7 @@ abstract class SlideThumbDialAction extends TeamsDialAction<ThumbSettings & Json
 			this.#wanted = undefined;
 			this.#ended = false;
 			this.#reason = undefined;
+			if (had) bridge.forget(this.which);
 			return;
 		}
 
@@ -894,7 +950,9 @@ abstract class SlideThumbDialAction extends TeamsDialAction<ThumbSettings & Json
 	}
 
 	async #capture(at: string, moved: boolean): Promise<void> {
-		if (this.#busy) return;
+		// Checked again here rather than only where captures are scheduled, so
+		// every path into reading the slide fails closed.
+		if (!this.#on() || this.#busy) return;
 		this.#busy = true;
 		try {
 			// Only a change worth watching is faded; a poll that found a build
