@@ -2985,23 +2985,84 @@ public sealed class TeamsClient : IDisposable
     {
         // Ink color and thickness are UI Automation patterns inside a flyout
         // rather than a selector walk, so they are handled directly rather than
-        // described in the config like every other control.
+        // described in the config like every other control. Jumping to a slide
+        // is the same shape: a pattern on a filmstrip item, not a named control.
         var ink = target is InkColorTarget or InkThicknessTarget;
+        var jump = target == GoToSlideTarget;
 
         ControlSpec? spec = null;
-        if (!ink && !_config.Controls.TryGetValue(target, out spec))
+        if (!ink && !jump && !_config.Controls.TryGetValue(target, out spec))
             return (false, $"unknown target '{target}'");
+
 
         // Chromium activates the Teams window when a control is invoked, so the
         // window that had focus is put back afterwards.
         var previousFocus = _restoreFocus ? FocusGuard.Capture() : IntPtr.Zero;
         try
         {
+            if (jump) return GoToSlide(arg);
             return ink ? AdjustInk(target, arg) : InvokeCore(target, spec!, arg);
         }
         finally
         {
             if (previousFocus != IntPtr.Zero) FocusGuard.RestoreAfter(previousFocus);
+        }
+    }
+
+    /// <summary>Target name for jumping straight to a slide.</summary>
+    public const string GoToSlideTarget = "ppt-goto-slide";
+
+
+    /// <summary>
+    /// The filmstrip or grid tile for a slide number.
+    ///
+    /// Both lists are slide-sized list items in deck order, so the index is the
+    /// slide number less one - but only while the list really holds every
+    /// slide. If Teams ever virtualises one, that mapping quietly points at the
+    /// wrong slide, and the cost of being wrong is moving the presentation
+    /// somewhere nobody asked for. So it is checked against the count Teams
+    /// reports rather than assumed.
+    /// </summary>
+    private (AutomationElement? tile, string? error) SlideTile(int wanted)
+    {
+        var win = ResolveMeetingWindow();
+        if (win is null) return (null, "not in a meeting");
+
+        var strip = Filmstrip(win);
+        if (strip.Count == 0) return (null, "no slide list open");
+
+        if (_lastSlideTotal is not null
+            && int.TryParse(_lastSlideTotal, out var total)
+            && total != strip.Count)
+            return (null, $"slide list has {strip.Count} of {total} slides");
+
+        if (wanted < 1 || wanted > strip.Count) return (null, $"no slide {wanted}");
+
+        return (strip[wanted - 1], null);
+    }
+
+    /// <summary>
+    /// Goes straight to a slide by invoking its thumbnail.
+    ///
+    /// The alternative is walking there one Next press at a time, which is what
+    /// an earlier slide dial did: slow over any distance, and wrong on a deck
+    /// with builds, because Next advances the build rather than the slide.
+    /// </summary>
+    private (bool ok, string? error) GoToSlide(string? arg)
+    {
+        if (!int.TryParse(arg, out var wanted)) return (false, "no slide number");
+
+        var (tile, error) = SlideTile(wanted);
+        if (tile is null) return (false, error);
+
+        try
+        {
+            tile.Patterns.Invoke.Pattern.Invoke();
+            return (true, null);
+        }
+        catch (Exception ex)
+        {
+            return (false, $"could not reach slide {wanted}: {ex.Message}");
         }
     }
 

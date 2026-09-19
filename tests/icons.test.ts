@@ -14,6 +14,7 @@ import {
 	renderReaction,
 	renderReactionFrame,
 	renderSimple,
+	renderSlideJump,
 	renderStripIdle,
 	renderStripNext,
 	renderToggle,
@@ -533,5 +534,46 @@ describe("next-slide title cards", () => {
 	it("says whose slide it is", () => {
 		expect(renderStripNext("Conclusion")).toContain(">NEXT<");
 		expect(renderStripNext("Conclusion", "NOW")).toContain(">NOW<");
+	});
+});
+
+describe("dialling to a slide", () => {
+	// A 1x1 PNG is enough: what matters is that it is embedded rather than
+	// dropped, not what it looks like.
+	const PNG =
+		"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+	it("embeds the thumbnail it was given", () => {
+		const svg = renderSlideJump(PNG, 7, 14);
+		expectSvg(svg);
+		expect(svg).toContain("<image");
+		expect(svg).toContain(PNG);
+	});
+
+	it("still draws without one", () => {
+		const svg = renderSlideJump(undefined, 7, 14);
+		expectSvg(svg);
+		expect(svg).not.toContain("<image");
+	});
+
+	it("shows where the dial is pointing", () => {
+		const svg = renderSlideJump(PNG, 7, 14);
+		expect(svg).toContain(">7<");
+		expect(svg).toContain(">of 14<");
+	});
+
+	it("leaves the total off when it is not known", () => {
+		const svg = renderSlideJump(PNG, 7, 0);
+		expect(svg).toContain(">7<");
+		expect(svg).not.toContain("of 0");
+	});
+
+	it("keeps the number inside the slot at every slide number", () => {
+		for (const n of [1, 9, 14, 99, 140]) {
+			const box = inkBox(renderSlideJump(undefined, n, 140));
+			expect(box.left).toBeGreaterThanOrEqual(1);
+			expect(box.right).toBeLessThanOrEqual(198);
+			expect(box.bottom).toBeLessThanOrEqual(98);
+		}
 	});
 });

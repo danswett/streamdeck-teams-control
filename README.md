@@ -266,12 +266,31 @@ node tools/check-profile.mjs "com.bad-duck.teamscontrol.sdPlugin/profiles/Teams 
 The + XL has six. The PowerPoint Live presenter layout uses the first four and
 leaves the last two empty, for whatever you want there:
 
-| dial | shows | turn |
-|---|---|---|
-| **Current slide** | the slide being presented, bordered red | — |
-| **Next slide** | the slide after it | — |
-| **Ink thickness** | 1 to 6, Teams' own range | sets it |
-| **Ink color** | the tool's palette, wrapping | sets it |
+| dial | shows | turn | press |
+|---|---|---|---|
+| **Current slide** | the slide being presented, bordered red | moves through the deck | grid view |
+| **Next slide** | the slide after it | — | — |
+| **Ink thickness** | 1 to 6, Teams' own range | sets it | — |
+| **Ink color** | the tool's palette, wrapping | sets it | — |
+
+Turning the slide dial draws the number it is heading for over the dimmed
+thumbnail and jumps once the dial settles, the same shape as the ink dials and
+for the same reason: one UI Automation walk per gesture rather than one per
+click. The jump goes straight to the slide by invoking its filmstrip thumbnail,
+rather than walking there with Next — **Next advances the build, not the
+slide**, so on a deck with animations counting presses lands somewhere else
+entirely.
+
+**Turning needs presenter view open, and does nothing while the grid is up.**
+The filmstrip is the only list of slides that can be aimed at without moving the
+deck. The grid's tiles look like the same thing and are not: selecting one
+navigates *and* closes the grid, and `SetFocus` on one paints nothing at all —
+captures of the window before and after are identical but for the clock, because
+Teams only draws a ring for `:focus-visible`. So the grid is a view the dial can
+open and close, not a surface it can browse. `sidecar/probe-real-grid.ps1` is
+what established that, and is scoped to `fluent-grid-view` because an earlier
+probe matched "slide-sized list items", found the filmstrip, and tested the
+wrong control entirely.
 
 The + XL ships with Elgato's Volume Controller, and its input and output dials
 sit naturally in the two spare slots — but a bundled profile is installed once

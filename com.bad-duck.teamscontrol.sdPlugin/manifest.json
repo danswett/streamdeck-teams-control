@@ -365,7 +365,12 @@
 			"Encoder": {
 				"layout": "layouts/ink.json",
 				"StackColor": "#6264A7",
-				"TriggerDescription": {}
+				"TriggerDescription": {
+					"Rotate": "Change slide",
+					"Push": "Grid view",
+					"Touch": "",
+					"LongTouch": ""
+				}
 			}
 		},
 		{

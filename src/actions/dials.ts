@@ -29,7 +29,7 @@ import streamDeck from "@elgato/streamdeck";
 import type { JsonObject } from "@elgato/utils";
 
 import { bridge, type TeamsState } from "../bridge";
-import { renderInkColor, renderInkThickness, renderStripIdle, renderStripNext, toPixmap, toolColor } from "../icons";
+import { renderInkColor, renderInkThickness, renderSlideJump, renderStripIdle, renderStripNext, toPixmap, toolColor } from "../icons";
 import { pptLive } from "./powerpoint";
 
 const logger = streamDeck.logger.createScope("Dial");
@@ -268,6 +268,29 @@ const INK_LAYOUT = "layouts/ink.json";
 const BLIND = "step:";
 
 /** The selected drawing tool, which is the one both ink dials act on. */
+/**
+ * Whether presenter view is open.
+ *
+ * Read off the "hide presenter view" control, whose state tracks the presence
+ * of the notes pane - so true means the pane is there and presenter view is
+ * showing, which is the opposite of how the control's name reads. The filmstrip
+ * lives in that pane, and the filmstrip is the only thing in the tree that
+ * addresses a slide by number.
+ */
+function presenterViewOpen(state: TeamsState): boolean {
+	return state.states["ppt-hide-presenter-view"] ?? false;
+}
+
+/**
+ * Whether Teams' grid of slides is up.
+ *
+ * Its tiles are slide-sized list items carrying Invoke, exactly like the
+ * filmstrip's, so the dial can reach a slide through either one.
+ */
+function gridOpen(state: TeamsState): boolean {
+	return state.states["ppt-grid"] ?? false;
+}
+
 function activeInkTool(state: TeamsState): string | null {
 	for (const tool of INK_TOOLS) if (state.states[tool]) return tool;
 	return null;
@@ -690,6 +713,22 @@ const POLL_ACTIVE_FOR_MS = 12_000;
 const POLL_INK_MS = 250;
 
 /**
+ * How long to hold the dialled slide after asking Teams to go there.
+ *
+ * Teams reports the move well before the new slide has been captured, so the
+ * number stays up until the deck agrees rather than until the request was sent.
+ * The timeout is only there so a jump that never lands cannot pin the slot.
+ */
+const JUMP_CONFIRM_MS = 4000;
+
+/** The sidecar target that goes straight to a slide; see TeamsClient.GoToSlide. */
+const GOTO_SLIDE = "ppt-goto-slide";
+
+/** The sidecar target that toggles Teams' own grid of slides. */
+const GRID_VIEW = "ppt-grid";
+
+
+/**
  * Whether this slot may read the slide at all.
  *
  * Off unless the user turns it on. Every other action in this plugin reads
@@ -777,7 +816,7 @@ abstract class SlideThumbDialAction extends TeamsDialAction<ThumbSettings & Json
 
 		this.#wanted = undefined;
 		this.#image = undefined;
-		this.#slideName = undefined;
+		this.#clearJump();
 
 		// The sidecar keeps the last frame to fade out of, so ask it to drop
 		// that too rather than leaving a slide resident in a process that
@@ -806,14 +845,175 @@ abstract class SlideThumbDialAction extends TeamsDialAction<ThumbSettings & Json
 		return false;
 	}
 
+	/**
+	 * Whether turning this dial moves through the deck.
+	 *
+	 * Only the current-slide slot does: dialling the next slide somewhere would
+	 * be dialling the current one with an off-by-one.
+	 */
+	protected jumps(): boolean {
+		return false;
+	}
+
+	/** The slide the dial has been turned to, while it is being turned. */
+	#jump: number | undefined;
+
+	/** When the jump was committed, so a stale snapshot does not clear it early. */
+	#jumpSentAt = 0;
+
+	#jumpTimer: NodeJS.Timeout | undefined;
+
+	/** Forgets a dialled slide, whether or not it was ever sent. */
+	#clearJump(): void {
+		if (this.#jumpTimer) clearTimeout(this.#jumpTimer);
+		this.#jumpTimer = undefined;
+		this.#jump = undefined;
+		this.#jumpSentAt = 0;
+	}
+
+	override onDialRotate(ev: DialRotateEvent<ThumbSettings & JsonObject>): void {
+		if (!this.jumps() || this.#allowed.get(ev.action.id) !== true) return;
+
+		const state = bridge.state;
+		if (!pptLive(state)) return;
+
+		/*
+			Nothing in the tree addresses a slide by number unless presenter
+			view is open. Its filmstrip is the only list that can be walked
+			without committing: the grid's tiles navigate and close the grid the
+			moment they are selected, and programmatic focus on them paints
+			nothing at all, so the grid cannot show where the dial is pointing.
+			With neither open the remaining slide controls are Next and
+			Previous, and walking there with those is not the same thing - Next
+			advances the build, not the slide.
+
+			So the dial goes quiet unless the filmstrip is there to aim at. The
+			thumbnail carries on: that comes off the live slide surface, which
+			needs none of this.
+		*/
+		if (!presenterViewOpen(state) || gridOpen(state)) {
+			logger.debug("slide dial turned without the filmstrip; nothing to aim at");
+			return;
+		}
+
+		const total = Number(state.context["ppt.slides"] ?? 0);
+		const now = Number(state.context["ppt.slide"] ?? 0);
+		if (!Number.isFinite(total) || total < 1 || now < 1) return;
+
+		// Every turn is taken, including while one is in flight: the dial is
+		// never allowed to lag, and the commit below picks up wherever it
+		// finishes up.
+		const from = this.#jump ?? now;
+		this.#jump = Math.min(total, Math.max(1, from + ev.payload.ticks));
+		this.repaintAll();
+
+		if (this.#jumpTimer) clearTimeout(this.#jumpTimer);
+		this.#jumpTimer = setTimeout(() => {
+			this.#jumpTimer = undefined;
+			void this.#goto();
+		}, SETTLE_MS);
+	}
+
+	/**
+	 * Pressing opens the deck as a grid, and closes it again on the slide the
+	 * dial is pointing at.
+	 *
+	 * Turning inside the grid is the same gesture as turning outside it - the
+	 * number counts on the strip and the jump is made once the dial settles -
+	 * so by the time the press lands the deck is usually already there. Pressing
+	 * before it settles commits straight away rather than making the user wait
+	 * out the timer.
+	 *
+	 * Not gated on the thumbnail setting: this is an ordinary meeting control
+	 * that reads nothing, and it needs neither presenter view nor a picture.
+	 */
+	/**
+	 * Pressing shows the deck as a grid, and pressing again puts it away.
+	 *
+	 * The grid is a view, not something the dial drives: its tiles navigate and
+	 * close it the moment they are selected, so there is no way to point at one
+	 * without going there. Turning is disabled while it is up for that reason.
+	 *
+	 * Not gated on the thumbnail setting: this is an ordinary meeting control
+	 * that reads nothing, and it needs neither presenter view nor a picture.
+	 */
+	override async onDialDown(ev: DialDownEvent<ThumbSettings & JsonObject>): Promise<void> {
+		if (!this.jumps()) return;
+		if (!pptLive(bridge.state)) return;
+
+		const res = await bridge.invoke(GRID_VIEW);
+		if (!res.ok) {
+			logger.warn(`could not toggle grid view: ${res.error ?? "no reason given"}`);
+			await ev.action.showAlert();
+		}
+	}
+
+	async #goto(): Promise<void> {
+		const wanted = this.#jump;
+		if (wanted === undefined) return;
+
+		if (Number(bridge.state.context["ppt.slide"] ?? 0) === wanted) {
+			// Already there - turned away and back again.
+			this.#jump = undefined;
+			this.repaintAll();
+			return;
+		}
+
+		this.#jumpSentAt = Date.now();
+		const res = await bridge.invoke(GOTO_SLIDE, String(wanted));
+		if (res.ok) return;
+
+		// Nothing happened, so stop claiming it did.
+		logger.warn(`could not go to slide ${wanted}: ${res.error ?? "no reason given"}`);
+		this.#jump = undefined;
+		this.repaintAll();
+	}
+
+	/**
+	 * Drops the dialled slide once Teams has actually moved to it.
+	 *
+	 * Held until then rather than cleared on send, because the capture of the
+	 * new slide takes a moment longer still - and clearing early would put the
+	 * *old* slide back on the strip in between, which reads as the jump having
+	 * failed.
+	 */
+	#settleJump(state: TeamsState): void {
+		if (this.#jump === undefined) return;
+
+		// The grid replaces the slide surface, so a pending number cannot be
+		// confirmed while it is up - and it is not actionable either. Drop it.
+		if (gridOpen(state)) {
+			this.#clearJump();
+			return;
+		}
+
+		if (this.#jumpSentAt === 0) return;
+
+		const now = Number(state.context["ppt.slide"] ?? 0);
+		if (now === this.#jump || Date.now() - this.#jumpSentAt > JUMP_CONFIRM_MS) {
+			this.#jump = undefined;
+			this.#jumpSentAt = 0;
+		}
+	}
+
 	protected override draw(state: TeamsState, dial: DialAction<ThumbSettings & JsonObject>): Feedback {
 		if (this.#allowed.get(dial.id) !== true) {
 			return { canvas: toPixmap(renderStripIdle(this.#title(), "turn on in settings")) };
 		}
 
+		this.#settleJump(state);
+
 		// Asking from draw keeps the two in step: every repaint is a chance to
 		// notice the deck moved, and the capture that follows repaints again.
 		this.#considerCapture(state);
+
+		if (this.#jump !== undefined) {
+			return {
+				canvas: toPixmap(
+					renderSlideJump(this.#image, this.#jump, Number(state.context["ppt.slides"] ?? 0))
+				)
+			};
+		}
 
 		if (this.#image !== undefined) return { canvas: this.#image };
 
@@ -862,6 +1062,7 @@ abstract class SlideThumbDialAction extends TeamsDialAction<ThumbSettings & Json
 			this.#slideName = undefined;
 			this.#ended = false;
 			this.#reason = undefined;
+			this.#clearJump();
 			if (had) bridge.forget(this.which);
 			return;
 		}
@@ -1053,6 +1254,7 @@ abstract class SlideThumbDialAction extends TeamsDialAction<ThumbSettings & Json
 	}
 
 	override onWillDisappear(ev: WillDisappearEvent<ThumbSettings & JsonObject>): void {
+		this.#clearJump();
 		this.#allowed.delete(ev.action.id);
 		if (this.#timer) clearTimeout(this.#timer);
 		if (this.#fade) clearTimeout(this.#fade);
@@ -1068,11 +1270,20 @@ abstract class SlideThumbDialAction extends TeamsDialAction<ThumbSettings & Json
  * Taken off the slide surface rather than the filmstrip, so a slide part-way
  * through its animations looks here the way it looks to the room. That also
  * means this one works without presenter view open.
+ *
+ * Turning it moves through the deck. The number is drawn over the dimmed
+ * thumbnail as it counts, and the jump is made once the dial goes still - the
+ * same shape as the ink dials, and for the same reason: one UI Automation walk
+ * per gesture rather than one per click.
  */
 @action({ UUID: "com.bad-duck.teamscontrol.ppt-slide-current" })
 export class SlideCurrentDialAction extends SlideThumbDialAction {
 	protected override readonly which = "current" as const;
 	protected override readonly live = true;
+
+	protected override jumps(): boolean {
+		return true;
+	}
 }
 
 /**

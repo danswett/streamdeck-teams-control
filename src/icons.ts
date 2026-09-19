@@ -567,6 +567,43 @@ function wrapText(text: string, size: number, maxWidth: number, maxLines: number
 const STRIP_TEXT_WIDTH = 186;
 
 /**
+ * The slide being dialled to: the thumbnail dimmed, with the number over it.
+ *
+ * Turning the dial has to say where it is going before it goes there, because
+ * getting there takes Teams the better part of a second and a dial that waits
+ * for that feels broken. So the picture the slot already has is dimmed and used
+ * as a backdrop, and the number counts with the dial.
+ *
+ * The thumbnail is a PNG data URI from the sidecar, embedded rather than
+ * recomposed: redrawing the slide for every click of the dial would mean a
+ * capture per tick.
+ */
+export function renderSlideJump(image: string | undefined, slide: number, total: number): string {
+	const backdrop =
+		image === undefined
+			? `<rect width="${STRIP_W}" height="${STRIP_H}" fill="#101014" />`
+			: `<image x="0" y="0" width="${STRIP_W}" height="${STRIP_H}" ` +
+				`preserveAspectRatio="xMidYMid slice" href="${escapeText(image)}" />`;
+
+	const caption = total > 0 ? `of ${total}` : "";
+
+	return strip(
+		backdrop +
+			// Dark enough that the number reads at a glance, light enough that
+			// the slide underneath is still recognisable.
+			`<rect width="${STRIP_W}" height="${STRIP_H}" fill="#000000" fill-opacity="0.66" />` +
+			`<text x="100" y="${caption ? 58 : 66}" text-anchor="middle" ` +
+			`font-family="Segoe UI, system-ui, sans-serif" font-size="46" font-weight="700" ` +
+			`fill="#FFFFFF">${slide}</text>` +
+			(caption
+				? `<text x="100" y="82" text-anchor="middle" ` +
+					`font-family="Segoe UI, system-ui, sans-serif" font-size="16" font-weight="500" ` +
+					`fill="#B8B8C0">${escapeText(caption)}</text>`
+				: "")
+	);
+}
+
+/**
  * The next slide by name, for when there is no picture of it to show.
  *
  * Teams scrolls the filmstrip so the current slide sits at its trailing edge,
