@@ -1649,6 +1649,58 @@ public sealed class TeamsClient : IDisposable
     }
 
     /// <summary>
+    /// The part of a filmstrip item that is actually inside the strip.
+    ///
+    /// A filmstrip item reports its whole rectangle whether or not it has been
+    /// scrolled into view, and <c>IsOffscreen</c> only becomes true once none
+    /// of it is showing. A half-scrolled slide is therefore reported as present,
+    /// at a rectangle that runs off the side of the list and over whatever is
+    /// next to it - which is how a thumbnail came back with the chat pane down
+    /// one edge.
+    ///
+    /// So the item is clipped to its own list. Anything much short of whole is
+    /// refused rather than shown cropped: half a slide is not a useful preview,
+    /// and the clipping is only there to absorb a pixel or two of rounding.
+    /// </summary>
+    private static System.Drawing.Rectangle? VisiblePart(AutomationElement item, System.Drawing.Rectangle rect)
+    {
+        System.Drawing.Rectangle view;
+        try
+        {
+            var list = item.Parent;
+            if (list is null) return rect;
+
+            var r = list.BoundingRectangle;
+            if (r.Width <= 0 || r.Height <= 0) return rect;
+            view = new System.Drawing.Rectangle(r.X, r.Y, r.Width, r.Height);
+        }
+        catch { return rect; }
+
+        return ClipToViewport(rect, view);
+    }
+
+    /// <summary>
+    /// The geometry behind <see cref="VisiblePart"/>, split out so it can be
+    /// tested without a running Teams.
+    /// </summary>
+    internal static System.Drawing.Rectangle? ClipToViewport(
+        System.Drawing.Rectangle rect,
+        System.Drawing.Rectangle view)
+    {
+        if (rect.Width <= 0 || rect.Height <= 0) return null;
+
+        var shown = System.Drawing.Rectangle.Intersect(rect, view);
+        if (shown.Width <= 0 || shown.Height <= 0) return null;
+        if ((double)shown.Width / rect.Width < MinVisibleFraction) return null;
+        if ((double)shown.Height / rect.Height < MinVisibleFraction) return null;
+
+        return shown;
+    }
+
+    /// <summary>How much of a slide must be in view before it is worth showing.</summary>
+    internal const double MinVisibleFraction = 0.98;
+
+    /// <summary>
     /// Captures the slide being shown, or the one after it.
     ///
     /// The two come from different places on purpose. "Current" is the live
@@ -1676,7 +1728,7 @@ public sealed class TeamsClient : IDisposable
         else
         {
             var strip = Filmstrip(win);
-            if (strip.Count == 0) return (false, "no slide thumbnails; presenter view is closed", null, null, false, none);
+            if (strip.Count == 0) return (false, "presenter view is closed", null, null, false, none);
 
             var at = -1;
             for (var i = 0; i < strip.Count; i++)
@@ -1687,7 +1739,7 @@ public sealed class TeamsClient : IDisposable
                 }
                 catch { }
             }
-            if (at < 0) return (false, "no slide is selected in the filmstrip", null, null, false, none);
+            if (at < 0) return (false, "no slide selected", null, null, false, none);
 
             // The end of the deck is reported as its own thing rather than as a
             // failure, because the two want opposite handling: a failure should
@@ -1707,17 +1759,22 @@ public sealed class TeamsClient : IDisposable
             try
             {
                 if (target.Properties.IsOffscreen.ValueOrDefault)
-                    return (false, "that slide is scrolled out of view", null, null, false, none);
+                    return (false, "scrolled out of view", null, null, false, none);
             }
             catch { }
 
             try
             {
                 var r = target.BoundingRectangle;
-                if (r.Width <= 0 || r.Height <= 0) return (false, "that slide has no size on screen", null, null, false, none);
+                if (r.Width <= 0 || r.Height <= 0) return (false, "slide has no size", null, null, false, none);
                 rect = new System.Drawing.Rectangle((int)r.X, (int)r.Y, (int)r.Width, (int)r.Height);
             }
-            catch { return (false, "could not measure that slide", null, null, false, none); }
+            catch { return (false, "could not measure it", null, null, false, none); }
+
+            // Partly scrolled counts as out of view too; see VisiblePart.
+            var shown = VisiblePart(target, rect);
+            if (shown is null) return (false, "scrolled out of view", null, null, false, none);
+            rect = shown.Value;
 
             name = NameOf(target);
         }
@@ -1725,7 +1782,7 @@ public sealed class TeamsClient : IDisposable
         var (image, frames) = SlideCapture.GrabSequence(
             which, WindowHandleOf(win), rect.X, rect.Y, rect.Width, rect.Height,
             border: which != "next", fadeFrames: fadeFrames);
-        if (image is null) return (false, "could not capture that slide", null, null, false, none);
+        if (image is null) return (false, "could not capture it", null, null, false, none);
 
         return (true, null, image, name, false, frames);
     }

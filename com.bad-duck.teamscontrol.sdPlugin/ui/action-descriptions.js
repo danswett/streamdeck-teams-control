@@ -51,10 +51,10 @@ globalThis.ACTION_DESCRIPTIONS = {
 		"Advances one slide. As the presenter this moves the deck for everyone; as an attendee it moves your view only, and the Sync key brings you back. Available whenever a deck is being presented.",
 
 	"com.bad-duck.teamscontrol.ppt-slide-current":
-		"Shows the slide you are presenting on the touch strip, bordered in red the way Teams marks the live slide. The picture is taken from the presenter-view filmstrip, so presenter view has to be open for it to appear. It is captured when the slide changes rather than continuously.",
+		"Shows the slide you are presenting on the touch strip, bordered in red the way Teams marks the live slide. It is the live slide surface rather than the filmstrip thumbnail, so a build that has not fired yet is missing here too, and ink appears as you draw it. Off until you turn it on, and the picture never leaves this computer.",
 
 	"com.bad-duck.teamscontrol.ppt-slide-next":
-		"Shows the slide after the one you are presenting, so you can see what is coming without leaving the current slide. Like the current-slide thumbnail it comes from the presenter-view filmstrip, and shows nothing on the last slide of the deck.",
+		"Shows the slide after the one you are presenting, so you can see what is coming without leaving the current slide. It comes from the presenter-view filmstrip, so presenter view has to be open, and it shows that slide fully built. Off until you turn it on, and the picture never leaves this computer.",
 
 	"com.bad-duck.teamscontrol.ppt-status":
 		"Shows the current slide and the deck length, such as 3 / 19. Display only - pressing it does nothing. It holds the last known position while Teams hides its toolbar or a flyout is open, rather than going blank.",

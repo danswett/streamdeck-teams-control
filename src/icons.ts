@@ -521,13 +521,81 @@ export function renderInkColor(color: string, name: string): string {
 	);
 }
 
+/**
+ * Rough width of a string at a given size, in the strip's own font.
+ *
+ * SVG has no way to ask, and the touch strip silently clips rather than
+ * shrinking, so a caption that does not fit is simply lost - which is how
+ * "that slide is scrolled out of view" ended up on screen cut in half. The
+ * constant is calibrated against Segoe UI by rasterising these captions and
+ * measuring the ink: the widest measured about 0.43 of the font size per
+ * character, so this errs a little wide of that. `tests/icons.test.ts` renders
+ * every caption the plugin can produce and fails if one overruns the slot,
+ * which is what keeps the estimate honest.
+ */
+function textWidth(text: string, size: number): number {
+	return text.length * size * 0.47;
+}
+
+/** Greedy wrap, or null when it will not fit in the lines allowed. */
+function wrapText(text: string, size: number, maxWidth: number, maxLines: number): string[] | null {
+	const words = text.split(/\s+/).filter(Boolean);
+	if (words.length === 0) return [];
+
+	const lines: string[] = [];
+	let line = "";
+
+	for (const word of words) {
+		if (textWidth(word, size) > maxWidth) return null;
+
+		const candidate = line === "" ? word : `${line} ${word}`;
+		if (textWidth(candidate, size) <= maxWidth) {
+			line = candidate;
+			continue;
+		}
+
+		lines.push(line);
+		if (lines.length >= maxLines) return null;
+		line = word;
+	}
+
+	if (line !== "") lines.push(line);
+	return lines.length <= maxLines ? lines : null;
+}
+
+/** The widest a caption may be before it starts touching the edge of the slot. */
+const STRIP_TEXT_WIDTH = 186;
+
 /** A dial with nothing to act on: says so, centred, rather than going blank. */
 export function renderStripIdle(label: string, detail: string): string {
+	// Stepped down and wrapped rather than trusted to fit. These captions carry
+	// whatever reason the sidecar gave, so their length is not knowable here.
+	let size = 18;
+	let lines = wrapText(detail, size, STRIP_TEXT_WIDTH, 2);
+	for (const smaller of [16, 14, 12]) {
+		if (lines !== null) break;
+		size = smaller;
+		lines = wrapText(detail, size, STRIP_TEXT_WIDTH, 2);
+	}
+	lines ??= [detail];
+
+	const two = lines.length > 1;
+	const labelY = two ? 38 : 45;
+	const firstY = two ? 64 : 74;
+
+	const caption = lines
+		.map(
+			(line, i) =>
+				`<text x="100" y="${firstY + i * (size + 4)}" text-anchor="middle" ` +
+				`font-family="Segoe UI, system-ui, sans-serif" font-size="${size}" ` +
+				`font-weight="400" fill="#5A5A62">${escapeText(line)}</text>`
+		)
+		.join("");
+
 	return strip(
-		`<text x="100" y="45" text-anchor="middle" font-family="Segoe UI, system-ui, sans-serif" ` +
+		`<text x="100" y="${labelY}" text-anchor="middle" font-family="Segoe UI, system-ui, sans-serif" ` +
 			`font-size="22" font-weight="600" fill="#8A8A92">${escapeText(label)}</text>` +
-			`<text x="100" y="74" text-anchor="middle" font-family="Segoe UI, system-ui, sans-serif" ` +
-			`font-size="18" font-weight="400" fill="#5A5A62">${escapeText(detail)}</text>`
+			caption
 	);
 }
 

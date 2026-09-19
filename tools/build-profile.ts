@@ -330,8 +330,8 @@ const PROFILES: Profile[] = [
 		name: "PowerPoint Live (Presenter)",
 		device: PLUS_XL,
 		uuid: "6C9E1A3F-4D05-4B8C-8F67-8A3B2E5D9C74",
-		layoutHash: "972e66ae",
-		revision: 3,
+		layoutHash: "1ddffa5d",
+		revision: 4,
 		page: "a1b2c3d4-0013-4e85-a0b7-2f6c1e5d8a34",
 		dials: {
 			// Positions 1 and 2: the slide being presented and the one after it.
@@ -339,23 +339,7 @@ const PROFILES: Profile[] = [
 			"1,0": { action: "ppt-slide-next", name: "PPT Live: Next Slide" },
 
 			"2,0": { action: "ppt-ink-thickness-dial", name: "PPT Presenter: Ink Thickness" },
-			"3,0": { action: "ppt-ink-color-dial", name: "PPT Presenter: Ink Color" },
-
-			// Ships with the + XL, so these are live out of the box on the deck
-			// this profile is for. They are dead for anyone without the Volume
-			// Controller plugin, which is why no other profile carries them.
-			"4,0": {
-				action: "com.elgato.volume-controller.input-device-control",
-				name: "Input Device Control",
-				settings: { deviceId: "default", friendlyName: "", style: "vertical", volume: "50", volumeStep: "3" },
-				plugin: { name: "Volume Controller", uuid: "com.elgato.volume-controller" }
-			},
-			"5,0": {
-				action: "com.elgato.volume-controller.output-device-control",
-				name: "Output Device Control",
-				settings: { deviceId: "default", friendlyName: "", style: "vertical", volume: "50", volumeStep: "3" },
-				plugin: { name: "Volume Controller", uuid: "com.elgato.volume-controller" }
-			}
+			"3,0": { action: "ppt-ink-color-dial", name: "PPT Presenter: Ink Color" }
 		},
 		/*
 			Laid out by hand in the Stream Deck app and read back with

@@ -19,6 +19,7 @@ import {
 	type DialAction,
 	type DialDownEvent,
 	type DialRotateEvent,
+	type DidReceiveSettingsEvent,
 	SingletonAction,
 	type TouchTapEvent,
 	type WillAppearEvent,
@@ -668,7 +669,19 @@ const POLL_ACTIVE_FOR_MS = 12_000;
  */
 const POLL_INK_MS = 250;
 
-abstract class SlideThumbDialAction extends TeamsDialAction {
+/**
+ * Whether this slot may read the slide at all.
+ *
+ * Off unless the user turns it on. Every other action in this plugin reads
+ * which controls exist and what state they are in; this one reads the content
+ * of the meeting, and that is not a thing to start doing on someone's behalf
+ * because they happened to install a plugin for the mute button.
+ */
+type ThumbSettings = {
+	capture?: boolean;
+};
+
+abstract class SlideThumbDialAction extends TeamsDialAction<ThumbSettings & JsonObject> {
 	/** Which slide to show; sent straight to the sidecar. */
 	protected abstract readonly which: "current" | "next";
 
@@ -711,7 +724,38 @@ abstract class SlideThumbDialAction extends TeamsDialAction {
 		return INK_LAYOUT;
 	}
 
-	protected override draw(state: TeamsState): Feedback {
+	/** Which dials have been allowed to read the slide, by dial id. */
+	readonly #allowed = new Map<string, boolean>();
+
+	override onWillAppear(ev: WillAppearEvent<ThumbSettings & JsonObject>): void {
+		this.#allowed.set(ev.action.id, ev.payload.settings.capture === true);
+		super.onWillAppear(ev);
+	}
+
+	override onDidReceiveSettings(ev: DidReceiveSettingsEvent<ThumbSettings & JsonObject>): void {
+		const was = this.#on();
+		this.#allowed.set(ev.action.id, ev.payload.settings.capture === true);
+
+		// Turning it off drops the picture rather than leaving the last slide
+		// sitting on the strip after permission was withdrawn.
+		if (was && !this.#on()) {
+			this.#image = undefined;
+			this.#capturedAt = undefined;
+		}
+		this.repaintAll();
+	}
+
+	/** Whether any dial on the strip has been allowed to read the slide. */
+	#on(): boolean {
+		for (const a of this.actions) if (a.isDial() && this.#allowed.get(a.id) === true) return true;
+		return false;
+	}
+
+	protected override draw(state: TeamsState, dial: DialAction<ThumbSettings & JsonObject>): Feedback {
+		if (this.#allowed.get(dial.id) !== true) {
+			return { canvas: toPixmap(renderStripIdle(this.#title(), "turn on in settings")) };
+		}
+
 		// Asking from draw keeps the two in step: every repaint is a chance to
 		// notice the deck moved, and the capture that follows repaints again.
 		this.#considerCapture(state);
@@ -723,11 +767,15 @@ abstract class SlideThumbDialAction extends TeamsDialAction {
 		return {
 			canvas: toPixmap(
 				renderStripIdle(
-					this.which === "next" ? "Next slide" : "Current slide",
+					this.#title(),
 					pptLive(state) ? (this.#reason ?? "waiting for the slide") : "no deck"
 				)
 			)
 		};
+	}
+
+	#title(): string {
+		return this.which === "next" ? "Next slide" : "Current slide";
 	}
 
 	/** Where the deck is, as a value that changes exactly when the picture must. */
@@ -797,11 +845,12 @@ abstract class SlideThumbDialAction extends TeamsDialAction {
 		if (!this.live || this.#loop !== undefined) return;
 
 		const tick = (): void => {
-			// Nothing on the strip to paint. The loop ends here rather than
-			// being cancelled from onWillDisappear, because a snapshot only
-			// arrives when something in Teams changes - so a loop stopped on
-			// the way out might have nothing to start it again.
-			if (!this.#onStrip()) {
+			// Nothing on the strip to paint, or permission withdrawn. The loop
+			// ends here rather than being cancelled from onWillDisappear,
+			// because a snapshot only arrives when something in Teams changes -
+			// so a loop stopped on the way out might have nothing to start it
+			// again.
+			if (!this.#on()) {
 				this.#loop = undefined;
 				return;
 			}
@@ -813,11 +862,6 @@ abstract class SlideThumbDialAction extends TeamsDialAction {
 		};
 
 		this.#loop = setTimeout(tick, this.#interval());
-	}
-
-	#onStrip(): boolean {
-		for (const a of this.actions) if (a.isDial()) return true;
-		return false;
 	}
 
 	#stopWatching(): void {
@@ -930,7 +974,8 @@ abstract class SlideThumbDialAction extends TeamsDialAction {
 		step();
 	}
 
-	override onWillDisappear(ev: WillDisappearEvent<JsonObject>): void {
+	override onWillDisappear(ev: WillDisappearEvent<ThumbSettings & JsonObject>): void {
+		this.#allowed.delete(ev.action.id);
 		if (this.#timer) clearTimeout(this.#timer);
 		if (this.#fade) clearTimeout(this.#fade);
 		this.#timer = undefined;

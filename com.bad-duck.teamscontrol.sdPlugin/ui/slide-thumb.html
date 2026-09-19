@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Slide thumbnail settings</title>
+		<link rel="stylesheet" href="inspector.css" />
+		<script src="sdpi-components.js"></script>
+	</head>
+	<body>
+		<p class="hint" id="action-description"></p>
+
+		<sdpi-item label="Thumbnail">
+			<sdpi-checkbox setting="capture" label="Show the slide on the touch strip"></sdpi-checkbox>
+		</sdpi-item>
+		<p class="hint">
+			Off by default, because this is the only part of the plugin that reads
+			what is on a slide rather than which buttons exist. With it on, the
+			slide is copied from the Teams window straight to your Stream Deck
+			several times a second while you are presenting.
+		</p>
+		<p class="hint">
+			<b>Everything stays on this computer.</b> Nothing is uploaded, sent
+			anywhere, written to disk, or recorded in any log — the picture goes to
+			the deck on your desk and is replaced by the next one. Leave this off if
+			you present material that should not be shown on an external display.
+		</p>
+		<script src="action-descriptions.js"></script>
+		<script>
+			// Several actions share each inspector - most PowerPoint Live keys share
+			// ppt.html - so it has to name the key you actually clicked, and a count
+			// here would rot. textContent, never innerHTML.
+			SDPIComponents.streamDeckClient.getConnectionInfo().then(({ actionInfo }) => {
+				const text = globalThis.ACTION_DESCRIPTIONS?.[actionInfo?.action];
+				if (text) document.getElementById("action-description").textContent = text;
+			});
+		</script>
+	</body>
+</html>

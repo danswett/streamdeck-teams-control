@@ -244,8 +244,8 @@ node tools/check-profile.mjs "com.bad-duck.teamscontrol.sdPlugin/profiles/Teams 
 
 #### Dials
 
-The + XL has six. The presenter layout uses four and leaves the last two to
-Elgato's own Volume Controller:
+The + XL has six. The PowerPoint Live presenter layout uses the first four and
+leaves the last two empty, for whatever you want there:
 
 | dial | shows | turn |
 |---|---|---|
@@ -253,6 +253,11 @@ Elgato's own Volume Controller:
 | **Next slide** | the slide after it | — |
 | **Ink thickness** | 1 to 6, Teams' own range | sets it |
 | **Ink color** | the tool's palette, wrapping | sets it |
+
+The + XL ships with Elgato's Volume Controller, and its input and output dials
+sit naturally in the two spare slots — but a bundled profile is installed once
+and never reconciled, so anything placed there is placed permanently. Leaving
+them empty is the reversible choice.
 
 The ink dials act on whichever drawing tool is selected rather than owning one,
 so picking the pen points both of them at the pen. They go quiet for tools that
@@ -299,9 +304,15 @@ the window on request and is therefore occlusion-proof. `CopyFromScreen` was
 tried first and captured whatever happened to be on top.
 
 **This is the one part of the plugin that reads meeting content rather than
-controls**, and it is deliberately narrow: a rectangle inside the Teams window,
-scaled straight into the 200 × 100 slot it will occupy, never written to disk
-and never logged.
+controls, so it is off until the user turns it on** — per dial, in the property
+inspector. Everything else here reads which controls exist and what state they
+are in; starting to read the slides themselves because somebody installed a
+plugin for the mute button is not a reasonable default.
+
+It is deliberately narrow: a rectangle inside the Teams window, scaled straight
+into the 200 × 100 slot it will occupy, sent to the deck on the desk. Nothing is
+uploaded, written to disk, or recorded in any log, and each picture is replaced
+by the next.
 
 The two slots come from different places, which is the whole point:
 
@@ -315,12 +326,28 @@ The two slots come from different places, which is the whole point:
   not been reached has no live render to read. It is the next *slide*, not the
   next build.
 
+A filmstrip item reports its whole rectangle whether or not it has been scrolled
+into view, and UI Automation only calls it offscreen once *none* of it is
+showing. A half-scrolled slide is therefore offered at a rectangle that runs off
+the side of the list and over whatever is beside it — which is how a thumbnail
+came back with the chat pane down one edge. So the item is clipped to the list
+it sits in, and anything much short of whole is refused rather than cropped:
+half a slide is not a useful preview. `SlideClipTests` pins the geometry to the
+coordinates that filmstrip actually reported.
+
 Running off the end of the deck is reported as its own signal rather than as a
 failure, because the two want opposite handling. A failure should leave the last
 picture alone and retry; running out of slides means the picture is now of a
 slide the presenter has already left, so it has to go. The same rule applies to
 any failed capture once the deck has moved — **a stale thumbnail is only honest
 while the slide has not changed.**
+
+The strip clips a caption rather than shrinking it, and says nothing when it
+does, so "that slide is scrolled out of view" arrived on the deck cut in half.
+Captions now wrap and step down in size to fit. SVG offers no way to measure
+text, so the fit is estimated from a constant calibrated by rasterising the real
+thing; `tests/icons.test.ts` renders every caption the plugin can produce and
+fails if any of it touches the edge of the slot.
 
 ##### Watching a slide that is not moving
 
@@ -338,6 +365,8 @@ is tied to whether there is any reason to expect a change:
 | a pen, highlighter or eraser is selected | 250 ms |
 | something changed in the last 12 s | 700 ms |
 | otherwise | 3 s |
+
+None of it runs at all unless a thumbnail has been switched on.
 
 Selecting a marking tool re-arms the timer immediately rather than waiting out
 the slow interval. The laser is deliberately excluded: it moves constantly and

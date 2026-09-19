@@ -62,7 +62,7 @@
 			"DontAutoSwitchWhenInstalled": true
 		},
 		{
-			"Name": "profiles/PowerPoint Live (Presenter) (+ XL) r3",
+			"Name": "profiles/PowerPoint Live (Presenter) (+ XL) r4",
 			"DeviceType": 13,
 			"Readonly": false,
 			"DontAutoSwitchWhenInstalled": true
@@ -355,7 +355,7 @@
 			],
 			"SupportedInMultiActions": false,
 			"UserTitleEnabled": false,
-			"PropertyInspectorPath": "ui/ppt.html",
+			"PropertyInspectorPath": "ui/slide-thumb.html",
 			"States": [
 				{
 					"Image": "imgs/actions/ppt-slide-current/key",
@@ -378,7 +378,7 @@
 			],
 			"SupportedInMultiActions": false,
 			"UserTitleEnabled": false,
-			"PropertyInspectorPath": "ui/ppt.html",
+			"PropertyInspectorPath": "ui/slide-thumb.html",
 			"States": [
 				{
 					"Image": "imgs/actions/ppt-slide-next/key",

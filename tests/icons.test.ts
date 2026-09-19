@@ -14,6 +14,7 @@ import {
 	renderReaction,
 	renderReactionFrame,
 	renderSimple,
+	renderStripIdle,
 	renderToggle,
 	renderTool,
 	toDataUri,
@@ -401,5 +402,91 @@ describe("the live pill", () => {
 		const height = Number(/height="(\d+)"[^>]*rx=/.exec(svg)?.[1] ?? /rx="[\d.]+"[^>]*height="(\d+)"/.exec(svg)?.[1]);
 		const radius = Number(/rx="([\d.]+)"/.exec(svg)?.[1]);
 		expect(radius).toBeCloseTo(height / 2, 1);
+	});
+});
+/* ------------------------------------------------------------------------- *
+ * Touch-strip captions
+ *
+ * The strip clips rather than shrinking, and says nothing when it does, so a
+ * caption that does not fit is silently lost. renderStripIdle wraps and steps
+ * the size down to avoid that, but it does so against an *estimate* of how wide
+ * the text will be - SVG offers no way to ask. These tests rasterise the real
+ * thing and measure the ink, which is the only way to know the estimate is
+ * still right.
+ * ------------------------------------------------------------------------- */
+
+/** Every caption the plugin can put on a dial slot. */
+const CAPTIONS: [string, string][] = [
+	["Current slide", "turn on in settings"],
+	["Next slide", "turn on in settings"],
+	["Current slide", "waiting for the slide"],
+	["Next slide", "waiting for the slide"],
+	["Current slide", "no deck"],
+	["Next slide", "no deck"],
+	["End of show", "no slide after this one"],
+	["Next slide", "presenter view is closed"],
+	["Next slide", "scrolled out of view"],
+	["Next slide", "no slide selected"],
+	["Next slide", "slide has no size"],
+	["Next slide", "could not measure it"],
+	["Next slide", "could not capture it"],
+	["Current slide", "no slide is being shown"],
+	["Current slide", "not in a meeting"],
+	// Not produced any more, but it is the one that actually shipped clipped,
+	// so it stays as the case that must never regress.
+	["Next slide", "that slide is scrolled out of view"]
+];
+
+/** The bounding box of everything drawn, in slot pixels. */
+function inkBox(svg: string): { left: number; right: number; top: number; bottom: number } {
+	const img = new Resvg(svg, { fitTo: { mode: "width", value: 200 } }).render();
+	const px = img.pixels;
+
+	let left = img.width;
+	let right = -1;
+	let top = img.height;
+	let bottom = -1;
+
+	for (let y = 0; y < img.height; y++) {
+		for (let x = 0; x < img.width; x++) {
+			const i = (y * img.width + x) * 4;
+			// The slot is drawn on a near-black card, so ink is anything
+			// appreciably brighter than the background it sits on.
+			if (px[i] < 70 && px[i + 1] < 70 && px[i + 2] < 70) continue;
+			if (x < left) left = x;
+			if (x > right) right = x;
+			if (y < top) top = y;
+			if (y > bottom) bottom = y;
+		}
+	}
+
+	return { left, right, top, bottom };
+}
+
+describe("touch-strip captions", () => {
+	it.each(CAPTIONS)("fits %s / %s inside the slot", (label, detail) => {
+		const svg = renderStripIdle(label, detail);
+		expectSvg(svg);
+
+		const box = inkBox(svg);
+		expect(box.right).toBeGreaterThan(0);
+
+		// A slot is 200x100. Anything touching an edge has been cut off.
+		expect(box.left).toBeGreaterThanOrEqual(1);
+		expect(box.right).toBeLessThanOrEqual(198);
+		expect(box.top).toBeGreaterThanOrEqual(1);
+		expect(box.bottom).toBeLessThanOrEqual(98);
+	});
+
+	it("keeps a long caption on two lines rather than shrinking it away", () => {
+		const svg = renderStripIdle("Next slide", "that slide is scrolled out of view");
+
+		// Three text nodes: the label, then the caption split over two lines.
+		expect((svg.match(/<text/g) ?? []).length).toBe(3);
+	});
+
+	it("leaves a caption that already fits on one line", () => {
+		const svg = renderStripIdle("Next slide", "scrolled out of view");
+		expect((svg.match(/<text/g) ?? []).length).toBe(2);
 	});
 });
