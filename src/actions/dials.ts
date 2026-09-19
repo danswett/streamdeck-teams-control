@@ -28,7 +28,7 @@ import streamDeck from "@elgato/streamdeck";
 import type { JsonObject } from "@elgato/utils";
 
 import { bridge, type TeamsState } from "../bridge";
-import { renderGlyph, renderTool, toDataUri } from "../icons";
+import { renderInkColor, renderInkThickness, renderStripIdle, toDataUri, toolColor } from "../icons";
 import { pptLive } from "./powerpoint";
 
 const logger = streamDeck.logger.createScope("Dial");
@@ -50,12 +50,37 @@ export abstract class TeamsDialAction<T extends JsonObject = JsonObject> extends
 	/** The slot's contents for the current state. */
 	protected abstract draw(state: TeamsState, dial: DialAction<T>): Feedback;
 
+	/**
+	 * Layout to apply to the slot, if the action needs one setting at runtime.
+	 *
+	 * The manifest names one too, but a dial that was already on the strip when
+	 * the plugin restarted can be left on whatever it had, so it is set again
+	 * on every appearance rather than trusted.
+	 */
+	protected layout(): string | undefined {
+		return undefined;
+	}
+
 	override onWillAppear(ev: WillAppearEvent<T>): void {
 		this.#visible++;
 		if (!this.#unsubscribe) {
 			this.#unsubscribe = bridge.subscribe((state) => this.#paintAll(state));
 		}
-		if (ev.action.isDial()) void this.#paint(ev.action, bridge.state);
+		if (!ev.action.isDial()) return;
+
+		const layout = this.layout();
+		const dial = ev.action;
+		if (layout === undefined) {
+			void this.#paint(dial, bridge.state);
+			return;
+		}
+
+		// Painted only once the layout is in place: a pixmap sent against the
+		// previous layout has nowhere to land and the slot stays blank.
+		void dial
+			.setFeedbackLayout(layout)
+			.catch((err) => logger.debug(`setFeedbackLayout failed: ${String(err)}`))
+			.then(() => this.#paint(dial, bridge.state));
 	}
 
 	override onWillDisappear(ev: WillDisappearEvent<T>): void {
@@ -98,150 +123,6 @@ export abstract class TeamsDialAction<T extends JsonObject = JsonObject> extends
 	}
 }
 
-/** How still the dial must be before the presses behind it are sent. */
-const SETTLE_MS = 220;
-
-/**
- * A spin can outrun Teams by a long way. Past this the extra ticks are dropped
- * rather than queued: arriving at slide 40 a minute after the user stopped
- * turning is worse than not going there at all.
- */
-const MAX_PENDING = 25;
-
-const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n));
-
-/**
- * Moves through a PowerPoint Live deck.
- *
- * Turn for previous and next, press for grid view, touch to sync back to the
- * presenter. The slot shows the position in the deck, and the bar shows how far
- * through it you are — the one genuinely continuous thing this plugin has, and
- * the reason a dial is worth having at all.
- */
-@action({ UUID: "com.bad-duck.teamscontrol.ppt-slide-dial" })
-export class SlideDialAction extends TeamsDialAction {
-	/** Slides asked for but not yet pressed, per dial. */
-	readonly #pending = new Map<string, number>();
-	readonly #timers = new Map<string, NodeJS.Timeout>();
-
-	/** Dials whose backlog is already being walked down. */
-	readonly #flushing = new Set<string>();
-
-	protected override draw(state: TeamsState, dial: DialAction<JsonObject>): Feedback {
-		const live = pptLive(state);
-		const pending = this.#pending.get(dial.id) ?? 0;
-
-		const slide = Number.parseInt(state.context["ppt.slide"] ?? "", 10);
-		const total = Number.parseInt(state.context["ppt.slides"] ?? "", 10);
-
-		if (!live || !Number.isFinite(slide)) {
-			return {
-				title: "Slide",
-				icon: toDataUri(renderGlyph("pptSlide", "unavailable")),
-				value: live ? "—" : "No deck",
-				indicator: 0
-			};
-		}
-
-		// Where the dial has been turned to, not where Teams has caught up to.
-		const target = Number.isFinite(total)
-			? clamp(slide + pending, 1, total)
-			: Math.max(1, slide + pending);
-
-		return {
-			title: pending === 0 ? "Slide" : "Slide →",
-			icon: toDataUri(renderGlyph("pptSlide", pending === 0 ? "on" : "accent")),
-			value: Number.isFinite(total) ? `${target} / ${total}` : String(target),
-			indicator: Number.isFinite(total) && total > 0 ? Math.round((target / total) * 100) : 0
-		};
-	}
-
-	override onWillDisappear(ev: WillDisappearEvent<JsonObject>): void {
-		const timer = this.#timers.get(ev.action.id);
-		if (timer) clearTimeout(timer);
-		this.#timers.delete(ev.action.id);
-		this.#pending.delete(ev.action.id);
-		super.onWillDisappear(ev);
-	}
-
-	override onDialRotate(ev: DialRotateEvent<JsonObject>): void {
-		if (!pptLive(bridge.state)) return;
-
-		const dial = ev.action;
-		const id = dial.id;
-
-		this.#pending.set(id, clamp((this.#pending.get(id) ?? 0) + ev.payload.ticks, -MAX_PENDING, MAX_PENDING));
-		this.refresh(dial);
-
-		// Restarted on every tick, so a continuous spin sends nothing until it
-		// stops. One press per tick during the spin would arrive minutes late.
-		const timer = this.#timers.get(id);
-		if (timer) clearTimeout(timer);
-		this.#timers.set(
-			id,
-			setTimeout(() => {
-				this.#timers.delete(id);
-				void this.#flush(dial);
-			}, SETTLE_MS)
-		);
-	}
-
-	/** Press opens grid view, which both roles have. */
-	override async onDialDown(ev: DialDownEvent<JsonObject>): Promise<void> {
-		await this.#press(ev.action, "ppt-grid");
-	}
-
-	/** Touch returns an attendee to the presenter's slide; a no-op for a presenter. */
-	override async onTouchTap(ev: TouchTapEvent<JsonObject>): Promise<void> {
-		await this.#press(ev.action, "ppt-sync");
-	}
-
-	async #press(dial: DialAction<JsonObject>, target: string): Promise<void> {
-		const state = bridge.state;
-		if (!state.inMeeting || !(state.available[target] ?? false)) return;
-
-		const result = await bridge.invoke(target);
-		if (!result.ok) logger.warn(`invoke(${target}) failed: ${result.error ?? "unknown"}`);
-	}
-
-	/**
-	 * Walks the backlog down one press at a time.
-	 *
-	 * Sequential on purpose: the sidecar runs one thing at a time anyway, and
-	 * firing them together would only fill its queue with work the user can no
-	 * longer see the point of.
-	 */
-	async #flush(dial: DialAction<JsonObject>): Promise<void> {
-		const id = dial.id;
-		if (this.#flushing.has(id)) return;
-		this.#flushing.add(id);
-
-		try {
-			for (;;) {
-				const pending = this.#pending.get(id) ?? 0;
-				if (pending === 0) break;
-
-				const step = pending > 0 ? 1 : -1;
-				const result = await bridge.invoke(step > 0 ? "ppt-next" : "ppt-prev");
-
-				// Spent whether or not it worked, so a failing control cannot
-				// spin here forever.
-				this.#pending.set(id, (this.#pending.get(id) ?? 0) - step);
-
-				if (!result.ok) {
-					logger.warn(`slide dial gave up: ${result.error ?? "unknown"}`);
-					this.#pending.set(id, 0);
-					break;
-				}
-				this.refresh(dial);
-			}
-		} finally {
-			this.#flushing.delete(id);
-			this.refresh(dial);
-		}
-	}
-}
-
 /* ------------------------------------------------------------------------- *
  * Ink
  *
@@ -252,9 +133,16 @@ export class SlideDialAction extends TeamsDialAction {
  * Both act on whichever drawing tool is selected, so neither dial has a tool
  * of its own to configure - pick the pen and they drive the pen. The tools
  * differ in what they even have: the laser has a colour and no thickness, and
- * the cursor and eraser have neither, so each dial goes quiet rather than
- * pretending.
+ * the cursor has neither, so each dial goes quiet rather than pretending.
  * ------------------------------------------------------------------------- */
+
+/** How still the dial must be before the change behind it is sent. */
+const SETTLE_MS = 220;
+
+/** A spin can outrun Teams; past this the extra ticks are dropped. */
+const MAX_PENDING = 25;
+
+const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n));
 
 /** The drawing tools, and what each actually has to configure. */
 const INK_TOOLS = ["ppt-cursor", "ppt-laser", "ppt-pen", "ppt-highlighter", "ppt-eraser"];
@@ -264,6 +152,12 @@ const HAS_THICKNESS = new Set(["ppt-pen", "ppt-highlighter"]);
 /** Teams' own range for the ink thickness slider. */
 const THICKNESS_MIN = 1;
 const THICKNESS_MAX = 6;
+
+/**
+ * The slot is drawn as one image, so the layout is a single full-canvas pixmap
+ * rather than a built-in arrangement of icon and value boxes.
+ */
+const INK_LAYOUT = "layouts/ink.json";
 
 /** The selected drawing tool, which is the one both ink dials act on. */
 function activeInkTool(state: TeamsState): string | null {
@@ -373,24 +267,25 @@ export class InkThicknessDialAction extends InkDialAction {
 		const tool = this.toolFor(state);
 		if (tool === null) {
 			return {
-				title: "Thickness",
-				icon: toDataUri(renderGlyph("pptHighlighter", "unavailable")),
-				value: pptLive(state) ? "No pen" : "No deck",
-				indicator: 0
+				canvas: toDataUri(renderStripIdle("Thickness", pptLive(state) ? "no pen selected" : "no deck"))
 			};
 		}
 
-		const pending = this.pendingOn(dial);
-		const target = this.#target(state, tool, pending);
-
+		const target = this.#target(state, tool, this.pendingOn(dial));
 		return {
-			title: pending === 0 ? "Thickness" : "Thickness →",
-			icon: toDataUri(
-				renderTool(tool, { available: true, active: true, color: state.context[`ppt.color.${tool}`] })
-			),
-			value: String(target),
-			indicator: Math.round(((target - THICKNESS_MIN) / (THICKNESS_MAX - THICKNESS_MIN)) * 100)
+			canvas: toDataUri(
+				renderInkThickness(
+					toolColor(tool, state.context[`ppt.color.${tool}`]),
+					target,
+					THICKNESS_MIN,
+					THICKNESS_MAX
+				)
+			)
 		};
+	}
+
+	protected override layout(): string {
+		return INK_LAYOUT;
 	}
 
 	protected override commit(
@@ -430,21 +325,18 @@ export class InkColorDialAction extends InkDialAction {
 		const tool = this.toolFor(state);
 		if (tool === null) {
 			return {
-				title: "Ink colour",
-				icon: toDataUri(renderGlyph("pptPen", "unavailable")),
-				value: pptLive(state) ? "No pen" : "No deck"
+				canvas: toDataUri(renderStripIdle("Ink colour", pptLive(state) ? "no pen selected" : "no deck"))
 			};
 		}
 
-		const pending = this.pendingOn(dial);
 		const current = state.context[`ppt.color.${tool}`] ?? "";
-		const name = this.#preview(state, tool, current, pending);
+		const name = this.#preview(state, tool, current, this.pendingOn(dial));
 
-		return {
-			title: pending === 0 ? "Ink colour" : "Ink colour →",
-			icon: toDataUri(renderTool(tool, { available: true, active: true, color: name || current })),
-			value: name || current || "—"
-		};
+		return { canvas: toDataUri(renderInkColor(toolColor(tool, name || current), name || current)) };
+	}
+
+	protected override layout(): string {
+		return INK_LAYOUT;
 	}
 
 	protected override commit(

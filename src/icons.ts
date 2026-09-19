@@ -435,3 +435,89 @@ function renderEmojiGlyph(def: GlyphDef | undefined, available: boolean): string
 	// Opacity is used rather than a filter so it rasterises everywhere.
 	return wrap(available ? art : `<g opacity="0.25">${art}</g>`);
 }
+
+/* ------------------------------------------------------------------------- *
+ * Touch strip
+ *
+ * A dial's slot is 200x100 and is drawn as one image rather than assembled
+ * from a built-in layout's icon-and-value slots, which put the icon hard left
+ * and the number hard right and read as off-centre above a dial. Everything
+ * here is centred on the slot, so it sits over the dial it belongs to.
+ * ------------------------------------------------------------------------- */
+
+/** The touch strip gives every dial the same canvas, on every device. */
+const STRIP_W = 200;
+const STRIP_H = 100;
+
+/** Teams' own accent, used for the slider so it reads as a Teams control. */
+const STRIP_ACCENT = "#7B83EB";
+const STRIP_TRACK = "#4A4A52";
+
+function strip(body: string): string {
+	return (
+		`<svg xmlns="http://www.w3.org/2000/svg" width="${STRIP_W}" height="${STRIP_H}" ` +
+		`viewBox="0 0 ${STRIP_W} ${STRIP_H}">${body}</svg>`
+	);
+}
+
+/**
+ * Ink thickness, drawn the way PowerPoint Live draws it.
+ *
+ * A tapered wedge in the ink colour over a slider, which is what the flyout
+ * shows - so the dial is recognisably the same control rather than a bar chart
+ * standing in for one.
+ */
+export function renderInkThickness(color: string, value: number, min = 1, max = 6): string {
+	const x0 = 16;
+	const x1 = 140;
+	const span = max > min ? (clampValue(value, min, max) - min) / (max - min) : 0;
+	const knobX = x0 + span * (x1 - x0);
+
+	// Left tip is deliberately not zero-height: a true point disappears once
+	// Stream Deck scales this down for the strip.
+	const wedge = `16,33 168,23 168,43 16,36`;
+
+	return strip(
+		`<polygon points="${wedge}" fill="${color}" />` +
+			`<rect x="${x0}" y="${64}" width="${x1 - x0}" height="5" rx="2.5" fill="${STRIP_TRACK}" />` +
+			`<rect x="${x0}" y="${64}" width="${Math.max(0, knobX - x0)}" height="5" rx="2.5" fill="${STRIP_ACCENT}" />` +
+			`<circle cx="${knobX.toFixed(1)}" cy="66.5" r="9" fill="${STRIP_ACCENT}" stroke="#20202A" stroke-width="1.5" />` +
+			`<text x="176" y="75" text-anchor="middle" font-family="Segoe UI, system-ui, sans-serif" ` +
+			`font-size="26" font-weight="600" fill="#FFFFFF">${escapeText(String(Math.round(value)))}</text>`
+	);
+}
+
+/**
+ * The ink colour, as a block of the colour itself.
+ *
+ * A swatch says it faster than a name does, so the name is a caption under it
+ * rather than the main event - and it steps down a size rather than running off
+ * the slot, because "Light green" is nearly twice the width of "Red".
+ */
+export function renderInkColor(color: string, name: string): string {
+	const text = escapeText(name);
+	const size = text.length > 12 ? 16 : text.length > 9 ? 18 : 21;
+
+	return strip(
+		`<rect x="18" y="10" width="164" height="48" rx="10" fill="${color}" ` +
+			`stroke="#FFFFFF" stroke-opacity="0.28" stroke-width="1.5" />` +
+			(text
+				? `<text x="100" y="85" text-anchor="middle" font-family="Segoe UI, system-ui, sans-serif" ` +
+					`font-size="${size}" font-weight="600" fill="#FFFFFF">${text}</text>`
+				: "")
+	);
+}
+
+/** A dial with nothing to act on: says so, centred, rather than going blank. */
+export function renderStripIdle(label: string, detail: string): string {
+	return strip(
+		`<text x="100" y="45" text-anchor="middle" font-family="Segoe UI, system-ui, sans-serif" ` +
+			`font-size="22" font-weight="600" fill="#8A8A92">${escapeText(label)}</text>` +
+			`<text x="100" y="74" text-anchor="middle" font-family="Segoe UI, system-ui, sans-serif" ` +
+			`font-size="18" font-weight="400" fill="#5A5A62">${escapeText(detail)}</text>`
+	);
+}
+
+function clampValue(n: number, lo: number, hi: number): number {
+	return Math.min(hi, Math.max(lo, n));
+}

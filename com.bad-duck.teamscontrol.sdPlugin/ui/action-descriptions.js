@@ -59,8 +59,6 @@ globalThis.ACTION_DESCRIPTIONS = {
 	"com.bad-duck.teamscontrol.ppt-ink-thickness-dial":
 		"Sets how thick the selected pen or highlighter draws, over Teams' own range of 1 to 6. Turning shows the thickness you are heading for; it is applied when you stop. Goes quiet for the laser, the cursor and the eraser, none of which have a thickness.",
 
-	"com.bad-duck.teamscontrol.ppt-slide-dial":
-		"Moves through the deck from a dial. Turn for previous and next, press for grid view, tap the touch strip to sync back to the presenter. The strip shows the slide you are turning towards and how far through the deck it is. Turning quickly does not queue a press per click: the slides are sent once you stop, so a long spin cannot go on moving the deck after you let go.",
 
 	"com.bad-duck.teamscontrol.ppt-sync":
 		"Returns you to the slide the presenter is on, after you have moved through the deck privately. Attendee only. Teams only offers this while you are actually out of step, so the key reads 'In sync' the rest of the time.",

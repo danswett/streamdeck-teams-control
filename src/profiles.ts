@@ -49,6 +49,24 @@ export function profilePath(base: string, device: DeviceType): string | null {
 	return suffix === undefined ? null : `profiles/${base}${suffix}`;
 }
 
+/**
+ * Breathing room between profile changes.
+ *
+ * switchToProfile resolves when the request is sent rather than when Stream
+ * Deck has finished with it, so awaiting alone does not stop two of them
+ * overlapping. Long enough to clear an install, short enough to be invisible
+ * against a meeting changing state.
+ */
+const SWITCH_GAP_MS = 1500;
+
+/**
+ * How long to let a deck settle after it announces itself.
+ *
+ * Switching immediately on connect is too early - Stream Deck is still
+ * bringing the device up and refuses the profile install underneath it.
+ */
+const DEVICE_SETTLE_MS = 1500;
+
 export type ProfileSettings = {
 	/** Follow the meeting between the bundled profiles. */
 	pptAutoProfile?: boolean;
@@ -76,6 +94,9 @@ class ProfileSwitcher {
 	/** Last profile chosen per device, so only a genuine change switches. */
 	readonly #current = new Map<string, string>();
 
+	/** Serialises profile changes; see {@link ProfileSwitcher.enqueue}. */
+	#queue: Promise<void> = Promise.resolve();
+
 	start(): void {
 		void streamDeck.settings.getGlobalSettings<ProfileSettings>().then((s) => {
 			this.#enabled = s.pptAutoProfile ?? false;
@@ -93,7 +114,7 @@ class ProfileSwitcher {
 
 			// Turned off while it had the deck: give the profile back rather
 			// than stranding the user on a layout they just disabled.
-			if (!enabled) void this.#restoreAll();
+			if (!enabled) this.#restoreAll();
 			// Turned on mid-meeting: act now rather than waiting for the next
 			// thing to happen in Teams, which may be minutes away.
 			else this.#apply();
@@ -105,8 +126,15 @@ class ProfileSwitcher {
 			sidecar only reports when something in Teams changes, so a Stream
 			Deck restarted mid-presentation sat on the wrong profile until the
 			presenter happened to do something.
+
+			Delayed, because a deck is not ready for a profile the instant it
+			announces itself: switching 150ms after one attached got "Another
+			operation is already in progress" from Stream Deck, and the request
+			was dropped with nothing reported back.
 		*/
-		streamDeck.devices.onDeviceDidConnect(() => this.#apply());
+		streamDeck.devices.onDeviceDidConnect(() => {
+			setTimeout(() => this.#apply(), DEVICE_SETTLE_MS);
+		});
 
 		bridge.subscribe((state) => this.#onState(state));
 	}
@@ -130,15 +158,45 @@ class ProfileSwitcher {
 			if (wanted !== null && target === null) continue;
 			if (target === (this.#current.get(device.id) ?? null)) continue;
 
-			if (target === null) void this.#restore(device.id);
-			else void this.#switch(device.id, target);
+			const id = device.id;
+
+			// Claimed now rather than inside the task. The queue can be several
+			// hundred milliseconds deep, and #onState runs in bursts - the
+			// initial apply, a device connecting and the first state all land
+			// together - so a check made only when the task ran queued the same
+			// switch three times over.
+			if (target === null) this.#current.delete(id);
+			else this.#current.set(id, target);
+
+			if (target === null) this.#enqueue(() => this.#restore(id));
+			else this.#enqueue(() => this.#switch(id, target));
 		}
 	}
 
+	/**
+	 * Runs profile changes one at a time.
+	 *
+	 * Stream Deck installs a bundled profile the first time it is switched to,
+	 * and it will only do one of those at once: asking for two decks in the
+	 * same tick gets "Another operation is already in progress" and the second
+	 * one is dropped silently. The plugin sees nothing - switchToProfile
+	 * resolves as soon as the request is sent, not when the import finishes -
+	 * so the deck simply never changed, which is exactly how a + XL ended up
+	 * sitting on a layout with no dials on it.
+	 *
+	 * Two decks is the normal case here, not an edge case: the whole point is
+	 * that each of them gets its own layout.
+	 */
+	#enqueue(task: () => Promise<void>): void {
+		this.#queue = this.#queue
+			.then(task)
+			.then(() => new Promise<void>((resolve) => setTimeout(resolve, SWITCH_GAP_MS)))
+			.catch((err) => {
+				logger.warn(`Profile change failed: ${String(err)}`);
+			});
+	}
+
 	async #switch(id: string, profile: string): Promise<void> {
-		// Recorded before awaiting, so a second state arriving mid-switch does
-		// not fire the same switch a second time.
-		this.#current.set(id, profile);
 		try {
 			await streamDeck.profiles.switchToProfile(id, profile);
 			logger.info(`${id} -> "${profile}"`);
@@ -164,8 +222,9 @@ class ProfileSwitcher {
 		}
 	}
 
-	async #restoreAll(): Promise<void> {
-		for (const id of [...this.#current.keys()]) await this.#restore(id);
+	/** Hands every deck back, one at a time, for the same reason switching is. */
+	#restoreAll(): void {
+		for (const id of [...this.#current.keys()]) this.#enqueue(() => this.#restore(id));
 	}
 }
 

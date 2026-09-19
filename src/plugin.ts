@@ -38,7 +38,7 @@ import {
 	PptTakeControlAction
 } from "./actions/powerpoint";
 import { bridge } from "./bridge";
-import { InkColorDialAction, InkThicknessDialAction, SlideDialAction } from "./actions/dials";
+import { InkColorDialAction, InkThicknessDialAction } from "./actions/dials";
 import { profileSwitcher } from "./profiles";
 
 streamDeck.logger.setLevel("info");
@@ -83,7 +83,6 @@ streamDeck.actions.registerAction(new PptStopPresentingAction());
 
 // Dials, on the decks that have them. Nothing registers per device: Stream Deck
 // only ever raises these for a dial the user has actually placed.
-streamDeck.actions.registerAction(new SlideDialAction());
 streamDeck.actions.registerAction(new InkColorDialAction());
 streamDeck.actions.registerAction(new InkThicknessDialAction());
 
