@@ -123,6 +123,7 @@ export abstract class TeamsDialAction<T extends JsonObject = JsonObject> extends
 	}
 }
 
+
 /* ------------------------------------------------------------------------- *
  * Ink
  *
@@ -131,16 +132,26 @@ export abstract class TeamsDialAction<T extends JsonObject = JsonObject> extends
  * key each when there are fifteen colours.
  *
  * Both act on whichever drawing tool is selected, so neither dial has a tool
- * of its own to configure - pick the pen and they drive the pen. The tools
- * differ in what they even have: the laser has a colour and no thickness, and
- * the cursor has neither, so each dial goes quiet rather than pretending.
+ * of its own to configure - pick the pen and they drive the pen. The laser has
+ * a colour and no thickness, and the cursor has neither, so each dial says so
+ * rather than pretending.
  * ------------------------------------------------------------------------- */
 
-/** How still the dial must be before the change behind it is sent. */
-const SETTLE_MS = 220;
+/**
+ * How still the dial must be before the change behind it is sent.
+ *
+ * Every commit opens a Teams flyout, so this is the difference between one
+ * flyout for a whole gesture and one per click of the dial.
+ */
+const SETTLE_MS = 400;
 
-/** A spin can outrun Teams; past this the extra ticks are dropped. */
-const MAX_PENDING = 25;
+/**
+ * How long a dialled value stands if Teams never confirms it.
+ *
+ * Without a ceiling, a change Teams quietly refused would leave the slot
+ * claiming an ink setting that was never applied.
+ */
+const CONFIRM_TIMEOUT_MS = 4000;
 
 const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n));
 
@@ -159,6 +170,9 @@ const THICKNESS_MAX = 6;
  */
 const INK_LAYOUT = "layouts/ink.json";
 
+/** Marks a turn made before the tool's palette had ever been seen. */
+const BLIND = "step:";
+
 /** The selected drawing tool, which is the one both ink dials act on. */
 function activeInkTool(state: TeamsState): string | null {
 	for (const tool of INK_TOOLS) if (state.states[tool]) return tool;
@@ -166,42 +180,117 @@ function activeInkTool(state: TeamsState): string | null {
 }
 
 /**
- * A dial whose whole gesture becomes a single request.
+ * A dial that shows where it has been turned to at once, and catches Teams up
+ * afterwards.
  *
- * Unlike a slide, where every step is a press Teams has to animate, colour and
- * thickness are each set in one call - so there is nothing to be gained by
- * sending the steps one at a time. The rotation accumulates, the strip shows
- * where it is heading, and one command goes out when the dial stops.
+ * Three things have to hold at the same time, and the obvious implementation
+ * breaks all three:
+ *
+ *   - It must not lag. The strip is redrawn on the tick, never on the reply.
+ *   - It must not flap. Teams is a long way behind a dial: the flyout has to
+ *     open, the value has to be set, and a snapshot has to come back. Drawing
+ *     from the reported state through that window shows the old value, then
+ *     the new one, then the old one again as a stale snapshot lands.
+ *   - It must not drop a turn. Refusing ticks while a change is in flight
+ *     loses most of a quick gesture.
+ *
+ * So the dial keeps its own value from the moment it is touched, draws that,
+ * and only lets go once a snapshot reports the same thing.
  */
 abstract class InkDialAction extends TeamsDialAction {
-	readonly #pending = new Map<string, number>();
+	/** What the user turned to, held until Teams reports the same. */
+	readonly #intent = new Map<string, { value: string; since: number }>();
 	readonly #timers = new Map<string, NodeJS.Timeout>();
 	readonly #busy = new Set<string>();
 
-	/** The tool this dial can act on now, or null when it has nothing to change. */
-	protected abstract toolFor(state: TeamsState): string | null;
+	/**
+	 * The last tool this dial could act on.
+	 *
+	 * Selecting the cursor, or opening any flyout - which unmounts the whole
+	 * slide-show subtree - leaves nothing selected that has ink. Keeping the
+	 * last one means the slot still shows what it is about instead of going
+	 * blank, which is what made the strip look dead until a flyout had been
+	 * opened once.
+	 */
+	#lastTool: string | undefined;
 
-	/** Issues the change for a whole gesture. */
-	protected abstract commit(
+	/** Whether a tool has the thing this dial changes. */
+	protected abstract capable(tool: string): boolean;
+
+	/** The value Teams currently reports. */
+	protected abstract reported(state: TeamsState, tool: string): string;
+
+	/** Applies a turn to the value on screen, giving the new one. */
+	protected abstract step(from: string, ticks: number, state: TeamsState, tool: string): string;
+
+	/** Sends the dialled value to Teams. */
+	protected abstract send(
 		tool: string,
-		pending: number,
+		value: string,
 		state: TeamsState
 	): Promise<{ ok: boolean; error?: string }>;
 
-	protected pendingOn(dial: DialAction<JsonObject>): number {
-		return this.#pending.get(dial.id) ?? 0;
+	protected override layout(): string {
+		return INK_LAYOUT;
+	}
+
+	/** The tool the slot is about: the live one, or the last one it was about. */
+	protected displayTool(state: TeamsState): string | undefined {
+		const active = activeInkTool(state);
+		if (active !== null && this.capable(active)) {
+			this.#lastTool = active;
+			return active;
+		}
+		if (this.#lastTool !== undefined) return this.#lastTool;
+
+		// Nothing this dial can act on has been selected yet, which is the
+		// normal way a meeting starts - the cursor is the default tool. Show
+		// whichever capable tool Teams has already reported a value for, so the
+		// slot arrives with the real setting on it instead of waiting for the
+		// user to go and pick a pen first.
+		for (const tool of INK_TOOLS) {
+			if (this.capable(tool) && this.reported(state, tool) !== "") return tool;
+		}
+		return undefined;
+	}
+
+	/** True when a turn would actually reach Teams right now. */
+	protected canAct(state: TeamsState): boolean {
+		const active = activeInkTool(state);
+		return pptLive(state) && active !== null && this.capable(active);
+	}
+
+	/** What the slot should say: the dialled value if there is one, else Teams'. */
+	protected shown(state: TeamsState, tool: string, dial: DialAction<JsonObject>): string {
+		const intent = this.#intent.get(dial.id);
+		if (intent === undefined) return this.reported(state, tool);
+
+		const settled =
+			this.reported(state, tool) === intent.value || Date.now() - intent.since > CONFIRM_TIMEOUT_MS;
+		if (settled) {
+			this.#intent.delete(dial.id);
+			return this.reported(state, tool);
+		}
+		return intent.value;
+	}
+
+	/** True while the dial is showing something Teams has not confirmed. */
+	protected pendingOn(dial: DialAction<JsonObject>): boolean {
+		return this.#intent.has(dial.id);
 	}
 
 	override onDialRotate(ev: DialRotateEvent<JsonObject>): void {
+		const state = bridge.state;
+		const tool = this.displayTool(state);
+		if (tool === undefined || !this.canAct(state)) return;
+
 		const dial = ev.action;
 		const id = dial.id;
 
-		if (this.toolFor(bridge.state) === null) return;
-		// Turning while the last gesture is still being applied would race it;
-		// the flyout it opens is the slowest thing on this deck.
-		if (this.#busy.has(id)) return;
-
-		this.#pending.set(id, clamp((this.#pending.get(id) ?? 0) + ev.payload.ticks, -MAX_PENDING, MAX_PENDING));
+		// Turns are always taken, including while a change is in flight; the
+		// commit that is running will pick the newer value up when it finishes.
+		const from = this.#intent.get(id)?.value ?? this.reported(state, tool);
+		this.#intent.set(id, { value: this.step(from, ev.payload.ticks, state, tool), since: Date.now() });
 		this.refresh(dial);
 
 		const timer = this.#timers.get(id);
@@ -210,7 +299,7 @@ abstract class InkDialAction extends TeamsDialAction {
 			id,
 			setTimeout(() => {
 				this.#timers.delete(id);
-				void this.#flush(dial);
+				void this.#commit(dial);
 			}, SETTLE_MS)
 		);
 	}
@@ -219,34 +308,38 @@ abstract class InkDialAction extends TeamsDialAction {
 		const timer = this.#timers.get(ev.action.id);
 		if (timer) clearTimeout(timer);
 		this.#timers.delete(ev.action.id);
-		this.#pending.delete(ev.action.id);
+		this.#intent.delete(ev.action.id);
 		super.onWillDisappear(ev);
 	}
 
-	async #flush(dial: DialAction<JsonObject>): Promise<void> {
+	async #commit(dial: DialAction<JsonObject>): Promise<void> {
 		const id = dial.id;
-		const pending = this.#pending.get(id) ?? 0;
-		if (pending === 0 || this.#busy.has(id)) return;
+		if (this.#busy.has(id)) return; // the one in flight will come back round
 
 		const state = bridge.state;
-		const tool = this.toolFor(state);
-		if (tool === null) {
-			this.#pending.set(id, 0);
-			this.refresh(dial);
-			return;
-		}
+		const tool = this.displayTool(state);
+		const intent = this.#intent.get(id);
+		if (tool === undefined || intent === undefined) return;
+		if (intent.value === this.reported(state, tool)) return;
 
 		this.#busy.add(id);
 		try {
-			const result = await this.commit(tool, pending, state);
-			if (!result.ok) logger.warn(`${this.manifestId ?? "dial"}: ${result.error ?? "unknown"}`);
+			const result = await this.send(tool, intent.value, state);
+			if (!result.ok) {
+				logger.warn(`${this.manifestId ?? "dial"}: ${result.error ?? "unknown"}`);
+				// Drop the claim rather than leaving the slot asserting an ink
+				// setting Teams never took.
+				this.#intent.delete(id);
+				this.refresh(dial);
+			}
 		} finally {
 			this.#busy.delete(id);
-			// Spent either way: the state that arrives next is the truth, and a
-			// backlog that survived a failure would fire again on the next turn.
-			this.#pending.set(id, 0);
-			this.refresh(dial);
 		}
+
+		// Turned again while that was in flight, so go round once more rather
+		// than leaving the strip showing something that was never sent.
+		const latest = this.#intent.get(id);
+		if (latest !== undefined && latest.value !== intent.value) await this.#commit(dial);
 	}
 }
 
@@ -258,104 +351,122 @@ abstract class InkDialAction extends TeamsDialAction {
  */
 @action({ UUID: "com.bad-duck.teamscontrol.ppt-ink-thickness-dial" })
 export class InkThicknessDialAction extends InkDialAction {
-	protected override toolFor(state: TeamsState): string | null {
-		const tool = activeInkTool(state);
-		return pptLive(state) && tool !== null && HAS_THICKNESS.has(tool) ? tool : null;
+	protected override capable(tool: string): boolean {
+		return HAS_THICKNESS.has(tool);
+	}
+
+	protected override reported(state: TeamsState, tool: string): string {
+		return state.context[`ppt.thickness.${tool}`] ?? "";
+	}
+
+	protected override step(from: string, ticks: number): string {
+		const now = Number.parseInt(from, 10);
+		const base = Number.isFinite(now) ? now : THICKNESS_MIN;
+		return String(clamp(base + ticks, THICKNESS_MIN, THICKNESS_MAX));
+	}
+
+	protected override send(_tool: string, value: string): Promise<{ ok: boolean; error?: string }> {
+		// Absolute, because the dial already knows where it is; a delta applied
+		// to a value that moved underneath it would land somewhere else.
+		return bridge.invoke("ppt-ink-thickness", value);
 	}
 
 	protected override draw(state: TeamsState, dial: DialAction<JsonObject>): Feedback {
-		const tool = this.toolFor(state);
-		if (tool === null) {
+		const tool = this.displayTool(state);
+		if (tool === undefined) {
 			return {
 				canvas: toDataUri(renderStripIdle("Thickness", pptLive(state) ? "no pen selected" : "no deck"))
 			};
 		}
 
-		const target = this.#target(state, tool, this.pendingOn(dial));
+		const value = Number.parseInt(this.shown(state, tool, dial), 10);
 		return {
 			canvas: toDataUri(
 				renderInkThickness(
 					toolColor(tool, state.context[`ppt.color.${tool}`]),
-					target,
+					Number.isFinite(value) ? value : THICKNESS_MIN,
 					THICKNESS_MIN,
 					THICKNESS_MAX
 				)
 			)
 		};
 	}
-
-	protected override layout(): string {
-		return INK_LAYOUT;
-	}
-
-	protected override commit(
-		tool: string,
-		pending: number,
-		state: TeamsState
-	): Promise<{ ok: boolean; error?: string }> {
-		// Absolute rather than relative: the dial already knows where it is,
-		// and a delta applied to a value that moved underneath it would land
-		// somewhere neither of us meant.
-		return bridge.invoke("ppt-ink-thickness", String(this.#target(state, tool, pending)));
-	}
-
-	#target(state: TeamsState, tool: string, pending: number): number {
-		const now = Number.parseInt(state.context[`ppt.thickness.${tool}`] ?? "", 10);
-		const from = Number.isFinite(now) ? now : THICKNESS_MIN;
-		return clamp(from + pending, THICKNESS_MIN, THICKNESS_MAX);
-	}
 }
 
 /**
  * Carousels the selected tool through its colours.
  *
- * The palette belongs to the tool rather than to Teams - the pen and the
- * highlighter offer different sets - and it can only be read while the flyout
- * is open, so the sidecar publishes whichever one it last saw. Until it has
- * seen one, the dial can say where it is but not where it is going.
+ * The palette belongs to the tool - the pen and the highlighter offer
+ * different sets - and it can only be read while the flyout is open, so the
+ * sidecar publishes whichever one it last saw. Before it has seen any, a turn
+ * is still accepted and sent as a plain step; the first one teaches it the
+ * palette and everything after that can be previewed by name.
  */
 @action({ UUID: "com.bad-duck.teamscontrol.ppt-ink-color-dial" })
 export class InkColorDialAction extends InkDialAction {
-	protected override toolFor(state: TeamsState): string | null {
-		const tool = activeInkTool(state);
-		return pptLive(state) && tool !== null && HAS_COLOR.has(tool) ? tool : null;
+	protected override capable(tool: string): boolean {
+		return HAS_COLOR.has(tool);
+	}
+
+	protected override reported(state: TeamsState, tool: string): string {
+		return state.context[`ppt.color.${tool}`] ?? "";
+	}
+
+	protected override step(from: string, ticks: number, state: TeamsState, tool: string): string {
+		const palette = this.#palette(state, tool);
+		if (palette.length === 0) {
+			const already = from.startsWith(BLIND) ? Number.parseInt(from.slice(BLIND.length), 10) : 0;
+			return `${BLIND}${(Number.isFinite(already) ? already : 0) + ticks}`;
+		}
+
+		const at = palette.indexOf(from);
+		const base = at < 0 ? palette.indexOf(this.reported(state, tool)) : at;
+		const n = palette.length;
+		// Wraps, because a carousel that stops at the ends is not a carousel.
+		return palette[(((base < 0 ? 0 : base) + ticks) % n + n) % n];
+	}
+
+	protected override send(
+		tool: string,
+		value: string,
+		state: TeamsState
+	): Promise<{ ok: boolean; error?: string }> {
+		if (value.startsWith(BLIND)) {
+			return bridge.invoke("ppt-ink-color", value.slice(BLIND.length));
+		}
+
+		const palette = this.#palette(state, tool);
+		const from = palette.indexOf(this.reported(state, tool));
+		const to = palette.indexOf(value);
+		if (from < 0 || to < 0) return Promise.resolve({ ok: true });
+
+		// Shortest way round the ring, so picking the colour before the current
+		// one is one step back rather than fourteen forward.
+		const n = palette.length;
+		let steps = to - from;
+		if (steps > n / 2) steps -= n;
+		else if (steps < -n / 2) steps += n;
+
+		return bridge.invoke("ppt-ink-color", String(steps));
 	}
 
 	protected override draw(state: TeamsState, dial: DialAction<JsonObject>): Feedback {
-		const tool = this.toolFor(state);
-		if (tool === null) {
+		const tool = this.displayTool(state);
+		if (tool === undefined) {
 			return {
 				canvas: toDataUri(renderStripIdle("Ink colour", pptLive(state) ? "no pen selected" : "no deck"))
 			};
 		}
 
-		const current = state.context[`ppt.color.${tool}`] ?? "";
-		const name = this.#preview(state, tool, current, this.pendingOn(dial));
+		const shown = this.shown(state, tool, dial);
+		// A turn taken before the palette was known has no name to show yet, so
+		// the slot keeps the colour Teams last reported.
+		const name = shown.startsWith(BLIND) ? this.reported(state, tool) : shown;
 
-		return { canvas: toDataUri(renderInkColor(toolColor(tool, name || current), name || current)) };
+		return { canvas: toDataUri(renderInkColor(toolColor(tool, name), name)) };
 	}
 
-	protected override layout(): string {
-		return INK_LAYOUT;
-	}
-
-	protected override commit(
-		_tool: string,
-		pending: number
-	): Promise<{ ok: boolean; error?: string }> {
-		// Relative, because only the open flyout knows the order, and it wraps.
-		return bridge.invoke("ppt-ink-color", String(pending));
-	}
-
-	/** Where the dial is pointing, once a palette has been seen. */
-	#preview(state: TeamsState, tool: string, current: string, pending: number): string {
-		if (pending === 0) return current;
-
-		const palette = (state.context[`ppt.palette.${tool}`] ?? "").split("|").filter(Boolean);
-		if (palette.length === 0) return current;
-
-		const at = palette.indexOf(current);
-		const from = at < 0 ? 0 : at;
-		return palette[((from + pending) % palette.length + palette.length) % palette.length];
+	#palette(state: TeamsState, tool: string): string[] {
+		return (state.context[`ppt.palette.${tool}`] ?? "").split("|").filter(Boolean);
 	}
 }
