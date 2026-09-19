@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { Resvg } from "@resvg/resvg-js";
 
 import { REACTION_KEYS, TOOL_DEFAULT_COLOR, renderEmoji, renderGlyph, renderReaction } from "../src/icons.ts";
+import { appIconSvg } from "./app-icon.ts";
 import { TOOL_ICONS, composeToolSvg } from "./tool-art.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -125,18 +126,16 @@ write(path.join(handDir, "key.svg"), renderEmoji("hand", true));
 const pluginDir = path.join(IMGS, "plugin");
 write(path.join(pluginDir, "category-icon.svg"), renderGlyph("category", "on"));
 
-// Stream Deck requires the plugin icon itself to be PNG.
-const markSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 144 144">
-	<rect width="144" height="144" rx="30" fill="#5059C9"/>
-	<g transform="translate(14.4,14.4) scale(0.8)">
-		${renderGlyph("mic", "on").replace(/^<svg[^>]*>/, "").replace(/<\/svg>$/, "")}
-	</g>
-</svg>`;
+// Stream Deck requires the plugin icon itself to be PNG. Same mark as the
+// Marketplace app icon, from one source, so the store and the preferences pane
+// cannot end up showing different products - which is exactly what happened
+// when they were drawn separately.
+const markSvg = appIconSvg();
 
 writePng(path.join(pluginDir, "marketplace.png"), markSvg, 256);
 writePng(path.join(pluginDir, "marketplace@2x.png"), markSvg, 512);
 
-// The 288px Marketplace app icon is produced by tools/generate-marketplace.ts,
-// alongside the thumbnail and gallery images it has to sit beside.
+// The 288px variant is written by tools/generate-marketplace.ts, alongside the
+// thumbnail and gallery it has to sit beside - from the same appIconSvg().
 
 console.log("Done.");

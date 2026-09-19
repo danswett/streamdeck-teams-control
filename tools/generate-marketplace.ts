@@ -26,6 +26,7 @@ import {
 	renderToggle,
 	renderTool
 } from "../src/icons.ts";
+import { appIconSvg } from "./app-icon.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Committed rather than written to dist/: these are submission deliverables
@@ -118,32 +119,9 @@ const W = 1920;
 const H = 960;
 
 // ---------------------------------------------------------------- app icon
-// The guidelines ask for the product to be the focus. A single microphone
-// reads as a generic audio plugin, so this shows what the product actually is:
-// meeting controls sitting on keys.
-//
-// The fourth key is a drawing tool rather than a reaction, because PowerPoint
-// Live is half the product now and nothing else in the set hints at it. The
-// pen earns the place over a laser or the slide counter by surviving the size
-// this is actually seen at - Marketplace search results show it small, where
-// the laser's thin shape and the counter's "12/40" both turn to mush.
-function appIcon(): string {
-	const S = 288;
-	const pad = 30;
-	const cell = (S - pad * 2 - 16) / 2;
-	const art = [mute(true), camera(false), renderEmoji("hand", true), tool("ppt-pen", true)];
-
-	let body = `<rect width="${S}" height="${S}" rx="64" fill="${ACCENT}"/>`;
-	art.forEach((svg, i) => {
-		const x = pad + (i % 2) * (cell + 16);
-		const y = pad + Math.floor(i / 2) * (cell + 16);
-		body += `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="${cell * 0.16}" fill="#1A1A1D"/>`;
-		body += `<g transform="translate(${x},${y}) scale(${cell / 144})">${inner(svg)}</g>`;
-	});
-
-	return `<svg xmlns="http://www.w3.org/2000/svg" width="${S}" height="${S}" viewBox="0 0 ${S} ${S}">${body}</svg>`;
-}
-
+// Shared with the plugin icon Stream Deck shows in its preferences, so the
+// store and the application cannot advertise different products.
+const appIcon = appIconSvg;
 // --------------------------------------------------------------- thumbnail
 function thumbnail(): string {
 	let body = `<text x="${W / 2}" y="250" fill="${TEXT}" font-family="${FONT}" font-size="86"
