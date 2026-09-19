@@ -64,6 +64,10 @@ export abstract class TeamsDialAction<T extends JsonObject = JsonObject> extends
 	override onWillAppear(ev: WillAppearEvent<T>): void {
 		this.#visible++;
 		if (!this.#unsubscribe) {
+			// Replays the current state straight away, so this paints before
+			// the layout below has been applied. That paint is thrown away by
+			// Stream Deck; the cache it leaves behind is the problem, and is
+			// cleared before the real one.
 			this.#unsubscribe = bridge.subscribe((state) => this.#paintAll(state));
 		}
 		if (!ev.action.isDial()) return;
@@ -76,12 +80,26 @@ export abstract class TeamsDialAction<T extends JsonObject = JsonObject> extends
 			return;
 		}
 
-		// Painted only once the layout is in place: a pixmap sent against the
-		// previous layout has nowhere to land and the slot stays blank.
+		/*
+			Painted only once the layout is in place: a pixmap sent against the
+			previous layout has nowhere to land and the slot stays blank.
+
+			The cache has to be dropped first. Subscribing above paints
+			immediately, against the old layout, and records what it drew - so
+			this paint, computing the same picture from the same state, was
+			skipped as a duplicate and the slot never received anything under
+			the layout that could actually show it. It only appeared once
+			something in Teams changed and produced a different picture, which
+			is exactly how it looked: blank after a restart until a key was
+			pressed or a tool was picked.
+		*/
 		void dial
 			.setFeedbackLayout(layout)
 			.catch((err) => logger.warn(`setFeedbackLayout failed: ${String(err)}`))
-			.then(() => this.#paint(dial, bridge.state));
+			.then(() => {
+				this.#painted.delete(dial.id);
+				return this.#paint(dial, bridge.state);
+			});
 	}
 
 	override onWillDisappear(ev: WillDisappearEvent<T>): void {
