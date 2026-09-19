@@ -257,7 +257,7 @@ const PROFILES: Profile[] = [
 		page: "a1b2c3d4-0013-4e85-a0b7-2f6c1e5d8a34",
 		dials: {
 			"2,0": { action: "ppt-ink-thickness-dial", name: "PPT Presenter: Ink Thickness" },
-			"3,0": { action: "ppt-ink-color-dial", name: "PPT Presenter: Ink Colour" }
+			"3,0": { action: "ppt-ink-color-dial", name: "PPT Presenter: Ink Color" }
 		},
 		layout: {
 			...XL_MEETING,

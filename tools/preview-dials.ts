@@ -26,10 +26,10 @@ const rows: { label: string; svg: string }[] = [
 	{ label: "thickness 1, green", svg: renderInkThickness(INK_COLORS["green"], 1) },
 	{ label: "thickness 4, green", svg: renderInkThickness(INK_COLORS["green"], 4) },
 	{ label: "thickness 6, red", svg: renderInkThickness(INK_COLORS["red"], 6) },
-	{ label: "colour red", svg: renderInkColor(INK_COLORS["red"], "Red") },
-	{ label: "colour light green", svg: renderInkColor(INK_COLORS["light green"], "Light green") },
-	{ label: "colour yellow", svg: renderInkColor(INK_COLORS["yellow"], "Yellow") },
-	{ label: "idle", svg: renderStripIdle("Ink colour", "no pen selected") }
+	{ label: "color red", svg: renderInkColor(INK_COLORS["red"], "Red") },
+	{ label: "color light green", svg: renderInkColor(INK_COLORS["light green"], "Light green") },
+	{ label: "color yellow", svg: renderInkColor(INK_COLORS["yellow"], "Yellow") },
+	{ label: "idle", svg: renderStripIdle("Ink color", "no pen selected") }
 ];
 
 const GAP = 12;

@@ -114,7 +114,7 @@ for (const name of TOOL_ACTIONS) {
 }
 
 // Each reaction is its own action, so each gets its own artwork. The key shows
-// the full-colour emoji, but the action list must be monochrome white on
+// the full-color emoji, but the action list must be monochrome white on
 // transparent per Elgato's guidelines, so it uses a Fluent system glyph.
 for (const key of REACTION_KEYS) {
 	const dir = path.join(IMGS, "actions", key);

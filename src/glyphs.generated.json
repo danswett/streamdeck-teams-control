@@ -4,7 +4,7 @@
 		"",
 		"Artwork from Microsoft's Fluent icon sets, both MIT licensed:",
 		"  @fluentui/svg-icons (Fluent UI System Icons) - control glyphs, no fill",
-		"  fluentui-emoji ('flat' style)                - reactions, full colour"
+		"  fluentui-emoji ('flat' style)                - reactions, full color"
 	],
 	"controls": {
 		"mic": {

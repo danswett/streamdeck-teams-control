@@ -31,7 +31,7 @@ function resolveImage(ref: string): string | undefined {
 	return undefined;
 }
 
-function coloursIn(file: string): string[] {
+function colorsIn(file: string): string[] {
 	const svg = readFileSync(file, "utf8");
 	return [...svg.matchAll(/#[0-9a-fA-F]{3,8}/g)].map((m) => m[0].toLowerCase());
 }
@@ -43,14 +43,14 @@ describe("action list icons", () => {
 	 * The five PowerPoint Live drawing tools are a deliberate exception to the
 	 * monochrome-SVG rule.
 	 *
-	 * Their keys show Teams' own artwork - full-colour illustrations with
+	 * Their keys show Teams' own artwork - full-color illustrations with
 	 * gradients and blur filters, captured from the Teams DOM - and a generic
 	 * monochrome pen beside the real one in the action list reads as a different
 	 * control. They ship as PNG because that artwork cannot be reduced to a
 	 * white stroke without becoming a different drawing.
 	 *
 	 * Listed explicitly so the rule still binds for every other action: without
-	 * this the colour check would pass vacuously on a PNG, since it scans SVG
+	 * this the color check would pass vacuously on a PNG, since it scans SVG
 	 * markup for fills.
 	 */
 	const ARTWORK_ACTIONS = new Set([
@@ -70,10 +70,10 @@ describe("action list icons", () => {
 			expect(file, `missing icon file for ${icon}`).toBeDefined();
 			expect(file!.endsWith(".svg"), `${icon} should be SVG`).toBe(true);
 
-			// The guidelines require a white stroke on transparent; colour is
+			// The guidelines require a white stroke on transparent; color is
 			// explicitly called out as incorrect for the action list. The keys
-			// themselves may be full colour, which is why this checks Icon only.
-			const offending = coloursIn(file!).filter((c) => !WHITE.has(c));
+			// themselves may be full color, which is why this checks Icon only.
+			const offending = colorsIn(file!).filter((c) => !WHITE.has(c));
 			expect(offending).toEqual([]);
 		}
 	);
@@ -107,7 +107,7 @@ describe("category", () => {
 	it("has a monochrome white icon", () => {
 		const file = resolveImage(manifest.CategoryIcon);
 		expect(file).toBeDefined();
-		expect(coloursIn(file!).filter((c) => !WHITE.has(c))).toEqual([]);
+		expect(colorsIn(file!).filter((c) => !WHITE.has(c))).toEqual([]);
 	});
 
 	it("does not include the author name", () => {

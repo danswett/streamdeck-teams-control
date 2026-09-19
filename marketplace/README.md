@@ -168,7 +168,7 @@ Twenty new keys for a shared deck, and they follow whichever role you are in.
 
 Watching someone present: move through the slides at your own pace without touching anyone else's view, jump back to the presenter whenever you want, open grid view, switch to high contrast, pop the deck into its own window, or take control of it.
 
-Presenting: previous and next, laser pointer, pen, highlighter, eraser and cursor, presenter view, private viewing, present the latest saved version, copy a link to the deck, change layout, and stop sharing. A live slide counter sits on its own key, and the ink keys show the colour you picked in Teams.
+Presenting: previous and next, laser pointer, pen, highlighter, eraser and cursor, presenter view, private viewing, present the latest saved version, copy a link to the deck, change layout, and stop sharing. A live slide counter sits on its own key, and the ink keys show the color you picked in Teams.
 
 Take control mid-meeting and the deck re-lights itself for presenting.
 

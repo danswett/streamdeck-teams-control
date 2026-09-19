@@ -41,14 +41,14 @@ const COLORS: Record<Tone, string> = {
 export const UNAVAILABLE_COLOR = COLORS.unavailable;
 
 /**
- * Colours PowerPoint Live gives its drawing tools.
+ * Colors PowerPoint Live gives its drawing tools.
  *
- * Teams shows these in colour rather than monochrome, and the colour is the
+ * Teams shows these in color rather than monochrome, and the color is the
  * identity of the tool — a red pen is a different thing from a yellow
- * highlighter. Matching them means colour can no longer also mean "active", so
+ * highlighter. Matching them means color can no longer also mean "active", so
  * the active tool is marked with the same bar Teams draws beneath it.
  *
- * The artwork and the colour table live in src/tool-art.ts.
+ * The artwork and the color table live in src/tool-art.ts.
  */
 /** Fraction of the key the artwork fills. */
 const CONTROL_FILL = 0.80;
@@ -102,7 +102,7 @@ export function renderGlyph(key: string, tone: Tone): string {
 	const def = CONTROL_GLYPHS[key];
 	if (!def) return wrap("");
 
-	// Fluent system icons carry no fill of their own, so the group colours them.
+	// Fluent system icons carry no fill of their own, so the group colors them.
 	return wrap(
 		`<g transform="${transformFor(def, CONTROL_FILL)}" fill="${COLORS[tone]}">${def.body}</g>`
 	);
@@ -146,8 +146,8 @@ export function renderSimple(key: string, available: boolean, tone: Tone = "on")
 
 
 /**
- * Colour each tool falls back to when Teams has not said which it is using —
- * before the first state arrives, or in a language whose colour names are not
+ * Color each tool falls back to when Teams has not said which it is using —
+ * before the first state arrives, or in a language whose color names are not
  * in the table.
  */
 export const TOOL_DEFAULT_COLOR: Record<string, string> = {
@@ -159,13 +159,13 @@ export const TOOL_DEFAULT_COLOR: Record<string, string> = {
 };
 
 /**
- * Ink colours PowerPoint Live offers, keyed by the words Teams puts in the
+ * Ink colors PowerPoint Live offers, keyed by the words Teams puts in the
  * control's accessible name ("Pen: Light blue, Thickness 3").
  *
  * The names were captured from a live pen palette on 2026-09-17. Only two hex
  * values are confirmed — Red and Yellow, read out of the artwork Teams itself
  * rendered — and they are marked below. The rest are Office's usual values and
- * may be slightly off until the same trick is repeated with each colour
+ * may be slightly off until the same trick is repeated with each color
  * selected; an unrecognised name falls back to the tool's default rather than
  * guessing.
  */
@@ -205,7 +205,7 @@ export const INK_COLORS: Record<string, string> = {
 };
 
 /**
- * Resolves the colour Teams reported for a tool.
+ * Resolves the color Teams reported for a tool.
  *
  * Black is nudged off true black: the keys are dark, and a genuinely black pen
  * tip on them is invisible rather than subtle.
@@ -216,7 +216,7 @@ export function toolColor(control: string, reported: string | undefined): string
 
 	// hasOwn, because the lookup key is an accessible name read out of the Teams
 	// window: a plain index would resolve "constructor" to a function off the
-	// prototype and hand back something that is not a colour at all.
+	// prototype and hand back something that is not a color at all.
 	const key = reported.trim().toLowerCase();
 	return Object.hasOwn(INK_COLORS, key) ? INK_COLORS[key] : fallback;
 }
@@ -273,7 +273,7 @@ export function renderTool(
 	const ink = toolColor(control, options.color);
 	const key = `${control}|${ink}|${active ? "on" : "off"}`;
 
-	// A colour Teams has added since the images were built falls back to the
+	// A color Teams has added since the images were built falls back to the
 	// tool's own, which is always rendered.
 	return (
 		TOOL_IMAGES[key] ??
@@ -368,12 +368,12 @@ export function renderLabelled(key: string, label: string, tone: Tone): string {
 	);
 }
 
-/** Renders a full-colour reaction, dimmed when the control is unavailable. */
+/** Renders a full-color reaction, dimmed when the control is unavailable. */
 export function renderReaction(key: string, available: boolean): string {
 	return renderEmojiGlyph(REACTION_GLYPHS[key] ?? REACTION_GLYPHS["react-like"], available);
 }
 
-/** Renders a full-colour emoji used outside the reaction set, such as the hand. */
+/** Renders a full-color emoji used outside the reaction set, such as the hand. */
 export function renderEmoji(key: string, available: boolean): string {
 	return renderEmojiGlyph(EMOJI_GLYPHS[key], available);
 }
@@ -463,7 +463,7 @@ function strip(body: string): string {
 /**
  * Ink thickness, drawn the way PowerPoint Live draws it.
  *
- * A tapered wedge in the ink colour over a slider, which is what the flyout
+ * A tapered wedge in the ink color over a slider, which is what the flyout
  * shows - so the dial is recognisably the same control rather than a bar chart
  * standing in for one.
  */
@@ -488,7 +488,7 @@ export function renderInkThickness(color: string, value: number, min = 1, max = 
 }
 
 /**
- * The ink colour, as a block of the colour itself.
+ * The ink color, as a block of the color itself.
  *
  * A swatch says it faster than a name does, so the name is a caption under it
  * rather than the main event - and it steps down a size rather than running off

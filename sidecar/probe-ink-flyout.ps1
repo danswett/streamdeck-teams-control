@@ -1,19 +1,19 @@
 <#
     Reconnaissance of the PowerPoint Live drawing-tool flyout.
 
-    The sidecar can already read which ink colour is selected, because the
+    The sidecar can already read which ink color is selected, because the
     swatches are radio buttons it can see once the flyout is open. What it has
-    never had is a way to *set* a colour or a thickness, and the thickness
+    never had is a way to *set* a color or a thickness, and the thickness
     control's shape had never been recorded at all.
 
     Two things this established, both worth keeping:
 
-      * The tools are ListItems, and the three that carry a colour - pen,
+      * The tools are ListItems, and the three that carry a color - pen,
         highlighter, laser - support ExpandCollapse. So the flyout opens
         through the pattern rather than through a posted click, which is both
         faster and far less likely to land somewhere unintended.
       * Cursor and eraser have Invoke only. They have nothing to configure, so
-        a colour or thickness dial must leave them alone.
+        a color or thickness dial must leave them alone.
 
     Without -Expand this only reads, so it is safe during a real presentation.
     With -Expand it opens one tool's flyout, diffs what appeared, and closes it
@@ -200,7 +200,7 @@ if (-not $recovered) {
     Write-Host "   STILL OPEN - click anywhere on the slide to dismiss it, or the deck stays invisible to the plugin"
 }
 
-# Re-read the tool: its name carries the colour and thickness it now holds.
+# Re-read the tool: its name carries the color and thickness it now holds.
 $tool2 = $null
 foreach ($w in Get-TeamsWindows) { $tool2 = $w.FindFirst($TS::Descendants, $cond); if ($tool2) { break } }
 if ($tool2) { Write-Host "tool after: $(Format-Element $tool2)" }

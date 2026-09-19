@@ -102,6 +102,11 @@ export abstract class TeamsDialAction<T extends JsonObject = JsonObject> extends
 		void this.#paint(dial, bridge.state);
 	}
 
+	/** Redraws every dial of this action against the state already in hand. */
+	protected repaintAll(): void {
+		this.#paintAll(bridge.state);
+	}
+
 	#paintAll(state: TeamsState): void {
 		for (const a of this.actions) if (a.isDial()) void this.#paint(a, state);
 	}
@@ -127,13 +132,13 @@ export abstract class TeamsDialAction<T extends JsonObject = JsonObject> extends
 /* ------------------------------------------------------------------------- *
  * Ink
  *
- * Colour and thickness are what a dial is genuinely better at than a key: one
+ * Color and thickness are what a dial is genuinely better at than a key: one
  * is a ring of options and the other a bounded range, and neither is worth a
- * key each when there are fifteen colours.
+ * key each when there are fifteen colors.
  *
  * Both act on whichever drawing tool is selected, so neither dial has a tool
  * of its own to configure - pick the pen and they drive the pen. The laser has
- * a colour and no thickness, and the cursor has neither, so each dial says so
+ * a color and no thickness, and the cursor has neither, so each dial says so
  * rather than pretending.
  * ------------------------------------------------------------------------- */
 
@@ -152,6 +157,35 @@ const SETTLE_MS = 400;
  * claiming an ink setting that was never applied.
  */
 const CONFIRM_TIMEOUT_MS = 4000;
+
+/**
+ * How long to keep showing a dialled value after Teams first agrees with it.
+ *
+ * Letting go the moment a snapshot matches is too early. The snapshot taken
+ * while the flyout was open carries the value from before the change - the
+ * tools are unmounted then, so the sidecar reports the color it last cached -
+ * and that one can land after the confirming snapshot. The result was the one
+ * thing a dial must never do: the new color, then the old one, then the new
+ * one again.
+ */
+const CONFIRM_HOLD_MS = 1500;
+
+/**
+ * The ink color the color dial has been turned to but Teams has not applied.
+ *
+ * The thickness dial draws its wedge in the ink color, and the two dials are
+ * separate action instances with no state in common. Without this the wedge
+ * stayed on the old color until the change committed, which is visible right
+ * next to a slot that had already moved.
+ */
+const dialledColor = new Map<string, string>();
+
+/** Dials to redraw when the dialled color changes under them. */
+const inkListeners = new Set<() => void>();
+
+function notifyInk(): void {
+	for (const listener of inkListeners) listener();
+}
 
 const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n));
 
@@ -199,7 +233,7 @@ function activeInkTool(state: TeamsState): string | null {
  */
 abstract class InkDialAction extends TeamsDialAction {
 	/** What the user turned to, held until Teams reports the same. */
-	readonly #intent = new Map<string, { value: string; since: number }>();
+	readonly #intent = new Map<string, { value: string; since: number; confirmedAt?: number }>();
 	readonly #timers = new Map<string, NodeJS.Timeout>();
 	readonly #busy = new Set<string>();
 
@@ -265,14 +299,33 @@ abstract class InkDialAction extends TeamsDialAction {
 		const intent = this.#intent.get(dial.id);
 		if (intent === undefined) return this.reported(state, tool);
 
-		const settled =
-			this.reported(state, tool) === intent.value || Date.now() - intent.since > CONFIRM_TIMEOUT_MS;
-		if (settled) {
+		const reported = this.reported(state, tool);
+		const now = Date.now();
+
+		if (reported === intent.value) {
+			// Held briefly rather than dropped on the first agreement; see
+			// CONFIRM_HOLD_MS for the stale snapshot this rides out.
+			intent.confirmedAt ??= now;
+			if (now - intent.confirmedAt > CONFIRM_HOLD_MS) {
+				this.#intent.delete(dial.id);
+				this.forget(tool);
+			}
+			return intent.value;
+		}
+
+		if (now - intent.since > CONFIRM_TIMEOUT_MS) {
 			this.#intent.delete(dial.id);
-			return this.reported(state, tool);
+			this.forget(tool);
+			return reported;
 		}
 		return intent.value;
 	}
+
+	/** Told when a dialled value is adopted, so it can be shared with the other dial. */
+	protected claim(_tool: string, _value: string): void {}
+
+	/** Told when a dialled value is let go of. */
+	protected forget(_tool: string): void {}
 
 	/** True while the dial is showing something Teams has not confirmed. */
 	protected pendingOn(dial: DialAction<JsonObject>): boolean {
@@ -290,7 +343,9 @@ abstract class InkDialAction extends TeamsDialAction {
 		// Turns are always taken, including while a change is in flight; the
 		// commit that is running will pick the newer value up when it finishes.
 		const from = this.#intent.get(id)?.value ?? this.reported(state, tool);
-		this.#intent.set(id, { value: this.step(from, ev.payload.ticks, state, tool), since: Date.now() });
+		const next = this.step(from, ev.payload.ticks, state, tool);
+		this.#intent.set(id, { value: next, since: Date.now() });
+		this.claim(tool, next);
 		this.refresh(dial);
 
 		const timer = this.#timers.get(id);
@@ -330,6 +385,7 @@ abstract class InkDialAction extends TeamsDialAction {
 				// Drop the claim rather than leaving the slot asserting an ink
 				// setting Teams never took.
 				this.#intent.delete(id);
+				this.forget(tool);
 				this.refresh(dial);
 			}
 		} finally {
@@ -380,10 +436,15 @@ export class InkThicknessDialAction extends InkDialAction {
 		}
 
 		const value = Number.parseInt(this.shown(state, tool, dial), 10);
+		// The wedge follows the color dial the instant it moves, rather than
+		// waiting for Teams to apply it: the two slots sit next to each other
+		// and one lagging the other is obvious.
+		const color = dialledColor.get(tool) ?? state.context[`ppt.color.${tool}`];
+
 		return {
 			canvas: toDataUri(
 				renderInkThickness(
-					toolColor(tool, state.context[`ppt.color.${tool}`]),
+					toolColor(tool, color),
 					Number.isFinite(value) ? value : THICKNESS_MIN,
 					THICKNESS_MIN,
 					THICKNESS_MAX
@@ -391,10 +452,23 @@ export class InkThicknessDialAction extends InkDialAction {
 			)
 		};
 	}
+
+	override onWillAppear(ev: WillAppearEvent<JsonObject>): void {
+		super.onWillAppear(ev);
+
+		// Registered once and left: this is a singleton action that lives as
+		// long as the plugin, and repainting when no dial is on the strip is a
+		// no-op anyway.
+		if (this.#listening) return;
+		this.#listening = true;
+		inkListeners.add(() => this.repaintAll());
+	}
+
+	#listening = false;
 }
 
 /**
- * Carousels the selected tool through its colours.
+ * Carousels the selected tool through its colors.
  *
  * The palette belongs to the tool - the pen and the highlighter offer
  * different sets - and it can only be read while the flyout is open, so the
@@ -440,7 +514,7 @@ export class InkColorDialAction extends InkDialAction {
 		const to = palette.indexOf(value);
 		if (from < 0 || to < 0) return Promise.resolve({ ok: true });
 
-		// Shortest way round the ring, so picking the colour before the current
+		// Shortest way round the ring, so picking the color before the current
 		// one is one step back rather than fourteen forward.
 		const n = palette.length;
 		let steps = to - from;
@@ -454,16 +528,28 @@ export class InkColorDialAction extends InkDialAction {
 		const tool = this.displayTool(state);
 		if (tool === undefined) {
 			return {
-				canvas: toDataUri(renderStripIdle("Ink colour", pptLive(state) ? "no pen selected" : "no deck"))
+				canvas: toDataUri(renderStripIdle("Ink color", pptLive(state) ? "no pen selected" : "no deck"))
 			};
 		}
 
 		const shown = this.shown(state, tool, dial);
 		// A turn taken before the palette was known has no name to show yet, so
-		// the slot keeps the colour Teams last reported.
+		// the slot keeps the color Teams last reported.
 		const name = shown.startsWith(BLIND) ? this.reported(state, tool) : shown;
 
 		return { canvas: toDataUri(renderInkColor(toolColor(tool, name), name)) };
+	}
+
+	protected override claim(tool: string, value: string): void {
+		// Shared so the thickness dial can draw its wedge in the color being
+		// turned to rather than the one Teams still has.
+		if (!value.startsWith(BLIND)) dialledColor.set(tool, value);
+		notifyInk();
+	}
+
+	protected override forget(tool: string): void {
+		dialledColor.delete(tool);
+		notifyInk();
 	}
 
 	#palette(state: TeamsState, tool: string): string[] {

@@ -128,9 +128,9 @@ public sealed class ControlSpec
     public string? Surface { get; set; }
 
     /// <summary>
-    /// Reads the tool's ink colour out of its accessible name, which is where
+    /// Reads the tool's ink color out of its accessible name, which is where
     /// Teams puts it ("Pen: Light blue, Thickness 3"), so a key can be drawn in
-    /// the colour the tool will actually draw in.
+    /// the color the tool will actually draw in.
     /// </summary>
     public bool ColorFromName { get; set; }
 
@@ -259,16 +259,16 @@ public sealed class PowerPointLiveSpec
     public string DeckTitlePattern { get; set; } = @"^\s*SlideShow\s*[-–]\s*(.+?)\s*$";
 
     /// <summary>
-    /// Pulls the ink colour out of a drawing tool's accessible name: the part
+    /// Pulls the ink color out of a drawing tool's accessible name: the part
     /// after the colon and before any thickness. "Pen: Light blue, Thickness 3"
     /// gives "Light blue". Localised, like the name it reads.
     /// </summary>
     public string ToolColorPattern { get; set; } = @"^[^:]+:\s*([^,]+?)\s*(?:,|$)";
 
     /// <summary>
-    /// Pulls the ink thickness out of the same accessible name the colour comes
+    /// Pulls the ink thickness out of the same accessible name the color comes
     /// from: "Pen: Light blue, Thickness 3" gives 3. Localised, like the name it
-    /// reads. Only the pen and highlighter carry one; the laser has a colour and
+    /// reads. Only the pen and highlighter carry one; the laser has a color and
     /// no thickness.
     /// </summary>
     public string ToolThicknessPattern { get; set; } = @"Thickness\s*(\d+)";
@@ -283,10 +283,10 @@ public sealed class PowerPointLiveSpec
     public string InkThicknessPattern { get; set; } = @"^\s*Ink thickness\s*$";
 
     /// <summary>
-    /// The ink colours offered in a drawing tool's flyout, which is the only
-    /// place the chosen colour can be read while that flyout is open: opening it
+    /// The ink colors offered in a drawing tool's flyout, which is the only
+    /// place the chosen color can be read while that flyout is open: opening it
     /// removes the tool button itself from the tree, taking its name — and with
-    /// it the colour — along.
+    /// it the color — along.
     ///
     /// The union of all three palettes, captured from a live presenter session.
     /// They differ: the pen offers dark and magenta shades the highlighter does
@@ -323,7 +323,7 @@ public sealed class PowerPointLiveSpec
 
     /// <summary>
     /// The laser pointer's arrow options, which share the drawing-tool flyout
-    /// with the colour swatches and are the reason a colour cannot simply be
+    /// with the color swatches and are the reason a color cannot simply be
     /// "the selected radio button": one of these always reports itself selected
     /// too. Localised, like the names they match.
     /// </summary>
@@ -526,7 +526,7 @@ public sealed class TeamsClient : IDisposable
         try
         {
             // The name carries mute/camera state and, for a drawing tool, its
-            // ink colour. Selection carries which tool is in use, and does not
+            // ink color. Selection carries which tool is in use, and does not
             // touch the name at all — without it, switching tool in Teams was
             // only noticed when the backstop poll came round.
             var properties = spec.StateFromSelection
@@ -1432,7 +1432,7 @@ public sealed class TeamsClient : IDisposable
         return null;
     }
 
-    /// <summary>Last ink colour seen per tool, held across the subtree's absences.</summary>
+    /// <summary>Last ink color seen per tool, held across the subtree's absences.</summary>
     private readonly Dictionary<string, string> _lastToolColors = new();
 
     /// <summary>Whether a control lives in the subtree Teams unmounts when idle.</summary>
@@ -1440,7 +1440,7 @@ public sealed class TeamsClient : IDisposable
         !string.IsNullOrEmpty(spec.Surface) &&
         string.Equals(spec.Surface, _config.PowerPointLive.SlideShowSurface, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Ink colour named by a drawing tool, e.g. "Pen: Light blue, Thickness 3".</summary>
+    /// <summary>Ink color named by a drawing tool, e.g. "Pen: Light blue, Thickness 3".</summary>
     private string? ToolColorOf(AutomationElement el)
     {
         var rx = _config.PowerPointLive.ToolColorRegex;
@@ -1460,14 +1460,14 @@ public sealed class TeamsClient : IDisposable
     }
 
     /// <summary>
-    /// Reads the ink colour out of an open drawing-tool flyout.
+    /// Reads the ink color out of an open drawing-tool flyout.
     ///
     /// Needed because opening that flyout unmounts the tool button it belongs
     /// to, so the usual source — the button's own name — does not exist at the
-    /// moment the colour changes. Teams recolours its toolbar on the click, and
+    /// moment the color changes. Teams recolors its toolbar on the click, and
     /// without this the plugin only caught up once the flyout closed.
     ///
-    /// Only swatches named as colours count. The same flyout carries the laser
+    /// Only swatches named as colors count. The same flyout carries the laser
     /// pointer's arrow options, and one of those reports itself selected too, so
     /// "the selected radio button" alone would happily return "No arrow".
     /// </summary>
@@ -1505,20 +1505,20 @@ public sealed class TeamsClient : IDisposable
         }
         catch { }
 
-        // A known colour is taken at face value. Anything else is only trusted
+        // A known color is taken at face value. Anything else is only trusted
         // once an arrow option has confirmed this really is a drawing-tool
-        // flyout, which covers a colour Teams adds after this list was written.
+        // flyout, which covers a color Teams adds after this list was written.
         // That guard only helps in the pen's flyout — it is the one that carries
         // the arrow options — so the list still has to be kept complete.
         return listed ?? (sawArrow ? fallback : null);
     }
 
     /// <summary>
-    /// Reads the ink colour out of an open drawing-tool flyout and publishes it
+    /// Reads the ink color out of an open drawing-tool flyout and publishes it
     /// against the tool it belongs to, returning that tool's key.
     ///
     /// Called from both snapshot paths because either can be the one running
-    /// when a colour changes: opening a PowerPoint flyout leaves the meeting
+    /// when a color changes: opening a PowerPoint flyout leaves the meeting
     /// toolbar in place, while opening a Teams menu does not.
     /// </summary>
     private string? ApplyPaletteColor(MeetingSnapshot snap, AutomationElement win, string? role)
@@ -1534,8 +1534,8 @@ public sealed class TeamsClient : IDisposable
         snap.InkFlyoutOpen = true;
 
         // An open palette is proof the deck is still up, so it holds the grace
-        // window open. Without this, studying the colours for half a minute
-        // dimmed every slide-show key and dropped the colours altogether — the
+        // window open. Without this, studying the colors for half a minute
+        // dimmed every slide-show key and dropped the colors altogether — the
         // surface has been "missing" the whole time the flyout was up.
         _pptSurfaceSeenAt = Environment.TickCount64;
 
@@ -1545,7 +1545,7 @@ public sealed class TeamsClient : IDisposable
     }
 
     /// <summary>
-    /// The drawing tool a colour change applies to: the selected one. Its own
+    /// The drawing tool a color change applies to: the selected one. Its own
     /// button is gone while its flyout is open, so this reads the selection that
     /// was true when the flyout opened.
     /// </summary>
@@ -1560,20 +1560,20 @@ public sealed class TeamsClient : IDisposable
     }
 
     /* ------------------------------------------------------------------- *
-     * Setting ink colour and thickness
+     * Setting ink color and thickness
      *
      * Both live in the flyout a drawing tool opens, and both turned out to be
      * proper UI Automation patterns rather than menu items: thickness is a
-     * Slider carrying RangeValue over 1..6, and every colour is a RadioButton
+     * Slider carrying RangeValue over 1..6, and every color is a RadioButton
      * that can be selected directly. Neither needs a posted click, which is
      * what makes them quick enough to sit under a dial.
      *
-     * Only the tools that carry a colour can be opened at all - pen,
+     * Only the tools that carry a color can be opened at all - pen,
      * highlighter and laser have ExpandCollapse, cursor and eraser have Invoke
      * alone - so anything else is refused rather than half-attempted.
      *
      * The palette is per tool and the sets genuinely differ, so the open flyout
-     * is always the authority on what the colours are; InkColorNames is a union
+     * is always the authority on what the colors are; InkColorNames is a union
      * of them and matches neither exactly.
      * ------------------------------------------------------------------- */
 
@@ -1660,9 +1660,9 @@ public sealed class TeamsClient : IDisposable
         try
         {
             if (tool.Patterns.ExpandCollapse.PatternOrDefault is null)
-                return (false, $"'{key}' has no colour or thickness to set");
+                return (false, $"'{key}' has no color or thickness to set");
         }
-        catch { return (false, $"'{key}' has no colour or thickness to set"); }
+        catch { return (false, $"'{key}' has no color or thickness to set"); }
 
         var startedAt = Environment.TickCount64;
 
@@ -1762,7 +1762,7 @@ public sealed class TeamsClient : IDisposable
 
     private (bool ok, string? error) StepInkColor(List<AutomationElement> swatches, string key, string? arg)
     {
-        if (swatches.Count == 0) return (false, "this tool has no colours");
+        if (swatches.Count == 0) return (false, "this tool has no colors");
 
         _lastPalette[key] = swatches.Select(s => NameOf(s).Trim()).ToList();
 
@@ -1787,7 +1787,7 @@ public sealed class TeamsClient : IDisposable
         try { swatches[wanted].Patterns.SelectionItem.Pattern.Select(); }
         catch
         {
-            if (!Press(swatches[wanted])) return (false, "could not select the colour");
+            if (!Press(swatches[wanted])) return (false, "could not select the color");
         }
         return (true, null);
     }
@@ -1880,10 +1880,10 @@ public sealed class TeamsClient : IDisposable
                 snap.Available[key] = !_lastAvailable.TryGetValue(key, out var was) || was;
             foreach (var (k, v) in _lastStates) snap.States[k] = v;
 
-            // Ink colour is the exception. It has to come from the palette
+            // Ink color is the exception. It has to come from the palette
             // rather than from the tool, because opening the palette unmounts
-            // the tool button — which is why a new colour used to appear only
-            // once the palette closed, long after Teams had recoloured its own
+            // the tool button — which is why a new color used to appear only
+            // once the palette closed, long after Teams had recolored its own
             // toolbar on the click.
             var inkKey = ApplyPaletteColor(snap, win, role);
 
@@ -1909,8 +1909,8 @@ public sealed class TeamsClient : IDisposable
         var surfaceGone = snap.Context.ContainsKey("ppt.detached");
 
         // Opening a drawing tool's flyout unmounts that surface too, and with it
-        // the very button whose name carries the ink colour. So the one moment
-        // the colour can change is the one moment it cannot be read the usual
+        // the very button whose name carries the ink color. So the one moment
+        // the color can change is the one moment it cannot be read the usual
         // way, and the palette itself becomes the only source.
         //
         // Gated on the surface being gone, which is the only time it is needed.
@@ -1942,7 +1942,7 @@ public sealed class TeamsClient : IDisposable
                 snap.Available[key] = !_lastAvailable.TryGetValue(key, out var held) || held;
                 if (_lastStates.TryGetValue(key, out var heldState)) snap.States[key] = heldState;
 
-                // Covers the tool whose palette is open too: its colour was just
+                // Covers the tool whose palette is open too: its color was just
                 // published from that palette, so the remembered value is it.
                 if (_lastToolColors.TryGetValue(key, out var heldColor))
                     snap.Context[$"ppt.color.{key}"] = heldColor;
@@ -2040,8 +2040,8 @@ public sealed class TeamsClient : IDisposable
                 snap.States[key] = carried;
             }
 
-            // The ink colour rides along in the same name the selection came
-            // from, so a key can be drawn in the colour it will actually draw.
+            // The ink color rides along in the same name the selection came
+            // from, so a key can be drawn in the color it will actually draw.
             PublishToolColor(snap, key, spec, el);
         }
 
@@ -2049,7 +2049,7 @@ public sealed class TeamsClient : IDisposable
     }
 
     /// <summary>
-    /// Publishes the colour and thickness a drawing tool will draw with,
+    /// Publishes the color and thickness a drawing tool will draw with,
     /// falling back to the last ones seen. <paramref name="el"/> is null when
     /// the control could not be resolved this time round, which is not the same
     /// as it having neither.
@@ -2636,7 +2636,7 @@ public sealed class TeamsClient : IDisposable
 
     public (bool ok, string? error) Invoke(string target, string? arg = null)
     {
-        // Ink colour and thickness are UI Automation patterns inside a flyout
+        // Ink color and thickness are UI Automation patterns inside a flyout
         // rather than a selector walk, so they are handled directly rather than
         // described in the config like every other control.
         var ink = target is InkColorTarget or InkThicknessTarget;
@@ -3002,7 +3002,7 @@ public sealed class MeetingSnapshot
     public Dictionary<string, string> Context { get; set; } = new();
 
     /// <summary>
-    /// A drawing-tool flyout is open, so the colour can change without anything
+    /// A drawing-tool flyout is open, so the color can change without anything
     /// raising an event: the tool button that would have reported it is unmounted
     /// for as long as its own flyout is up. Polled faster while this holds, and
     /// deliberately kept out of the fingerprint — it is a hint about how often to

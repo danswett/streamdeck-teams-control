@@ -205,9 +205,9 @@ export class PptStatusAction extends TeamsAction {
  * the UI Automation selection rather than from a label — which means it also
  * tracks a tool you picked in Teams itself.
  *
- * The ink colour comes from the same place: Teams puts it in the control's
- * accessible name ("Pen: Light blue, Thickness 3"), so changing colour in
- * Teams recolours the key.
+ * The ink color comes from the same place: Teams puts it in the control's
+ * accessible name ("Pen: Light blue, Thickness 3"), so changing color in
+ * Teams recolors the key.
  */
 abstract class InkToolAction extends TeamsAction {
 	protected abstract readonly control: string;
@@ -283,7 +283,7 @@ export class PptHidePresenterViewAction extends TeamsAction {
 	protected override draw(state: TeamsState): string {
 		const control = "ppt-hide-presenter-view";
 
-		// Drawn in white either way. The slash is the state, so colouring it as
+		// Drawn in white either way. The slash is the state, so coloring it as
 		// well said the same thing twice - and said it backwards, because the
 		// accent landed on the resting state rather than the changed one.
 		const glyph = presenterViewGlyph(state.states[control]);

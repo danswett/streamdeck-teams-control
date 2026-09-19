@@ -40,8 +40,8 @@ $outTask.Result -split "`n" | Where-Object { $_ -match '"type":"state"' } | ForE
     $availFalse = @($o.available.PSObject.Properties | Where-Object { -not $_.Value } | ForEach-Object { $_.Name })
     if (-not $o.inMeeting) { $bad++ }
     $flag = if (-not $o.inMeeting) { 'DIMMED-ALL' } elseif ($availFalse.Count) { "unavailable: $($availFalse -join ',')" } else { 'all available' }
-    $colour = if (-not $o.inMeeting) { 'Red' } elseif ($availFalse.Count) { 'Yellow' } else { 'Green' }
-    Write-Host ("  inMeeting={0,-6} {1}" -f $o.inMeeting, $flag) -ForegroundColor $colour
+    $color = if (-not $o.inMeeting) { 'Red' } elseif ($availFalse.Count) { 'Yellow' } else { 'Green' }
+    Write-Host ("  inMeeting={0,-6} {1}" -f $o.inMeeting, $flag) -ForegroundColor $color
 }
 
 Write-Host ""

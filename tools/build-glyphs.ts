@@ -19,7 +19,7 @@ const SYS = path.join(ROOT, "node_modules", "@fluentui", "svg-icons", "icons");
 const EMOJI = path.join(ROOT, "node_modules", "fluentui-emoji", "icons", "flat");
 
 /**
- * Control glyphs. These carry no fill, so they can be recoloured per state.
+ * Control glyphs. These carry no fill, so they can be recolored per state.
  *
  * All taken from the same 28px size tier: Fluent draws each tier with its own
  * stroke weight and level of detail, so mixing tiers makes the keys look
@@ -72,7 +72,7 @@ const CONTROLS: Record<string, string> = {
 	pptPopout: "window_new_28_filled",
 	pptSlide: "slide_text_28_filled",
 
-	// Presenter tools, drawn in PowerPoint Live's own colours (see TOOL_COLORS).
+	// Presenter tools, drawn in PowerPoint Live's own colors (see TOOL_COLORS).
 	// Fluent has no laser-pointer glyph at any size, so the small filled circle
 	// stands in: in red it reads as the dot a laser actually puts on the slide,
 	// which is closer to what Teams shows than a reticle or a torch would be.
@@ -111,7 +111,7 @@ const CONTROLS: Record<string, string> = {
 
 	// Monochrome stand-ins for the reactions and the hand, used only for the
 	// action-list icons. Elgato's guidelines require those to be a white
-	// monochrome stroke on transparent, so the full-colour emoji that appear on
+	// monochrome stroke on transparent, so the full-color emoji that appear on
 	// the keys themselves cannot be reused there.
 	//
 	// Fluent's system set has no applause glyph, so the two-hands icon stands in.
@@ -175,7 +175,7 @@ const data = {
 		"",
 		"Artwork from Microsoft's Fluent icon sets, both MIT licensed:",
 		"  @fluentui/svg-icons (Fluent UI System Icons) - control glyphs, no fill",
-		"  fluentui-emoji ('flat' style)                - reactions, full colour"
+		"  fluentui-emoji ('flat' style)                - reactions, full color"
 	],
 	controls: emit(CONTROLS, SYS),
 	reactions: emit(REACTIONS, EMOJI),

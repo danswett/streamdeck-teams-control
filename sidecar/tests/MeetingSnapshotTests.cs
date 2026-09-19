@@ -124,9 +124,9 @@ public class MeetingSnapshotTests
     }
 
     [Fact]
-    public void Changing_ink_colour_changes_the_fingerprint()
+    public void Changing_ink_color_changes_the_fingerprint()
     {
-        // The colour is what the key is drawn in, so a change to it has to reach
+        // The color is what the key is drawn in, so a change to it has to reach
         // the plugin even though no control changed state.
         var before = Sample();
         before.Context["ppt.color.ppt-pen"] = "Light green";

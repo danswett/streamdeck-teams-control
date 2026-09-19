@@ -82,7 +82,7 @@ const rows: { title: string; cells: Cell[] }[] = [
 		title: "Blur",
 		cells: [
 			// The sidecar reports availability for blur but no state, so there is
-			// no "on" colour to preview.
+			// no "on" color to preview.
 			{ label: "available", svg: renderGlyph("blur", "on") },
 			{ label: "no meeting", svg: renderGlyph("blur", "unavailable") }
 		]

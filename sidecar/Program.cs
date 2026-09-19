@@ -212,7 +212,7 @@ public static class Program
         var idlePollMs = Math.Max(pollMs, 15_000);
 
         // While a drawing-tool flyout is open the tool button is unmounted, so a
-        // colour change raises no event and polling is the only way to see it.
+        // color change raises no event and polling is the only way to see it.
         // Brief and self-limiting: it only applies while that flyout is up.
         var inkFlyoutPollMs = Math.Clamp(pollMs, 150, 500);
         var currentPollMs = meetingPollMs;

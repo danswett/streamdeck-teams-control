@@ -134,8 +134,8 @@ const W = PAD * 2 + COLS * KEY + (COLS - 1) * GAP;
 const H = PAD * 2 + ROWS * KEY + (ROWS - 1) * GAP + 34;
 
 const inner = (svg: string) => svg.replace(/^<svg[^>]*>/, "").replace(/<\/svg>$/, "");
-const toolArt = (control: string, active: boolean, colour?: string): string => {
-	const art = renderTool(control, { available: true, active, color: colour });
+const toolArt = (control: string, active: boolean, color?: string): string => {
+	const art = renderTool(control, { available: true, active, color: color });
 	if (!art.startsWith("data:")) return art;
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144"><image href="${art}" x="0" y="0" width="144" height="144"/></svg>`;
 };

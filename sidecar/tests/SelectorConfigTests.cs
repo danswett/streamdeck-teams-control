@@ -453,7 +453,7 @@ public class SelectorConfigTests : IDisposable
     }
 
     [Fact]
-    public void ParseConfig_reads_the_surface_and_colour_fields()
+    public void ParseConfig_reads_the_surface_and_color_fields()
     {
         var cfg = Program.ParseConfig("""
             {
@@ -518,7 +518,7 @@ public class SelectorConfigTests : IDisposable
     }
 
     [Fact]
-    public void The_default_ink_colours_are_the_ones_the_palettes_offer()
+    public void The_default_ink_colors_are_the_ones_the_palettes_offer()
     {
         // Captured from a live presenter session, from all three palettes: they
         // differ, and a name missing here cannot be read while its flyout is
@@ -544,7 +544,7 @@ public class SelectorConfigTests : IDisposable
         }
 
         // The pen's flyout also carries the laser pointer's arrow options, and
-        // one of them always reports itself selected. Treating those as colours
+        // one of them always reports itself selected. Treating those as colors
         // would paint the key "No arrow".
         Assert.DoesNotContain("No arrow", colors);
         Assert.DoesNotContain("Single arrow", colors);
@@ -552,7 +552,7 @@ public class SelectorConfigTests : IDisposable
     }
 
     [Fact]
-    public void ParseConfig_reads_ink_colour_names()
+    public void ParseConfig_reads_ink_color_names()
     {
         var cfg = Program.ParseConfig("""
             {
@@ -566,9 +566,9 @@ public class SelectorConfigTests : IDisposable
     }
 
     [Fact]
-    public void An_empty_ink_colour_list_keeps_the_defaults()
+    public void An_empty_ink_color_list_keeps_the_defaults()
     {
-        // An empty list would otherwise disable colour reading outright, which
+        // An empty list would otherwise disable color reading outright, which
         // is never what someone editing this file means by it.
         var cfg = Program.ParseConfig("""
             {
@@ -610,9 +610,9 @@ public class SelectorConfigTests : IDisposable
     }
 
     [Fact]
-    public void The_tool_colour_pattern_reads_the_ink_colour_Teams_names()
+    public void The_tool_color_pattern_reads_the_ink_color_Teams_names()
     {
-        // Captured from a live meeting: the colour sits between the colon and
+        // Captured from a live meeting: the color sits between the colon and
         // the thickness, and can be more than one word.
         var rx = new PowerPointLiveSpec().ToolColorRegex!;
 
@@ -620,18 +620,18 @@ public class SelectorConfigTests : IDisposable
         Assert.Equal("Light orange", rx.Match("Laser pointer: Light orange").Groups[1].Value);
         Assert.Equal("Pink", rx.Match("Highlighter: Pink, Thickness 3").Groups[1].Value);
 
-        // Tools with no ink colour say nothing extra.
+        // Tools with no ink color say nothing extra.
         Assert.DoesNotMatch(rx, "Cursor");
         Assert.DoesNotMatch(rx, "Eraser");
     }
 
     [Fact]
-    public void Only_the_tools_that_carry_an_ink_colour_report_one()
+    public void Only_the_tools_that_carry_an_ink_color_report_one()
     {
         var config = Program.LoadConfig("nope");
 
         foreach (var key in new[] { "ppt-cursor", "ppt-laser", "ppt-pen", "ppt-highlighter", "ppt-eraser" })
-            Assert.True(config.Controls[key].ColorFromName, $"{key} should report its colour");
+            Assert.True(config.Controls[key].ColorFromName, $"{key} should report its color");
 
         Assert.False(config.Controls["ppt-next"].ColorFromName);
     }

@@ -3,7 +3,7 @@
  *
  * It grabs the real drawing-tool SVGs straight from the DOM - gradients,
  * filters and all - plus each tool's title, which is where Teams records the
- * ink colour. The result goes on the clipboard.
+ * ink color. The result goes on the clipboard.
  */
 copy(
 	JSON.stringify(

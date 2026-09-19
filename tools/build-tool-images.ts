@@ -31,7 +31,7 @@ function render(svg: string): string {
 	return `data:image/png;base64,${Buffer.from(png).toString("base64")}`;
 }
 
-/** Colours a tool can actually take. The eraser and cursor have only one. */
+/** Colors a tool can actually take. The eraser and cursor have only one. */
 function colorsFor(control: string): string[] {
 	if (control === "ppt-eraser" || control === "ppt-cursor") {
 		return [TOOL_DEFAULT_COLOR[control] ?? "#FFFFFF"];
@@ -49,10 +49,10 @@ for (const [control, icon] of Object.entries(TOOL_ICONS)) {
 			count++;
 		}
 	}
-	// One greyed variant per tool; an unavailable tool has no ink colour.
+	// One greyed variant per tool; an unavailable tool has no ink color.
 	images[`${control}|unavailable`] = render(composeToolSvg(icon, UNAVAILABLE_COLOR, false, SIZE));
 	count++;
-	console.log(`  ${control.padEnd(18)} ${colorsFor(control).length} colour(s)`);
+	console.log(`  ${control.padEnd(18)} ${colorsFor(control).length} color(s)`);
 }
 
 const out = {

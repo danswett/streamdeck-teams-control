@@ -1,5 +1,5 @@
 <#
-    Checks whether ink colour and thickness can be reached while the drawing
+    Checks whether ink color and thickness can be reached while the drawing
     tool's flyout is CLOSED.
 
     Opening that flyout is not free: it covers the slide on the presenter's own
@@ -59,7 +59,7 @@ foreach ($s in $sliders) {
     "  name='{0}' id='{1}' offscreen={2}" -f $s.Current.Name, $s.Current.AutomationId, $s.Current.IsOffscreen | Write-Host -ForegroundColor Green
 }
 
-Write-Host "`n--- any colour-named RadioButton with the flyout CLOSED? ---"
+Write-Host "`n--- any color-named RadioButton with the flyout CLOSED? ---"
 $radios = $meeting.FindAll($TS::Descendants,
     (New-Object System.Windows.Automation.PropertyCondition($AE::ControlTypeProperty, [System.Windows.Automation.ControlType]::RadioButton)))
 Write-Host "  $($radios.Count) radio button(s) in the tree"

@@ -54,7 +54,7 @@ globalThis.ACTION_DESCRIPTIONS = {
 		"Shows the current slide and the deck length, such as 3 / 19. Display only - pressing it does nothing. It holds the last known position while Teams hides its toolbar or a flyout is open, rather than going blank.",
 
 	"com.bad-duck.teamscontrol.ppt-ink-color-dial":
-		"Turns the selected pen, highlighter or laser through its colours. The palette belongs to the tool rather than to Teams - the pen and the highlighter offer different sets - so the dial reads whichever one is in front of it, and wraps at the ends. Turning shows the colour you are heading for; it is applied when you stop. Goes quiet for the cursor and the eraser, which have no colour.",
+		"Turns the selected pen, highlighter or laser through its colors. The palette belongs to the tool rather than to Teams - the pen and the highlighter offer different sets - so the dial reads whichever one is in front of it, and wraps at the ends. Turning shows the color you are heading for; it is applied when you stop. Goes quiet for the cursor and the eraser, which have no color.",
 
 	"com.bad-duck.teamscontrol.ppt-ink-thickness-dial":
 		"Sets how thick the selected pen or highlighter draws, over Teams' own range of 1 to 6. Turning shows the thickness you are heading for; it is applied when you stop. Goes quiet for the laser, the cursor and the eraser, none of which have a thickness.",
@@ -78,13 +78,13 @@ globalThis.ACTION_DESCRIPTIONS = {
 
 
 	"com.bad-duck.teamscontrol.ppt-laser":
-		"Selects the laser pointer. The drawing tools are a single-select group, so the key lights while this is the active tool and follows the tool you pick in Teams' own toolbar. The key is drawn in the colour the pointer will actually use. Presenter only.",
+		"Selects the laser pointer. The drawing tools are a single-select group, so the key lights while this is the active tool and follows the tool you pick in Teams' own toolbar. The key is drawn in the color the pointer will actually use. Presenter only.",
 
 	"com.bad-duck.teamscontrol.ppt-pen":
-		"Selects the pen. The drawing tools are a single-select group, so the key lights while this is the active tool and follows the tool you pick in Teams' own toolbar. The key is drawn in the colour the pen will actually draw in. Presenter only.",
+		"Selects the pen. The drawing tools are a single-select group, so the key lights while this is the active tool and follows the tool you pick in Teams' own toolbar. The key is drawn in the color the pen will actually draw in. Presenter only.",
 
 	"com.bad-duck.teamscontrol.ppt-highlighter":
-		"Selects the highlighter. The drawing tools are a single-select group, so the key lights while this is the active tool and follows the tool you pick in Teams' own toolbar. The key is drawn in the colour the highlighter will actually draw in. Presenter only.",
+		"Selects the highlighter. The drawing tools are a single-select group, so the key lights while this is the active tool and follows the tool you pick in Teams' own toolbar. The key is drawn in the color the highlighter will actually draw in. Presenter only.",
 
 	"com.bad-duck.teamscontrol.ppt-eraser":
 		"Selects the eraser, which removes annotations you have drawn. The key lights while it is the active tool. Presenter only.",

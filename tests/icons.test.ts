@@ -83,11 +83,11 @@ describe("toDataUri", () => {
 		const uri = toDataUri("<svg/>");
 
 		expect(uri.startsWith("data:image/svg+xml,")).toBe(true);
-		// Raw '#' would truncate the URI at the first colour literal.
+		// Raw '#' would truncate the URI at the first color literal.
 		expect(uri).not.toContain("#");
 	});
 
-	it("encodes colour literals rather than leaving them raw", () => {
+	it("encodes color literals rather than leaving them raw", () => {
 		expect(toDataUri('<svg fill="#ff0000"/>')).toContain("%23ff0000");
 	});
 });
@@ -215,16 +215,16 @@ describe("press animation", () => {
 	});
 });
 
-describe("ink colours", () => {
-	// The sidecar reads a colour name off the Teams palette and the plugin turns
+describe("ink colors", () => {
+	// The sidecar reads a color name off the Teams palette and the plugin turns
 	// it into ink. A name the sidecar can report but the plugin does not know
-	// renders in the tool's default colour instead, silently showing the wrong
+	// renders in the tool's default color instead, silently showing the wrong
 	// ink - so the two lists have to agree.
 	const selectors = JSON.parse(
 		readFileSync("com.bad-duck.teamscontrol.sdPlugin/selectors.json", "utf8")
 	) as { powerPointLive: { inkColorNames: string[] } };
 
-	it("renders every colour the sidecar can report", () => {
+	it("renders every color the sidecar can report", () => {
 		for (const name of selectors.powerPointLive.inkColorNames) {
 			expect(INK_COLORS[name.toLowerCase()], `no ink for "${name}"`).toBeDefined();
 		}
@@ -237,13 +237,13 @@ describe("ink colours", () => {
 		}
 	});
 
-	it("gives each colour distinct artwork", () => {
+	it("gives each color distinct artwork", () => {
 		const green = renderTool("ppt-pen", { available: true, active: true, color: "Light green" });
 		const red = renderTool("ppt-pen", { available: true, active: true, color: "Red" });
 		expect(green).not.toBe(red);
 	});
 
-	it("falls back rather than throwing on a colour Teams has since added", () => {
+	it("falls back rather than throwing on a color Teams has since added", () => {
 		expect(toolColor("ppt-pen", "Chartreuse Sparkle")).toBe(toolColor("ppt-pen", undefined));
 	});
 });

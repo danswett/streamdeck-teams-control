@@ -2,7 +2,7 @@
  * Composes the PowerPoint Live drawing-tool artwork at a given size.
  *
  * Shared by the two build steps that need it: tools/build-tool-images.ts, which
- * pre-renders every colour for the live keys, and tools/generate-icons.ts,
+ * pre-renders every color for the live keys, and tools/generate-icons.ts,
  * which writes the static manifest artwork. Keeping one composer means the
  * action list cannot drift from what the key draws.
  *
@@ -24,7 +24,7 @@ export const TOOL_ICONS: Record<string, ToolIcon> = JSON.parse(
 /** Fraction of the canvas the artwork fills, leaving room for the selection bar. */
 const FILL = 0.86;
 
-/** Teams marks the tool in use with a bar beneath it, in its accent colour. */
+/** Teams marks the tool in use with a bar beneath it, in its accent color. */
 const SELECTION_BAR = "#5B5FC7";
 
 export function composeToolSvg(

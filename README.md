@@ -187,11 +187,11 @@ The + XL has six, and the PowerPoint Live profiles use three of them:
 |---|---|---|---|
 | **Slide** | previous / next slide | grid view | sync to presenter |
 | **Ink thickness** | 1 to 6, Teams' own range | — | — |
-| **Ink colour** | through the tool's palette, wrapping | — | — |
+| **Ink color** | through the tool's palette, wrapping | — | — |
 
 The ink dials act on whichever drawing tool is selected rather than owning one,
 so picking the pen points both of them at the pen. They go quiet for tools that
-have nothing to set: the laser has a colour but no thickness, and the cursor and
+have nothing to set: the laser has a color but no thickness, and the cursor and
 eraser have neither.
 
 **A dial is not a key with a different shape.** A key press is one discrete
@@ -206,12 +206,12 @@ work that makes it true is issued once the dial goes still.
 The two kinds of dial settle differently, because what is behind them differs.
 Slides are a press each, so the offset is walked down one press at a time;
 past 25 the extra ticks are dropped, since arriving at slide 40 a minute later
-is worse than not going. Colour and thickness are each a single call, so the
+is worse than not going. Color and thickness are each a single call, so the
 whole gesture collapses into one command.
 
-Ink colour and thickness turned out to be proper UI Automation patterns rather
+Ink color and thickness turned out to be proper UI Automation patterns rather
 than menu items — thickness is a slider carrying `RangeValue` over 1..6, and
-every colour is a radio button carrying `SelectionItem` — so neither needs a
+every color is a radio button carrying `SelectionItem` — so neither needs a
 posted click, and a change measures around 375 ms against the ~4.5 s a flyout
 walk costs. `sidecar/probe-ink-flyout.ps1` is what established that, and will
 re-establish it when Teams moves something.
@@ -245,8 +245,8 @@ and only while a key is being pressed.
 
 **The action list and the keys use different artwork.** Elgato's guidelines
 require action-list icons to be a monochrome white stroke on transparent, and
-call out colour as incorrect, so the reactions and raise hand appear there as
-Fluent *system* glyphs while the keys themselves show the full-colour emoji.
+call out color as incorrect, so the reactions and raise hand appear there as
+Fluent *system* glyphs while the keys themselves show the full-color emoji.
 `tests/marketplace.test.ts` enforces that, because the artwork is generated and
 the rule is otherwise only noticed at submission time.
 
@@ -592,13 +592,13 @@ the automation IDs of two meeting-toolbar buttons rather than any label, and the
 drawing tools report which one is in use through UI Automation's selection
 rather than a label.
 
-The exception is ink colour. While a drawing tool's flyout is open, Teams
-unmounts the tool button whose name carries the colour, so the colour has to be
+The exception is ink color. While a drawing tool's flyout is open, Teams
+unmounts the tool button whose name carries the color, so the color has to be
 read from the flyout's swatches — and those carry no automation ID, only a name.
 `inkColorNames` lists them, and `arrowOptionPattern` excludes the laser
 pointer's arrow options, which share the pen's flyout and always report one of
 themselves as selected. Both are in `selectors.json`, and both need translating
-for a non-English Teams. Getting them wrong costs only immediacy: the colour
+for a non-English Teams. Getting them wrong costs only immediacy: the color
 still updates, just when the flyout closes rather than on the click.
 
 ### Why not macOS?

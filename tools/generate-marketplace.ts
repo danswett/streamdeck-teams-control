@@ -256,7 +256,7 @@ function galleryPresenting(): string {
 	);
 
 	body += `<text x="${W / 2}" y="810" fill="${MUTED}" font-family="${FONT}" font-size="34"
-		text-anchor="middle">Ink keys show the colour picked in Teams</text>`;
+		text-anchor="middle">Ink keys show the color picked in Teams</text>`;
 
 	return canvas(W, H, body);
 }

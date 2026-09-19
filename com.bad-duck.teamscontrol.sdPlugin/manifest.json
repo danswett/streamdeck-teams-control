@@ -508,10 +508,10 @@
 			]
 		},
 		{
-			"Name": "PPT Presenter: Ink Colour",
+			"Name": "PPT Presenter: Ink Color",
 			"UUID": "com.bad-duck.teamscontrol.ppt-ink-color-dial",
 			"Icon": "imgs/actions/ppt-ink-color-dial/icon",
-			"Tooltip": "Turn a dial through the selected pen's colours",
+			"Tooltip": "Turn a dial through the selected pen's colors",
 			"Controllers": [
 				"Encoder"
 			],
@@ -528,7 +528,7 @@
 				"layout": "layouts/ink.json",
 				"StackColor": "#6264A7",
 				"TriggerDescription": {
-					"Rotate": "Previous / next colour"
+					"Rotate": "Previous / next color"
 				}
 			}
 		},
