@@ -81,8 +81,8 @@ function emit(actions, label) {
 	let row = null;
 	for (const [position, action] of placed) {
 		const uuid = action.UUID ?? "";
-		if (!uuid.startsWith(`${PLUGIN_UUID}.`)) {
-			foreign.push(`${position} ${uuid || "(none)"}`);
+		if (!uuid) {
+			foreign.push(`${position} (no action)`);
 			continue;
 		}
 
@@ -91,13 +91,25 @@ function emit(actions, label) {
 		if (row !== null && thisRow !== row) lines.push("");
 		row = thisRow;
 
-		const key = uuid.slice(PLUGIN_UUID.length + 1);
-		const name = NAMES.get(uuid) ?? action.Name ?? key;
+		const own = uuid.startsWith(`${PLUGIN_UUID}.`);
+		const key = own ? uuid.slice(PLUGIN_UUID.length + 1) : uuid;
+		const name = (own ? NAMES.get(uuid) : null) ?? action.Name ?? key;
 		const settings =
 			action.Settings && Object.keys(action.Settings).length
 				? `, settings: ${JSON.stringify(action.Settings)}`
 				: "";
-		lines.push(`\t\t\t"${position}": { action: "${key}", name: "${name}"${settings} },`);
+
+		// Another plugin's action is kept rather than dropped - a volume dial
+		// that ships with the deck is a reasonable thing to put on a profile -
+		// but it has to say who owns it, or the builder would claim it.
+		const owner = own
+			? ""
+			: `, plugin: { name: ${JSON.stringify(action.Plugin?.Name ?? "")}, uuid: ${JSON.stringify(
+					action.Plugin?.UUID ?? ""
+				)} }`;
+		if (!own) foreign.push(`${position} ${uuid}`);
+
+		lines.push(`\t\t\t"${position}": { action: "${key}", name: "${name}"${settings}${owner} },`);
 	}
 
 	if (lines.length) {
@@ -117,7 +129,11 @@ if (!profiles.length) {
 }
 
 const matches = wanted
-	? profiles.filter((p) => p.name.toLowerCase().includes(wanted.toLowerCase()))
+	? // An exact name wins outright, so a duplicate made in the app - "... copy"
+		// - cannot make the profile it was copied from ambiguous.
+		(profiles.filter((p) => p.name.toLowerCase() === wanted.toLowerCase()).length
+			? profiles.filter((p) => p.name.toLowerCase() === wanted.toLowerCase())
+			: profiles.filter((p) => p.name.toLowerCase().includes(wanted.toLowerCase())))
 	: profiles;
 
 if (!wanted || matches.length !== 1) {
@@ -153,7 +169,7 @@ if (dials.lines.length) {
 
 const foreign = [...keys.foreign, ...dials.foreign];
 if (foreign.length) {
-	console.log(`\n// ${foreign.length} placement(s) belong to other plugins and were skipped;`);
-	console.log("// the builder only emits this plugin's own actions.");
+	console.log(`\n// ${foreign.length} placement(s) belong to other plugins and are carried as-is.`);
+	console.log("// They are dead keys for anyone without that plugin installed.");
 	for (const f of foreign) console.log(`//   ${f}`);
 }

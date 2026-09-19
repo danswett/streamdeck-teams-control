@@ -99,18 +99,27 @@ export function profilePath(base: string, device: DeviceType): string | null {
  *
  * switchToProfile resolves when the request is sent rather than when Stream
  * Deck has finished with it, so awaiting alone does not stop two of them
- * overlapping. Long enough to clear an install, short enough to be invisible
- * against a meeting changing state.
+ * overlapping - the second gets "Another operation is already in progress" and
+ * is dropped without the plugin hearing about it.
+ *
+ * Sized for the slow case rather than the common one. Switching to a profile
+ * that is already installed is quick; switching to one that is not has to
+ * install it first, and 1.5s was not enough for that - a measured success
+ * needed around 3.5s between the two decks.
  */
-const SWITCH_GAP_MS = 1500;
+const SWITCH_GAP_MS = 3500;
 
 /**
- * How long to let a deck settle after it announces itself.
+ * When to give a newly connected deck its profile, in milliseconds after it
+ * announced itself.
  *
- * Switching immediately on connect is too early - Stream Deck is still
- * bringing the device up and refuses the profile install underneath it.
+ * More than one, because the request can be dropped without a word: Stream Deck
+ * is still bringing the device up, and a profile it has never installed needs
+ * installing before it can switch to it. Asking again a few seconds later costs
+ * a redundant switch to the profile it is already on in the normal case, and
+ * rescues the one that was lost otherwise.
  */
-const DEVICE_SETTLE_MS = 1500;
+const DEVICE_SETTLE_MS = [4000, 12_000];
 
 export type ProfileSettings = {
 	/** Follow the meeting between the bundled profiles. */
@@ -176,13 +185,22 @@ class ProfileSwitcher {
 			Deck restarted mid-presentation sat on the wrong profile until the
 			presenter happened to do something.
 
-			Delayed, because a deck is not ready for a profile the instant it
-			announces itself: switching 150ms after one attached got "Another
-			operation is already in progress" from Stream Deck, and the request
-			was dropped with nothing reported back.
+			Tried more than once, and not immediately. A deck is not ready for a
+			profile the moment it announces itself: a switch 1.6s after one
+			attached was dropped with nothing logged on either side, and a
+			profile that has never been installed is dropped with it. There is
+			no result to check - switchToProfile resolves when the request is
+			sent - so the only defence is to ask again later.
 		*/
-		streamDeck.devices.onDeviceDidConnect(() => {
-			setTimeout(() => this.#apply(), DEVICE_SETTLE_MS);
+		streamDeck.devices.onDeviceDidConnect((ev) => {
+			for (const delay of DEVICE_SETTLE_MS) {
+				setTimeout(() => {
+					// Forgotten first, or the retry would be deduplicated away
+					// by the switch that was already recorded but never landed.
+					this.#current.delete(ev.device.id);
+					this.#apply();
+				}, delay);
+			}
 		});
 
 		bridge.subscribe((state) => this.#onState(state));

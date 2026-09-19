@@ -36,7 +36,24 @@ const PLUGIN_DIR = path.join(ROOT, "com.bad-duck.teamscontrol.sdPlugin");
 const PLUGIN_UUID = "com.bad-duck.teamscontrol";
 const PLUGIN_NAME = "Teams Meeting Controls";
 
-type Key = { action: string; name: string; settings?: object };
+type Key = {
+	/**
+	 * Action to place: this plugin's short key, or another plugin's full UUID
+	 * when {@link Key.plugin} says who owns it.
+	 */
+	action: string;
+	name: string;
+	settings?: object;
+	/**
+	 * The plugin that owns this action, when it is not this one.
+	 *
+	 * A bundled profile may place any plugin's action, which is how Elgato's
+	 * own default profiles put volume controls on a + XL. Worth keeping in
+	 * mind that the key is dead for anyone who does not have that plugin, so
+	 * this is only for the ones a deck ships with.
+	 */
+	plugin?: { name: string; uuid: string };
+};
 type Layout = Record<string, Key>;
 
 type Device = {
@@ -313,43 +330,67 @@ const PROFILES: Profile[] = [
 		name: "PowerPoint Live (Presenter)",
 		device: PLUS_XL,
 		uuid: "6C9E1A3F-4D05-4B8C-8F67-8A3B2E5D9C74",
-		layoutHash: "9364bf31",
+		layoutHash: "6fc7d259",
+		revision: 2,
 		page: "a1b2c3d4-0013-4e85-a0b7-2f6c1e5d8a34",
 		dials: {
 			"2,0": { action: "ppt-ink-thickness-dial", name: "PPT Presenter: Ink Thickness" },
-			"3,0": { action: "ppt-ink-color-dial", name: "PPT Presenter: Ink Color" }
-		},
-		layout: {
-			...XL_MEETING,
+			"3,0": { action: "ppt-ink-color-dial", name: "PPT Presenter: Ink Color" },
 
-			"4,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
-			"5,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
-			"6,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
-			"7,0": { action: "ppt-grid", name: "PPT Live: Grid View" },
-			"8,0": { action: "ppt-refresh", name: "PPT Presenter: Present Latest" },
-
-			// All five drawing tools in one unbroken row. They are a
-			// single-select group - picking one drops the last - so they should
-			// read as one control rather than as five scattered keys, which is
-			// the whole reason nine columns is worth having.
-			"4,1": { action: "ppt-cursor", name: "PPT Presenter: Cursor" },
-			"5,1": { action: "ppt-laser", name: "PPT Presenter: Laser Pointer" },
-			"6,1": { action: "ppt-pen", name: "PPT Presenter: Pen" },
-			"7,1": { action: "ppt-highlighter", name: "PPT Presenter: Highlighter" },
-			"8,1": { action: "ppt-eraser", name: "PPT Presenter: Eraser" },
-
-			"4,2": { action: "ppt-private-view", name: "PPT Presenter: Private Viewing" },
-			"5,2": { action: "ppt-hide-presenter-view", name: "PPT Presenter: Presenter View" },
-			"6,2": { action: "ppt-copy-link", name: "PPT Presenter: Copy Link" },
-			"7,2": { action: "ppt-layout-content", name: "PPT Presenter: Content Only" },
-			"8,2": { action: "ppt-layout-cameo", name: "PPT Presenter: Layout Cameo" },
-
-			// Alone in the far corner. It ends the presentation for everyone,
-			// and nothing else should be within a mis-tap of it.
-			"8,3": {
-				action: "ppt-stop-presenting",
-				name: "PPT Presenter: Stop Presenting"
+			// Ships with the + XL, so these are live out of the box on the deck
+			// this profile is for. They are dead for anyone without the Volume
+			// Controller plugin, which is why no other profile carries them.
+			"4,0": {
+				action: "com.elgato.volume-controller.input-device-control",
+				name: "Input Device Control",
+				settings: { deviceId: "default", friendlyName: "", style: "vertical", volume: "50", volumeStep: "3" },
+				plugin: { name: "Volume Controller", uuid: "com.elgato.volume-controller" }
+			},
+			"5,0": {
+				action: "com.elgato.volume-controller.output-device-control",
+				name: "Output Device Control",
+				settings: { deviceId: "default", friendlyName: "", style: "vertical", volume: "50", volumeStep: "3" },
+				plugin: { name: "Volume Controller", uuid: "com.elgato.volume-controller" }
 			}
+		},
+		/*
+			Laid out by hand in the Stream Deck app and read back with
+			tools/read-profile.mjs, so this one does not spread XL_MEETING the
+			way the other two + XL profiles do - the meeting keys sit where they
+			were dragged rather than where the shared block puts them.
+		*/
+		layout: {
+			"0,0": { action: "mute", name: "Mute" },
+			"1,0": { action: "camera", name: "Camera" },
+			"2,0": { action: "blur", name: "Background Blur" },
+			"3,0": { action: "share", name: "Share Screen" },
+			"8,0": { action: "leave", name: "Leave" },
+
+			"0,1": { action: "hand", name: "Raise Hand" },
+			"1,1": { action: "chat", name: "Chat" },
+			"2,1": { action: "people", name: "People" },
+
+			"0,2": { action: "react-like", name: "React: Like" },
+			"1,2": { action: "react-love", name: "React: Love" },
+			"2,2": { action: "react-applause", name: "React: Applause" },
+			"3,2": { action: "react-laugh", name: "React: Laugh" },
+			"4,2": { action: "react-wow", name: "React: Wow" },
+			"5,2": { action: "ppt-refresh", name: "PPT Presenter: Present Latest" },
+			"6,2": { action: "ppt-private-view", name: "PPT Presenter: Private Viewing" },
+			"7,2": { action: "ppt-copy-link", name: "PPT Presenter: Copy Link" },
+			"8,2": { action: "ppt-stop-presenting", name: "PPT Presenter: Stop Presenting" },
+
+			// Navigation and the drawing tools together along the bottom, under
+			// the dials that configure them.
+			"0,3": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
+			"1,3": { action: "ppt-status", name: "PPT Live: Slide Counter" },
+			"2,3": { action: "ppt-next", name: "PPT Live: Next Slide" },
+			"3,3": { action: "ppt-grid", name: "PPT Live: Grid View" },
+			"4,3": { action: "ppt-cursor", name: "PPT Presenter: Cursor" },
+			"5,3": { action: "ppt-laser", name: "PPT Presenter: Laser Pointer" },
+			"6,3": { action: "ppt-pen", name: "PPT Presenter: Pen" },
+			"7,3": { action: "ppt-highlighter", name: "PPT Presenter: Highlighter" },
+			"8,3": { action: "ppt-eraser", name: "PPT Presenter: Eraser" }
 		}
 	}
 ];
@@ -394,11 +435,13 @@ function place(layout: Layout, title: string, controller: string, limit: (c: num
 		const complaint = limit(col, row);
 		if (complaint) throw new Error(`${title}: ${position} ${complaint}`);
 
+		const owner = key.plugin ?? { name: PLUGIN_NAME, uuid: PLUGIN_UUID };
+
 		actions[position] = {
 			ActionID: actionId(title, position, controller),
 			LinkedTitle: true,
 			Name: key.name,
-			Plugin: { Name: PLUGIN_NAME, UUID: PLUGIN_UUID },
+			Plugin: { Name: owner.name, UUID: owner.uuid },
 			Resources: null,
 			Settings: key.settings ?? {},
 			State: 0,
@@ -415,7 +458,7 @@ function place(layout: Layout, title: string, controller: string, limit: (c: num
 					TitleColor: "#ffffff"
 				}
 			],
-			UUID: `${PLUGIN_UUID}.${key.action}`
+			UUID: key.plugin ? key.action : `${PLUGIN_UUID}.${key.action}`
 		};
 	}
 
