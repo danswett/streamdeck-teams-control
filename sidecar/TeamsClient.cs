@@ -266,6 +266,23 @@ public sealed class PowerPointLiveSpec
     public string ToolColorPattern { get; set; } = @"^[^:]+:\s*([^,]+?)\s*(?:,|$)";
 
     /// <summary>
+    /// Pulls the ink thickness out of the same accessible name the colour comes
+    /// from: "Pen: Light blue, Thickness 3" gives 3. Localised, like the name it
+    /// reads. Only the pen and highlighter carry one; the laser has a colour and
+    /// no thickness.
+    /// </summary>
+    public string ToolThicknessPattern { get; set; } = @"Thickness\s*(\d+)";
+
+    /// <summary>
+    /// Name of the thickness slider inside a drawing tool's flyout.
+    ///
+    /// Matched on the name and never on the AutomationId, which Teams generates
+    /// per render - the same slider came back as "slider-r1g" under the pen and
+    /// "slider-r1j" under the highlighter.
+    /// </summary>
+    public string InkThicknessPattern { get; set; } = @"^\s*Ink thickness\s*$";
+
+    /// <summary>
     /// The ink colours offered in a drawing tool's flyout, which is the only
     /// place the chosen colour can be read while that flyout is open: opening it
     /// removes the tool button itself from the tree, taking its name — and with
@@ -317,6 +334,12 @@ public sealed class PowerPointLiveSpec
 
     private Regex? _toolColor;
     public Regex? ToolColorRegex => _toolColor ??= Compile(ToolColorPattern);
+
+    private Regex? _toolThickness;
+    public Regex? ToolThicknessRegex => _toolThickness ??= Compile(ToolThicknessPattern);
+
+    private Regex? _inkThickness;
+    public Regex? InkThicknessRegex => _inkThickness ??= Compile(InkThicknessPattern);
 
     private Regex? _presenter;
     private Regex? _attendee;
@@ -1536,6 +1559,270 @@ public sealed class TeamsClient : IDisposable
         return null;
     }
 
+    /* ------------------------------------------------------------------- *
+     * Setting ink colour and thickness
+     *
+     * Both live in the flyout a drawing tool opens, and both turned out to be
+     * proper UI Automation patterns rather than menu items: thickness is a
+     * Slider carrying RangeValue over 1..6, and every colour is a RadioButton
+     * that can be selected directly. Neither needs a posted click, which is
+     * what makes them quick enough to sit under a dial.
+     *
+     * Only the tools that carry a colour can be opened at all - pen,
+     * highlighter and laser have ExpandCollapse, cursor and eraser have Invoke
+     * alone - so anything else is refused rather than half-attempted.
+     *
+     * The palette is per tool and the sets genuinely differ, so the open flyout
+     * is always the authority on what the colours are; InkColorNames is a union
+     * of them and matches neither exactly.
+     * ------------------------------------------------------------------- */
+
+    /// <summary>Targets handled here rather than by a selector in the config.</summary>
+    public const string InkColorTarget = "ppt-ink-color";
+    public const string InkThicknessTarget = "ppt-ink-thickness";
+
+    /// <summary>The palette last seen for a tool, in the order Teams lays it out.</summary>
+    private readonly Dictionary<string, List<string>> _lastPalette = new();
+
+    /// <summary>The element for the drawing tool that is currently selected.</summary>
+    private AutomationElement? SelectedInkTool(AutomationElement win, out string? key)
+    {
+        key = SelectedInkToolKey();
+        if (key is null) return null;
+        if (!_config.Controls.TryGetValue(key, out var spec) || string.IsNullOrEmpty(spec.AutomationId)) return null;
+        return FindAnywhere(win, spec.AutomationId!);
+    }
+
+    /// <summary>
+    /// Everything an open flyout offers, found in one pass.
+    ///
+    /// Walking a Teams window is expensive, and this runs while a dial is
+    /// waiting on it, so the slider and the swatches are collected together
+    /// rather than with a search each. An earlier version polled for them
+    /// separately and took long enough that the press timed out.
+    /// </summary>
+    private (AutomationElement? slider, List<AutomationElement> swatches) ReadInkFlyout(AutomationElement win)
+    {
+        var arrows = _config.PowerPointLive.ArrowOptionRegex;
+        var thickness = _config.PowerPointLive.InkThicknessRegex;
+
+        foreach (var scope in SearchScopes(win))
+        {
+            AutomationElement[] all;
+            try
+            {
+                all = scope.FindAllDescendants(cf =>
+                    cf.ByControlType(ControlType.RadioButton).Or(cf.ByControlType(ControlType.Slider)));
+            }
+            catch { continue; }
+
+            AutomationElement? slider = null;
+            var swatches = new List<AutomationElement>();
+
+            foreach (var e in all)
+            {
+                ControlType type;
+                try { type = e.Properties.ControlType.ValueOrDefault; }
+                catch { continue; }
+
+                var name = NameOf(e).Trim();
+
+                if (type == ControlType.Slider)
+                {
+                    if (slider is null && (thickness is null || SafeMatch(thickness, name))) slider = e;
+                    continue;
+                }
+
+                if (name.Length == 0) continue;
+                // The pen's flyout carries the laser's arrow options too, and
+                // they are radio buttons like every swatch here.
+                if (SafeMatch(arrows, name)) continue;
+                swatches.Add(e);
+            }
+
+            if (slider is not null || swatches.Count > 0) return (slider, swatches);
+        }
+
+        return (null, new List<AutomationElement>());
+    }
+
+    /// <summary>
+    /// Opens the selected tool's options, changes one thing, and closes again.
+    /// </summary>
+    private (bool ok, string? error) AdjustInk(string target, string? arg)
+    {
+        var win = ResolveMeetingWindow();
+        if (win is null) return (false, "not in a meeting");
+
+        var tool = SelectedInkTool(win, out var key);
+        if (tool is null || key is null) return (false, "no drawing tool is selected");
+
+        try
+        {
+            if (tool.Patterns.ExpandCollapse.PatternOrDefault is null)
+                return (false, $"'{key}' has no colour or thickness to set");
+        }
+        catch { return (false, $"'{key}' has no colour or thickness to set"); }
+
+        var startedAt = Environment.TickCount64;
+
+        try
+        {
+            var wantThickness = target == InkThicknessTarget;
+            AutomationElement? slider = null;
+            var swatches = new List<AutomationElement>();
+
+            /*
+                Expanding is not reliable enough to do once. Teams hides the
+                slide-show toolbar when the pointer is away and rebuilds it on
+                demand, and the expand can land on a tool that is mid-rebuild
+                and quietly do nothing - observed as a flyout that read back
+                empty after two and a half seconds of looking. Asking again
+                costs one more open and turns an intermittent failure into a
+                slower success.
+            */
+            for (var attempt = 0; attempt < 2 && slider is null && swatches.Count == 0; attempt++)
+            {
+                if (!TryExpand(tool)) return (false, "could not open the drawing tool's options");
+
+                // The flyout renders after the expand returns, so wait for the
+                // part about to be used rather than for a fixed interval - but
+                // bounded, because a dial is waiting on the answer.
+                for (var i = 0; i < 6; i++)
+                {
+                    Thread.Sleep(i == 0 ? 250 : 150);
+                    (slider, swatches) = ReadInkFlyout(win);
+                    if (wantThickness ? slider is not null : swatches.Count > 0) break;
+                }
+            }
+
+            if (_traceInk)
+                Console.Error.WriteLine(
+                    $"ink: read flyout in {Environment.TickCount64 - startedAt}ms " +
+                    $"(slider={(slider is not null)}, swatches={swatches.Count})");
+
+            return wantThickness ? SetInkThickness(slider, arg) : StepInkColor(swatches, key, arg);
+        }
+        finally
+        {
+            var closing = Environment.TickCount64;
+            CloseInkFlyout(win, tool);
+            if (_traceInk)
+                Console.Error.WriteLine(
+                    $"ink: closed in {Environment.TickCount64 - closing}ms, {Environment.TickCount64 - startedAt}ms total");
+        }
+    }
+
+    /// <summary>
+    /// Timing for the ink flyout, which is the slowest thing a dial can ask
+    /// for. Off unless TEAMSBRIDGE_TRACE_INK is set, because it runs during a
+    /// meeting and stderr is a shared channel.
+    /// </summary>
+    private static readonly bool _traceInk =
+        !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("TEAMSBRIDGE_TRACE_INK"));
+
+    private (bool ok, string? error) SetInkThickness(AutomationElement? slider, string? arg)
+    {
+        if (slider is null) return (false, "this tool has no thickness");
+
+        var range = slider.Patterns.RangeValue.PatternOrDefault;
+        if (range is null) return (false, "the thickness slider cannot be set");
+
+        double min, max, current;
+        try
+        {
+            min = range.Minimum.ValueOrDefault;
+            max = range.Maximum.ValueOrDefault;
+            current = range.Value.ValueOrDefault;
+        }
+        catch { return (false, "could not read the thickness slider"); }
+
+        if (max <= min) return (false, "the thickness slider reports no range");
+
+        // Absolute ("4") or relative ("+1", "-2"). A dial sends absolute,
+        // because it already knows the value and the user is watching a number.
+        var wanted = current;
+        var text = (arg ?? "").Trim();
+        if (text.StartsWith('+') || text.StartsWith('-'))
+        {
+            if (int.TryParse(text, out var delta)) wanted = current + delta;
+        }
+        else if (double.TryParse(text, out var abs))
+        {
+            wanted = abs;
+        }
+
+        wanted = Math.Clamp(Math.Round(wanted), min, max);
+        if (Math.Abs(wanted - current) < 0.5) return (true, null);
+
+        try { range.SetValue(wanted); }
+        catch (Exception ex) { return (false, $"could not set thickness: {ex.Message}"); }
+        return (true, null);
+    }
+
+    private (bool ok, string? error) StepInkColor(List<AutomationElement> swatches, string key, string? arg)
+    {
+        if (swatches.Count == 0) return (false, "this tool has no colours");
+
+        _lastPalette[key] = swatches.Select(s => NameOf(s).Trim()).ToList();
+
+        var at = -1;
+        for (var i = 0; i < swatches.Count; i++)
+        {
+            try
+            {
+                if (swatches[i].Patterns.SelectionItem.Pattern.IsSelected.ValueOrDefault) { at = i; break; }
+            }
+            catch { }
+        }
+        if (at < 0) at = 0;
+
+        if (!int.TryParse((arg ?? "").Trim(), out var step)) step = 1;
+        if (step == 0) return (true, null);
+
+        // Wraps, because a carousel that stops at the ends is not a carousel.
+        var count = swatches.Count;
+        var wanted = ((at + step) % count + count) % count;
+
+        try { swatches[wanted].Patterns.SelectionItem.Pattern.Select(); }
+        catch
+        {
+            if (!Press(swatches[wanted])) return (false, "could not select the colour");
+        }
+        return (true, null);
+    }
+
+    /// <summary>
+    /// Closes the flyout, and waits until the slide-show subtree is back.
+    ///
+    /// An open flyout unmounts that whole subtree, so leaving one open does not
+    /// just strand the user in a menu - it makes a deck that is still being
+    /// presented look exactly like one that has stopped, to this process and to
+    /// every key on the deck.
+    /// </summary>
+    private void CloseInkFlyout(AutomationElement win, AutomationElement tool)
+    {
+        var root = _config.PowerPointLive.RootAutomationId;
+
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            if (FindAnywhere(win, root) is not null) return;
+
+            TryCollapse(tool);
+            for (var i = 0; i < 8; i++)
+            {
+                if (FindAnywhere(win, root) is not null) return;
+                Thread.Sleep(70);
+            }
+
+            // Collapse can be refused once the element behind it has gone stale.
+            // Clicking away is what a user would do, and the toolbar comes back.
+            if (attempt >= 1) TryClickAway(win);
+        }
+
+        Console.Error.WriteLine("ink flyout would not close; the slide-show surface may read as missing");
+    }
+
     /// <summary>Caches a looked-up element under a key, re-finding it once it dies.</summary>
     private AutomationElement? ResolveCached(string key, Func<AutomationElement?> find)
     {
@@ -1762,9 +2049,13 @@ public sealed class TeamsClient : IDisposable
     }
 
     /// <summary>
-    /// Publishes the colour a drawing tool will draw in, falling back to the last
-    /// one seen. <paramref name="el"/> is null when the control could not be
-    /// resolved this time round, which is not the same as it having no colour.
+    /// Publishes the colour and thickness a drawing tool will draw with,
+    /// falling back to the last ones seen. <paramref name="el"/> is null when
+    /// the control could not be resolved this time round, which is not the same
+    /// as it having neither.
+    ///
+    /// Both come out of the one accessible name Teams writes, "Pen: Light blue,
+    /// Thickness 3", so they are read together.
     /// </summary>
     private void PublishToolColor(MeetingSnapshot snap, string key, ControlSpec spec, AutomationElement? el)
     {
@@ -1780,6 +2071,45 @@ public sealed class TeamsClient : IDisposable
         {
             snap.Context[$"ppt.color.{key}"] = lastColor;
         }
+
+        var thickness = el is null ? null : ToolThicknessOf(el);
+        if (thickness is not null)
+        {
+            snap.Context[$"ppt.thickness.{key}"] = thickness;
+            _lastToolThickness[key] = thickness;
+        }
+        else if (_lastToolThickness.TryGetValue(key, out var lastThickness))
+        {
+            snap.Context[$"ppt.thickness.{key}"] = lastThickness;
+        }
+
+        // The palette is only readable while the flyout is open, so a dial
+        // would have nothing to preview until it had already changed something.
+        // Publishing the last one seen lets it show where it is heading.
+        if (_lastPalette.TryGetValue(key, out var palette) && palette.Count > 0)
+        {
+            snap.Context[$"ppt.palette.{key}"] = string.Join("|", palette);
+        }
+    }
+
+    /// <summary>Last ink thickness seen per tool, held across the subtree's absences.</summary>
+    private readonly Dictionary<string, string> _lastToolThickness = new();
+
+    /// <summary>Ink thickness named by a tool, e.g. "Pen: Light blue, Thickness 3".</summary>
+    private string? ToolThicknessOf(AutomationElement el)
+    {
+        var rx = _config.PowerPointLive.ToolThicknessRegex;
+        if (rx is null) return null;
+
+        var name = NameOf(el);
+        if (name.Length == 0) return null;
+
+        try
+        {
+            var m = rx.Match(name);
+            return m.Success && m.Groups.Count > 1 ? m.Groups[1].Value : null;
+        }
+        catch (RegexMatchTimeoutException) { return null; }
     }
 
     /// <summary>
@@ -2306,7 +2636,13 @@ public sealed class TeamsClient : IDisposable
 
     public (bool ok, string? error) Invoke(string target, string? arg = null)
     {
-        if (!_config.Controls.TryGetValue(target, out var spec))
+        // Ink colour and thickness are UI Automation patterns inside a flyout
+        // rather than a selector walk, so they are handled directly rather than
+        // described in the config like every other control.
+        var ink = target is InkColorTarget or InkThicknessTarget;
+
+        ControlSpec? spec = null;
+        if (!ink && !_config.Controls.TryGetValue(target, out spec))
             return (false, $"unknown target '{target}'");
 
         // Chromium activates the Teams window when a control is invoked, so the
@@ -2314,7 +2650,7 @@ public sealed class TeamsClient : IDisposable
         var previousFocus = _restoreFocus ? FocusGuard.Capture() : IntPtr.Zero;
         try
         {
-            return InvokeCore(target, spec, arg);
+            return ink ? AdjustInk(target, arg) : InvokeCore(target, spec!, arg);
         }
         finally
         {
