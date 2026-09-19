@@ -215,14 +215,24 @@ it, and **the build fails** when that moves and the revision does not:
 `npm run build` runs the profile builder, so this is enforced before anything
 is packaged, in CI as well as locally.
 
-**Do not retry a switch to a profile that may still be installing.** An install
-holds Stream Deck's profile lock for as long as it takes, and a second ask
-during one is answered with `Another operation is already in progress` — which
-costs the install that was already running. The retries that exist to rescue a
-dropped switch cannot tell the two apart, so they are suppressed for 30s after
-the first ask for a path, and only a genuine change of target asks again
-immediately. On a two-deck machine that took the refusals per app start from two
-to zero.
+**Do not retry a switch to a profile that may still be installing.** The first
+ask for a path does not install it quietly — Stream Deck puts a dialog in front
+of the user asking whether to, and holds its profile lock until they answer.
+That answer can be hours away: this was diagnosed by leaving one up overnight,
+at which point `switchToProfile` appeared to do nothing at all — no import, no
+error, nothing in any log — and the profile arrived the moment somebody clicked
+the button the next morning.
+
+A second ask while that dialog is up is answered with `Another operation is
+already in progress`, and the retries that exist to rescue a dropped switch
+cannot tell a dropped request from an unanswered question. So repeat asks for
+the same path are suppressed for 30s and given up after three, while a genuine
+change of target still switches immediately. On a two-deck machine that took
+the refusals per app start from two to zero.
+
+**A revision bump is therefore user-visible.** It is not a silent update: the
+user is asked, and they can say no — which is another reason to bump only when a
+layout genuinely moved, and never on a schedule.
 
 The fingerprint deliberately ignores the plugin version. Tying the path to the
 version would change it on every release, including the many that never touch

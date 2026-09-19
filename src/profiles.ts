@@ -111,37 +111,34 @@ const SWITCH_GAP_MS = 3500;
 
 /**
  * How long to leave the first ask for a profile path, which is the one that
- * installs it.
+ * prompts the user to install it.
  *
- * An install copies a profile into Stream Deck's own store, and it holds the
- * same lock a switch does for as long as that takes - longer than the 3.5s a
- * switch was sized for. Two decks coming up together therefore had the second
- * deck's switch land on top of the first deck's install, and Stream Deck
- * answered "Another operation is already in progress" and dropped it. The
- * update then reached nobody, silently, which is the worst shape this failure
- * could have.
- *
- * Only paid once per path per run of the plugin, so the cost is a few seconds
- * on the first meeting after an update rather than on every switch.
+ * Stream Deck holds its profile lock while that dialog is up, so the next
+ * deck's switch would be refused if it followed too closely. Only paid once per
+ * path per run of the plugin.
  */
 const INSTALL_GAP_MS = 9000;
 
 /**
  * How long to leave a profile alone after asking for it for the first time.
  *
- * The first ask for a path is the one that installs it, and an install holds
- * Stream Deck's profile lock for as long as it takes. The retries below cannot
- * tell "the request was dropped" from "the install is still running", and
- * asking again during one is answered with "Another operation is already in
- * progress" - so a retry meant to rescue a lost switch was landing on top of
- * the install it was waiting for, and the profile never arrived.
+ * The first ask for a path does not install it quietly: Stream Deck asks the
+ * user whether to install it, and holds its profile lock until they answer -
+ * which can be hours. While that dialog is up, a second ask is answered with
+ * "Another operation is already in progress", and the retries below cannot tell
+ * a dropped request from an unanswered question.
  *
- * Long enough to cover an install, and only ever suppresses a *duplicate* ask
- * for the same path.
+ * Only ever suppresses a *duplicate* ask for the same path; a genuine change of
+ * target still switches at once.
  */
 const INSTALL_QUIET_MS = 30_000;
 
-/** How many times to ask for the same path before giving it up as refused. */
+/**
+ * How many times to ask for the same path before letting it go.
+ *
+ * The user may simply have said no, and asking forever would put the dialog
+ * back in front of them for the rest of the meeting.
+ */
 const INSTALL_TRIES = 3;
 
 /**
@@ -284,9 +281,11 @@ class ProfileSwitcher {
 						continue;
 					}
 					if (prev.tries >= INSTALL_TRIES) {
-						// Stream Deck reports nothing either way, so this is as
-						// far as it can be chased. The keys still work wherever
-						// the deck happens to be.
+						// Most likely the install prompt was declined, or is
+						// still sitting unanswered. Either way this is as far as
+						// it can be chased without putting the dialog back in
+						// front of the user; the keys still work wherever the
+						// deck happens to be.
 						logger.warn(`"${target}" did not take after ${prev.tries} attempts`);
 						continue;
 					}
