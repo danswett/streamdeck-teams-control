@@ -56,18 +56,20 @@ carry the requirements and the differentiator rather than a preamble.
 ```
 Control Microsoft Teams meetings from your Stream Deck: mute, camera, raise hand, the five reactions, background blur, screen share, chat, people and leave. Every key shows the real state of the meeting, so a muted mic looks muted before you press it.
 
-Full PowerPoint Live control too. Watching a deck? Move through slides at your own pace, jump back in sync with the presenter, open grid view, or pop the deck into its own window, all without touching anyone else's view. Presenting? Slide navigation, laser pointer, pen, highlighter and eraser, presenter view, private view, layout and stop sharing, with a live slide counter on the key. Keys follow your role, so taking control mid-meeting re-lights the deck for presenting.
+Full PowerPoint Live control too. Watching a deck? Move through slides at your own pace, jump back in sync, open grid view, or pop the deck into its own window, without touching anyone else's view. Presenting? Slide navigation, laser pointer, pen, highlighter and eraser, presenter view, private view and stop sharing, with a live slide counter on the key. Keys follow your role, so taking control re-lights the deck for presenting.
 
-Three bundled profiles can follow the meeting on their own: meeting controls when you join, attendee or presenter tools when a deck goes up, and back again when it ends.
+On a Stream Deck + XL the dials set ink color and thickness, move through the deck and run the meeting timer, and the touch strip shows the current and next slide.
 
-Teams does not need to be in focus and is never pulled to the front, so you can keep working while you mute, react or raise your hand. No keystrokes are sent, so nothing leaks into the window you are actually typing in, and no global hotkeys are taken.
+Three bundled profiles can follow the meeting: meeting controls when you join, attendee or presenter tools when a deck goes up, and back again when it ends.
+
+Teams does not need to be in focus and is never pulled to the front, so you can keep working while you mute, react or raise your hand. No keystrokes are sent, so nothing leaks into the window you are typing in, and no global hotkeys are taken.
 
 Keys dim when no meeting is running, so there is nothing to press by mistake.
 
 Requires Windows 10 or later, Stream Deck 7.1 or later, and the Microsoft Teams desktop app. Windows only. Not affiliated with or endorsed by Microsoft.
 ```
 
-1,386 characters, within the 1,500 limit and above the 250 minimum. The opening
+1,486 characters, within the 1,500 limit and above the 250 minimum. The opening
 two sentences run to 251 characters, so the search-engine snippet reads as
 complete sentences rather than breaking mid-clause.
 
@@ -137,11 +139,33 @@ The first-release notes are kept further down for reference only — they descri
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
 
-### Version 1.8.3 — the notes for this submission
+### Version 1.9.0 — the notes for this submission
 
-Submitted after 1.8.2 is live, so these describe only what changed on top of
-it. Everything about PowerPoint Live and the profiles is in the 1.8.2 notes
-below, which is what people will already have.
+Submitted after 1.8.3 is live, so these describe only what changed on top of it.
+Everything about PowerPoint Live and the profiles is in the notes below, which
+is what people will already have.
+
+```
+Stream Deck + XL support.
+
+The + XL gets its own layouts, laid out for nine columns. The four leftmost columns are the meeting and stay put whether or not anyone is presenting, so mute never moves out from under your finger.
+
+The dials and touch strip cover the parts of a presentation a key cannot show. One dial sets ink thickness and another runs through the pen or highlighter's colors, both acting on whichever tool you have selected in Teams. Turn the slide dial to move through the deck, and press it for grid view.
+
+The meeting timer gets a dial too: press to start or pause it, hold to reset it, with the time left and a bar that drains as it runs.
+
+The touch strip can show the slide you are presenting and the one coming next, and the slide counter key can show the current slide above its count.
+
+Slide pictures are off until you switch them on, per control. They are copied from the Teams window straight to your Stream Deck and go nowhere else: nothing is uploaded, saved to disk, or written to any log.
+
+The 15-key layouts are unchanged. Stream Deck will ask whether to install the updated + XL profile; decline it and everything else still works.
+```
+
+1,157 characters.
+
+### Version 1.8.3 — submitted, in review
+
+Described only what changed on top of 1.8.2.
 
 ```
 Matches the icon shown on this page.
