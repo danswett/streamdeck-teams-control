@@ -381,6 +381,33 @@ export function renderLabelled(key: string, label: string, tone: Tone): string {
 	);
 }
 
+/**
+ * The slide counter with the slide itself above it.
+ *
+ * The picture is a PNG data URI from the sidecar, already composed to the width
+ * of a key, so it is embedded rather than redrawn here. It sits against the top
+ * edge and the count sits under it, which is the only arrangement that leaves a
+ * 16:9 slide readable on a square key.
+ */
+export function renderSlideCount(image: string, label: string): string {
+	const art = `<image x="0" y="0" width="${SIZE}" height="${SLIDE_KEY_H}" href="${escapeText(image)}" />`;
+	if (!label) return wrap(art);
+
+	const text = escapeText(label);
+	const fontSize = text.length > 5 ? 30 : 36;
+
+	return wrap(
+		art +
+			`<text x="${SIZE / 2}" y="${SIZE - 26}" text-anchor="middle" ` +
+			`font-family="Segoe UI, system-ui, sans-serif" font-size="${fontSize}" ` +
+			`font-weight="600" fill="${COLORS["on"]}">${text}</text>`
+	);
+}
+
+/** How tall a 16:9 slide is across the full width of a key. */
+export const SLIDE_KEY_W = SIZE;
+export const SLIDE_KEY_H = Math.round((SIZE * 9) / 16);
+
 /** Renders a full-color reaction, dimmed when the control is unavailable. */
 export function renderReaction(key: string, available: boolean): string {
 	return renderEmojiGlyph(REACTION_GLYPHS[key] ?? REACTION_GLYPHS["react-like"], available);
@@ -565,6 +592,105 @@ function wrapText(text: string, size: number, maxWidth: number, maxLines: number
 
 /** The widest a caption may be before it starts touching the edge of the slot. */
 const STRIP_TEXT_WIDTH = 186;
+
+/**
+ * The meeting timer: what is left of it, and how much of it that is.
+ *
+ * Teams publishes no total anywhere, so the bar is drawn against the longest
+ * remaining time seen since the timer last went up - which is the duration in
+ * every ordinary case, because a timer starts at its full length.
+ *
+ * The bar empties left to right, and goes red near the end rather than only
+ * when it runs out, because the point of a timer on a desk is to be readable
+ * without being looked at directly.
+ */
+export function renderTimer(
+	remaining: number,
+	total: number,
+	running: boolean,
+	expired = false,
+	overtime?: number
+): string {
+	const left = Math.max(0, Math.round(remaining));
+	const span = Math.max(1, Math.round(total));
+	const fraction = expired ? 1 : Math.max(0, Math.min(1, left / span));
+
+	const clock = expired ? (overtime === undefined ? "" : `-${hhmmss(overtime)}`) : hhmmss(left);
+
+	// Teams turns the whole bar red once time is up, and turns it red near the
+	// end rather than only at zero. Matched, because a timer on a desk has to
+	// be readable without being looked at directly.
+	const nearlyUp = !expired && (fraction <= 0.1 || left <= 30);
+	const ink = expired ? TIMER_RED : running ? "#FFFFFF" : "#A8A8B2";
+	const size = clock.length > 5 ? 34 : 42;
+
+	const x = 16;
+	const width = STRIP_W - x * 2;
+	const filled = expired ? width : Math.max(0, Math.round(width * fraction));
+
+	// Anchored to the right, so the bar drains left to right and the edge that
+	// moves travels the same way as the reading eye - which is the direction
+	// Teams drains its own. Anchoring it left drains the other way, which reads
+	// as time being added rather than spent.
+	const filledX = x + width - filled;
+
+	/*
+		The gradient is scaled to the fill rather than to the trough, so a
+		nearly-empty bar still shows the whole sweep. That is Teams' own
+		behaviour: sampled at 20% remaining, the stub carried the full
+		periwinkle-to-mauve run rather than just its pink end.
+	*/
+	const paint = expired || nearlyUp ? TIMER_RED : "url(#timerFill)";
+
+	const caption = expired
+		? `<text x="100" y="92" text-anchor="middle" ` +
+			`font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" ` +
+			`letter-spacing="1.4" fill="#D13438">TIME'S UP</text>`
+		: running
+			? ""
+			: `<text x="100" y="92" text-anchor="middle" ` +
+				`font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" ` +
+				`letter-spacing="1.4" fill="#7E7E88">PAUSED</text>`;
+
+	return strip(
+		`<defs><linearGradient id="timerFill" x1="0" y1="0" x2="1" y2="0">` +
+			`<stop offset="0" stop-color="${TIMER_FROM}" />` +
+			`<stop offset="1" stop-color="${TIMER_TO}" />` +
+			`</linearGradient></defs>` +
+			(clock
+				? `<text x="100" y="${running || expired ? 52 : 48}" text-anchor="middle" ` +
+					`font-family="Segoe UI, system-ui, sans-serif" font-size="${size}" font-weight="700" ` +
+					`fill="${ink}">${escapeText(clock)}</text>`
+				: `<text x="100" y="54" text-anchor="middle" ` +
+					`font-family="Segoe UI, system-ui, sans-serif" font-size="30" font-weight="700" ` +
+					`fill="${TIMER_RED}">TIME'S UP</text>`) +
+			// The trough stays visible at zero so the bar reads as empty rather
+			// than as a control that has gone away.
+			`<rect x="${x}" y="64" width="${width}" height="10" rx="5" fill="#2A2A31" />` +
+			(filled > 0
+				? `<rect x="${filledX}" y="64" width="${filled}" height="10" rx="5" ` +
+					`fill="${paint}" fill-opacity="${running || expired ? 1 : 0.5}" />`
+				: "") +
+			(clock ? caption : "")
+	);
+}
+
+/** Teams' own timer colours, sampled from its bar. */
+const TIMER_FROM = "#7478E8";
+const TIMER_TO = "#A05998";
+const TIMER_RED = "#D13438";
+
+/** m:ss, or h:mm:ss once there is an hour to show. */
+function hhmmss(seconds: number): string {
+	const s = Math.max(0, Math.round(seconds));
+	const mins = Math.floor(s / 60);
+	const secs = s % 60;
+	// Teams' timer counts in minutes, but allows an hour or more, and "62:05"
+	// reads as a minute count rather than as over an hour.
+	return s >= 3600
+		? `${Math.floor(s / 3600)}:${String(mins % 60).padStart(2, "0")}:${String(secs).padStart(2, "0")}`
+		: `${mins}:${String(secs).padStart(2, "0")}`;
+}
 
 /**
  * The slide being dialled to: the thumbnail dimmed, with the number over it.

@@ -57,6 +57,7 @@ const CONTROLS: Record<string, string> = {
 	pptGrid: "grid_20_regular",
 	pptGridOn: "grid_20_filled",
 	pptSync: "arrow_sync_20_filled",
+	timer: "timer_20_filled",
 	// Teams uses Fluent's dark-theme glyph here, not a contrast one - confirmed
 	// by matching the path captured from the live Change view flyout. It already
 	// fills the left half, which is why the earlier stand-in needed rotating and

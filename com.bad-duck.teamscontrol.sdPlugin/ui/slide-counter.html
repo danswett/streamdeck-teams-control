@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Slide counter settings</title>
+		<link rel="stylesheet" href="inspector.css" />
+		<script src="sdpi-components.js"></script>
+	</head>
+	<body>
+		<p class="hint" id="action-description"></p>
+
+		<sdpi-item label="Slide">
+			<sdpi-checkbox setting="thumbnail" label="Show the slide above the count"></sdpi-checkbox>
+		</sdpi-item>
+		<p class="hint">
+			Off by default, because this is one of the few parts of the plugin that
+			reads what is on a slide rather than which buttons exist. With it off the
+			key shows a slide icon and the count, which is all it has ever shown.
+		</p>
+		<p class="hint">
+			<b>Everything stays on this computer.</b> The picture is copied from the
+			Teams window straight to your Stream Deck. Nothing is uploaded, sent
+			anywhere, written to disk, or recorded in any log. Leave this off if you
+			present material that should not be shown on an external display.
+		</p>
+		<p class="hint">
+			The picture is taken when you change slide, so a build or a pen stroke
+			mid-slide will not appear until you move on. The touch-strip thumbnail on
+			a Stream Deck + XL follows those as they happen.
+		</p>
+		<script src="action-descriptions.js"></script>
+		<script>
+			// Several actions share each inspector - most PowerPoint Live keys share
+			// ppt.html - so it has to name the key you actually clicked, and a count
+			// here would rot. textContent, never innerHTML.
+			SDPIComponents.streamDeckClient.getConnectionInfo().then(({ actionInfo }) => {
+				const text = globalThis.ACTION_DESCRIPTIONS?.[actionInfo?.action];
+				if (text) document.getElementById("action-description").textContent = text;
+			});
+		</script>
+	</body>
+</html>

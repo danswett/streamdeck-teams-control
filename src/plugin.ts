@@ -38,7 +38,13 @@ import {
 	PptTakeControlAction
 } from "./actions/powerpoint";
 import { bridge } from "./bridge";
-import { InkColorDialAction, InkThicknessDialAction, SlideCurrentDialAction, SlideNextDialAction } from "./actions/dials";
+import {
+	InkColorDialAction,
+	InkThicknessDialAction,
+	SlideCurrentDialAction,
+	SlideNextDialAction,
+	TimerDialAction
+} from "./actions/dials";
 import { profileSwitcher } from "./profiles";
 
 streamDeck.logger.setLevel("info");
@@ -87,6 +93,7 @@ streamDeck.actions.registerAction(new InkColorDialAction());
 streamDeck.actions.registerAction(new InkThicknessDialAction());
 streamDeck.actions.registerAction(new SlideCurrentDialAction());
 streamDeck.actions.registerAction(new SlideNextDialAction());
+streamDeck.actions.registerAction(new TimerDialAction());
 
 bridge.start();
 profileSwitcher.start();

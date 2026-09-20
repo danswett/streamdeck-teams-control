@@ -33,6 +33,7 @@ const ACTIONS: Record<string, { glyph: string; danger?: boolean }> = {
 	"ppt-status": { glyph: "pptSlide" },
 	"ppt-slide-current": { glyph: "pptSlide" },
 	"ppt-slide-next": { glyph: "pptNext" },
+	"timer-dial": { glyph: "timer" },
 	"ppt-sync": { glyph: "pptSync" },
 	"ppt-grid": { glyph: "pptGrid" },
 	"ppt-high-contrast": { glyph: "pptContrast" },

@@ -62,7 +62,7 @@
 			"DontAutoSwitchWhenInstalled": true
 		},
 		{
-			"Name": "profiles/PowerPoint Live (Presenter) (+ XL) r4",
+			"Name": "profiles/PowerPoint Live (Presenter) (+ XL) r5",
 			"DeviceType": 13,
 			"Readonly": false,
 			"DontAutoSwitchWhenInstalled": true
@@ -292,6 +292,34 @@
 			]
 		},
 		{
+			"Name": "Meeting Timer",
+			"UUID": "com.bad-duck.teamscontrol.timer-dial",
+			"Icon": "imgs/actions/timer-dial/icon",
+			"Tooltip": "Shows the meeting timer, with press to start or pause and hold to reset",
+			"Controllers": [
+				"Encoder"
+			],
+			"SupportedInMultiActions": false,
+			"UserTitleEnabled": false,
+			"PropertyInspectorPath": "ui/default.html",
+			"States": [
+				{
+					"Image": "imgs/actions/timer-dial/key",
+					"TitleAlignment": "bottom"
+				}
+			],
+			"Encoder": {
+				"layout": "layouts/ink.json",
+				"StackColor": "#6264A7",
+				"TriggerDescription": {
+					"Rotate": "",
+					"Push": "Start / pause",
+					"Touch": "",
+					"LongTouch": "Reset"
+				}
+			}
+		},
+		{
 			"Name": "PPT Live: Previous Slide",
 			"UUID": "com.bad-duck.teamscontrol.ppt-prev",
 			"Icon": "imgs/actions/ppt-prev/icon",
@@ -337,7 +365,7 @@
 			],
 			"SupportedInMultiActions": false,
 			"UserTitleEnabled": false,
-			"PropertyInspectorPath": "ui/ppt.html",
+			"PropertyInspectorPath": "ui/slide-counter.html",
 			"States": [
 				{
 					"Image": "imgs/actions/ppt-status/key",

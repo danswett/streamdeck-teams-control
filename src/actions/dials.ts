@@ -19,6 +19,7 @@ import {
 	type DialAction,
 	type DialDownEvent,
 	type DialRotateEvent,
+	type DialUpEvent,
 	type DidReceiveSettingsEvent,
 	SingletonAction,
 	type TouchTapEvent,
@@ -29,7 +30,7 @@ import streamDeck from "@elgato/streamdeck";
 import type { JsonObject } from "@elgato/utils";
 
 import { bridge, type TeamsState } from "../bridge";
-import { renderInkColor, renderInkThickness, renderSlideJump, renderStripIdle, renderStripNext, toPixmap, toolColor } from "../icons";
+import { renderInkColor, renderInkThickness, renderSlideJump, renderStripIdle, renderStripNext, renderTimer, toPixmap, toolColor } from "../icons";
 import { pptLive } from "./powerpoint";
 
 const logger = streamDeck.logger.createScope("Dial");
@@ -1297,4 +1298,172 @@ export class SlideCurrentDialAction extends SlideThumbDialAction {
 export class SlideNextDialAction extends SlideThumbDialAction {
 	protected override readonly which = "next" as const;
 	protected override readonly live = false;
+}
+
+/* ------------------------------------------------------------------------- *
+ * The meeting timer
+ *
+ * Teams' timer is a strip above the meeting toolbar with no AutomationIds on
+ * anything: the remaining time lives in an accessible name, and whether it is
+ * running is said only by which way the toggle is labelled. The sidecar reads
+ * both into context; this draws them.
+ *
+ * Press to start or pause, hold to put it back to the top. Holding is the
+ * guard the reset needs - it is the one gesture here that throws away what the
+ * timer was counting, and it sits under the same finger as start.
+ * ------------------------------------------------------------------------- */
+
+/** How long the dial must be held before a press becomes a reset. */
+const TIMER_HOLD_MS = 700;
+
+/** The sidecar targets that drive the timer; see TeamsClient.DriveTimer. */
+const TIMER_TOGGLE = "timer-toggle";
+const TIMER_RESET = "timer-reset";
+
+@action({ UUID: "com.bad-duck.teamscontrol.timer-dial" })
+export class TimerDialAction extends TeamsDialAction {
+	/**
+	 * The longest remaining time seen while this timer has been up.
+	 *
+	 * Teams exposes no duration, so the bar is drawn against this. A timer
+	 * starts at its full length, so the first reading after it appears - or
+	 * after a reset - is the duration. Setting a *shorter* timer while one is
+	 * already part-way through would leave this too high until the next reset;
+	 * there is nothing in the tree that would tell us otherwise.
+	 */
+	#total: number | undefined;
+
+	/**
+	 * When the timer was first seen expired, so the overtime can be counted.
+	 *
+	 * Teams shows a negative count once time is up, and publishes none of it:
+	 * the accessible name pins at "0 sec remaining" whatever the bar says. So
+	 * it is counted from the moment the expiry was *observed*, and only when
+	 * the timer was seen running beforehand - a dial that arrives already in
+	 * overtime says "TIME'S UP" without a number rather than inventing one
+	 * from when it happened to start looking.
+	 */
+	#expiredAt: number | undefined;
+	#sawRunning = false;
+
+	/** Held per dial, so a hold on one does not reset from another. */
+	readonly #holds = new Map<string, NodeJS.Timeout>();
+	readonly #fired = new Set<string>();
+
+	/** Ticks the overtime count while it is climbing. */
+	#tick: NodeJS.Timeout | undefined;
+
+	protected override layout(): string {
+		return INK_LAYOUT;
+	}
+
+	protected override draw(state: TeamsState): Feedback {
+		const remaining = Number(state.context["timer.remaining"] ?? NaN);
+
+		if (!state.inMeeting || !Number.isFinite(remaining)) {
+			this.#total = undefined;
+			this.#expiredAt = undefined;
+			this.#sawRunning = false;
+			this.#stopTicking();
+			return { canvas: toPixmap(renderStripIdle("Timer", state.inMeeting ? "none set" : "no meeting")) };
+		}
+
+		const expired = state.context["timer.expired"] === "1";
+
+		if (expired) {
+			// Only start counting if this dial watched it run out; see #expiredAt.
+			if (this.#expiredAt === undefined && this.#sawRunning) this.#expiredAt = Date.now();
+			this.#startTicking();
+		} else {
+			this.#expiredAt = undefined;
+			this.#sawRunning = remaining > 0;
+			this.#stopTicking();
+			if (this.#total === undefined || remaining > this.#total) this.#total = remaining;
+		}
+
+		const overtime =
+			this.#expiredAt === undefined ? undefined : Math.floor((Date.now() - this.#expiredAt) / 1000);
+
+		return {
+			canvas: toPixmap(
+				renderTimer(
+					remaining,
+					this.#total ?? Math.max(1, remaining),
+					state.context["timer.running"] === "1",
+					expired,
+					overtime
+				)
+			)
+		};
+	}
+
+	/**
+	 * Repaints once a second while in overtime.
+	 *
+	 * Nothing else would: the sidecar's reading stops changing at zero, so no
+	 * snapshot arrives to drive the count.
+	 */
+	#startTicking(): void {
+		if (this.#tick !== undefined) return;
+		this.#tick = setInterval(() => {
+			if (this.#expiredAt === undefined) return;
+			this.repaintAll();
+		}, 1000);
+	}
+
+	#stopTicking(): void {
+		if (this.#tick) clearInterval(this.#tick);
+		this.#tick = undefined;
+	}
+
+	override onDialDown(ev: DialDownEvent<JsonObject>): void {
+		const id = ev.action.id;
+		this.#fired.delete(id);
+
+		this.#holds.set(
+			id,
+			setTimeout(() => {
+				this.#holds.delete(id);
+				this.#fired.add(id);
+				void this.#drive(ev.action, TIMER_RESET);
+			}, TIMER_HOLD_MS)
+		);
+	}
+
+	override async onDialUp(ev: DialUpEvent<JsonObject>): Promise<void> {
+		const id = ev.action.id;
+		const hold = this.#holds.get(id);
+		if (hold) clearTimeout(hold);
+		this.#holds.delete(id);
+
+		// The reset already went; releasing must not also toggle it.
+		if (this.#fired.delete(id)) return;
+
+		await this.#drive(ev.action, TIMER_TOGGLE);
+	}
+
+	override onWillDisappear(ev: WillDisappearEvent<JsonObject>): void {
+		const hold = this.#holds.get(ev.action.id);
+		if (hold) clearTimeout(hold);
+		this.#holds.delete(ev.action.id);
+		this.#fired.delete(ev.action.id);
+		this.#stopTicking();
+		super.onWillDisappear(ev);
+	}
+
+	async #drive(dial: DialAction<JsonObject>, target: string): Promise<void> {
+		const res = await bridge.invoke(target);
+		if (res.ok) {
+			// A reset changes the duration the bar is drawn against, and ends
+			// any overtime that was being counted.
+			if (target === TIMER_RESET) {
+				this.#total = undefined;
+				this.#expiredAt = undefined;
+			}
+			return;
+		}
+
+		logger.warn(`${target} failed: ${res.error ?? "no reason given"}`);
+		await dial.showAlert();
+	}
 }

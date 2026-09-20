@@ -11,8 +11,11 @@
  */
 import {
 	action,
+	type DidReceiveSettingsEvent,
+	type KeyAction,
 	type KeyDownEvent,
 	type KeyUpEvent,
+	type WillAppearEvent,
 	type WillDisappearEvent
 } from "@elgato/streamdeck";
 import streamDeck from "@elgato/streamdeck";
@@ -25,6 +28,9 @@ import {
 	renderGlyph,
 	renderLive,
 	renderLabelled,
+	renderSlideCount,
+	SLIDE_KEY_H,
+	SLIDE_KEY_W,
 	renderSimple,
 	renderTool,
 	type Tone
@@ -165,19 +171,76 @@ export class PptSyncAction extends TeamsAction {
 	}
 }
 
+/** Whether the slide counter also shows the slide itself. */
+type CounterSettings = {
+	thumbnail?: boolean;
+};
+
 /**
  * Shows the deck's position, "3/19", and nothing else — it is deliberately not
  * pressable, because every plausible action for it already has its own key and
  * a mis-tap during someone else's presentation is expensive.
+ *
+ * It can also show the slide itself above the count. That reads the content of
+ * the meeting rather than which controls exist, so it is off until switched on,
+ * the same as the touch-strip thumbnails.
  */
 @action({ UUID: "com.bad-duck.teamscontrol.ppt-status" })
-export class PptStatusAction extends TeamsAction {
+export class PptStatusAction extends TeamsAction<CounterSettings & JsonObject> {
 	protected override targetFor(): undefined {
 		return undefined;
 	}
 
-	protected override draw(state: TeamsState): string {
-		if (!pptLive(state)) return renderLabelled("pptSlide", "", "unavailable");
+	/** Which keys have been allowed to read the slide, by key id. */
+	readonly #allowed = new Map<string, boolean>();
+
+	/** The last picture captured, and the deck position it was taken at. */
+	#image: string | undefined;
+	#capturedAt: string | undefined;
+	#busy = false;
+
+	override onWillAppear(ev: WillAppearEvent<CounterSettings & JsonObject>): void {
+		this.#allow(ev.action.id, ev.payload.settings.thumbnail === true);
+		super.onWillAppear(ev);
+	}
+
+	override onDidReceiveSettings(ev: DidReceiveSettingsEvent<CounterSettings & JsonObject>): void {
+		const was = this.#on();
+		this.#allow(ev.action.id, ev.payload.settings.thumbnail === true);
+
+		if (was && !this.#on()) {
+			this.#image = undefined;
+			this.#capturedAt = undefined;
+			bridge.forget("current");
+		}
+		this.repaintAll();
+	}
+
+	override onWillDisappear(ev: WillDisappearEvent<CounterSettings & JsonObject>): void {
+		this.#allowed.delete(ev.action.id);
+		super.onWillDisappear(ev);
+	}
+
+	/** Records the setting, and says so out loud - see the dials for why. */
+	#allow(id: string, allowed: boolean): void {
+		if (this.#allowed.get(id) === allowed) return;
+		this.#allowed.set(id, allowed);
+		logger.info(`slide counter thumbnail ${allowed ? "enabled" : "disabled"}`);
+	}
+
+	#on(): boolean {
+		for (const a of this.actions) if (a.isKey() && this.#allowed.get(a.id) === true) return true;
+		return false;
+	}
+
+	protected override draw(state: TeamsState, action?: KeyAction<CounterSettings & JsonObject>): string {
+		if (!pptLive(state)) {
+			if (this.#image !== undefined) {
+				this.#image = undefined;
+				this.#capturedAt = undefined;
+			}
+			return renderLabelled("pptSlide", "", "unavailable");
+		}
 
 		const slide = state.context["ppt.slide"] ?? "";
 		const total = state.context["ppt.slides"] ?? "";
@@ -186,7 +249,45 @@ export class PptStatusAction extends TeamsAction {
 		// the pointer is away, so the slide number has to stand on its own.
 		const label = slide && total ? `${slide}/${total}` : slide;
 
-		return renderLabelled("pptSlide", label, "on");
+		const allowed = action === undefined ? this.#on() : this.#allowed.get(action.id) === true;
+		if (!allowed) return renderLabelled("pptSlide", label, "on");
+
+		this.#considerCapture(slide);
+		if (this.#image === undefined) return renderLabelled("pptSlide", label, "on");
+
+		return renderSlideCount(this.#image, label);
+	}
+
+	/**
+	 * Captures the slide when the deck moves.
+	 *
+	 * Unlike the touch-strip thumbnail this does not watch for ink or builds:
+	 * a key is a glance rather than a preview, and a capture every quarter
+	 * second to keep up with a pen is not worth it for one.
+	 */
+	#considerCapture(slide: string): void {
+		if (slide === "" || slide === this.#capturedAt || this.#busy) return;
+		void this.#capture(slide);
+	}
+
+	async #capture(at: string): Promise<void> {
+		if (this.#busy) return;
+		this.#busy = true;
+		try {
+			const shot = await bridge.capture("current", 0, { w: SLIDE_KEY_W, h: SLIDE_KEY_H });
+			if (!shot.ok || shot.image === undefined) {
+				logger.debug(`slide counter: ${shot.error ?? "no image"}`);
+				return;
+			}
+
+			this.#capturedAt = at;
+			if (shot.image === this.#image) return;
+
+			this.#image = shot.image;
+			this.repaintAll();
+		} finally {
+			this.#busy = false;
+		}
 	}
 }
 

@@ -14,9 +14,11 @@ import {
 	renderReaction,
 	renderReactionFrame,
 	renderSimple,
+	renderSlideCount,
 	renderSlideJump,
 	renderStripIdle,
 	renderStripNext,
+	renderTimer,
 	renderToggle,
 	renderTool,
 	toDataUri,
@@ -440,8 +442,14 @@ const CAPTIONS: [string, string][] = [
 ];
 
 /** The bounding box of everything drawn, in slot pixels. */
-function inkBox(svg: string): { left: number; right: number; top: number; bottom: number } {
-	const img = new Resvg(svg, { fitTo: { mode: "width", value: 200 } }).render();
+function inkBox(
+	svg: string,
+	width = 200
+): { left: number; right: number; top: number; bottom: number } {
+	// Rasterised at the size the artwork is actually shown at, so the numbers
+	// are in its own coordinates: a 144px key measured on a 200px canvas reads
+	// 1.39x too wide and fails a bounds check it actually passes.
+	const img = new Resvg(svg, { fitTo: { mode: "width", value: width } }).render();
 	const px = img.pixels;
 
 	let left = img.width;
@@ -575,5 +583,177 @@ describe("dialling to a slide", () => {
 			expect(box.right).toBeLessThanOrEqual(198);
 			expect(box.bottom).toBeLessThanOrEqual(98);
 		}
+	});
+});
+
+describe("slide counter with the slide on it", () => {
+	const PNG =
+		"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+	it("embeds the slide and shows the count", () => {
+		const svg = renderSlideCount(PNG, "8/14");
+		expectSvg(svg);
+		expect(svg).toContain("<image");
+		expect(svg).toContain(PNG);
+		expect(svg).toContain(">8/14<");
+	});
+
+	it("keeps the slide clear of the count", () => {
+		// A 16:9 slide across a square key leaves the lower third for the
+		// number; overlapping them made both unreadable.
+		const svg = renderSlideCount(PNG, "8/14");
+		const imageH = Number(/<image[^>]*height="(\d+)"/.exec(svg)?.[1]);
+		const textY = Number(/<text[^>]*y="(\d+)"/.exec(svg)?.[1]);
+		const fontSize = Number(/<text[^>]*font-size="(\d+)"/.exec(svg)?.[1]);
+
+		expect(imageH).toBe(81);
+		expect(textY - fontSize).toBeGreaterThan(imageH);
+	});
+
+	it("steps the count down when the deck is long", () => {
+		const short = /font-size="(\d+)"/.exec(renderSlideCount(PNG, "8/14"))?.[1];
+		const long = /font-size="(\d+)"/.exec(renderSlideCount(PNG, "12/199"))?.[1];
+		expect(Number(long)).toBeLessThan(Number(short));
+	});
+
+	it("draws the slide alone when there is no count yet", () => {
+		const svg = renderSlideCount(PNG, "");
+		expectSvg(svg);
+		expect(svg).not.toContain("<text");
+	});
+
+	it("keeps every count inside the key", () => {
+		for (const label of ["1/9", "8/14", "12/199", "199/199"]) {
+			const box = inkBox(renderSlideCount(PNG, label), 144);
+			expect(box.left).toBeGreaterThanOrEqual(0);
+			expect(box.right).toBeLessThanOrEqual(143);
+			expect(box.bottom).toBeLessThanOrEqual(143);
+		}
+	});
+});
+
+describe("the meeting timer", () => {
+	/** The two rects: the trough first, then the fill if there is any. */
+	function bars(svg: string): { x: number; w: number }[] {
+		return [...svg.matchAll(/<rect x="(-?[\d.]+)"[^>]*width="([\d.]+)"/g)].map((m) => ({
+			x: Number(m[1]),
+			w: Number(m[2])
+		}));
+	}
+
+	it("drains left to right", () => {
+		// The fill is anchored to the right, so as time runs down its right edge
+		// stays put and its left edge walks rightwards. Anchoring it to the left
+		// drains the other way and reads as time being added.
+		const [, full] = bars(renderTimer(300, 300, true));
+		const [, half] = bars(renderTimer(150, 300, true));
+		const [, nearlyGone] = bars(renderTimer(15, 300, true));
+
+		const rightEdge = (b: { x: number; w: number }): number => b.x + b.w;
+		expect(rightEdge(half)).toBe(rightEdge(full));
+		expect(rightEdge(nearlyGone)).toBe(rightEdge(full));
+
+		expect(half.x).toBeGreaterThan(full.x);
+		expect(nearlyGone.x).toBeGreaterThan(half.x);
+	});
+
+	it("keeps the fill inside the trough at both ends", () => {
+		for (const left of [300, 299, 150, 1, 0]) {
+			const [trough, fill] = bars(renderTimer(left, 300, true));
+			if (!fill) continue;
+			expect(fill.x).toBeGreaterThanOrEqual(trough.x);
+			expect(fill.x + fill.w).toBeLessThanOrEqual(trough.x + trough.w);
+		}
+	});
+
+	it("leaves the trough alone when the time is up", () => {
+		const svg = renderTimer(0, 300, true);
+		expect(bars(svg)).toHaveLength(1);
+		expect(svg).toContain(">0:00<");
+	});
+
+	it("says when it is paused, and only then", () => {
+		expect(renderTimer(150, 300, false)).toContain(">PAUSED<");
+		expect(renderTimer(150, 300, true)).not.toContain(">PAUSED<");
+	});
+
+	it("spells out an hour rather than counting past sixty minutes", () => {
+		expect(renderTimer(3725, 3900, true)).toContain(">1:02:05<");
+		expect(renderTimer(3599, 3900, true)).toContain(">59:59<");
+	});
+
+	it("keeps every reading inside the slot", () => {
+		for (const [left, total] of [
+			[300, 300],
+			[150, 300],
+			[0, 300],
+			[3725, 3900],
+			[35999, 36000]
+		]) {
+			const box = inkBox(renderTimer(left, total, true));
+			expect(box.left).toBeGreaterThanOrEqual(1);
+			expect(box.right).toBeLessThanOrEqual(198);
+			expect(box.bottom).toBeLessThanOrEqual(98);
+		}
+	});
+});
+
+describe("the timer when time is up", () => {
+	it("fills the whole bar and says so", () => {
+		const svg = renderTimer(0, 300, true, true, 4);
+		expectSvg(svg);
+		expect(svg).toContain("TIME'S UP");
+
+		// Two rects: the trough, and a fill covering it exactly.
+		const rects = [...svg.matchAll(/<rect x="([\d.]+)"[^>]*width="([\d.]+)"/g)].map((m) => ({
+			x: Number(m[1]),
+			w: Number(m[2])
+		}));
+		expect(rects).toHaveLength(2);
+		expect(rects[1].x).toBe(rects[0].x);
+		expect(rects[1].w).toBe(rects[0].w);
+	});
+
+	it("counts the overtime negative when it watched it run out", () => {
+		expect(renderTimer(0, 300, true, true, 4)).toContain(">-0:04<");
+		expect(renderTimer(0, 300, true, true, 75)).toContain(">-1:15<");
+	});
+
+	it("shows no number when it did not see it run out", () => {
+		// Teams pins the accessible name at "0 sec remaining" once time is up,
+		// so a dial that arrives mid-overtime has nothing to count from and
+		// must not invent one.
+		const svg = renderTimer(0, 300, true, true, undefined);
+		expect(svg).not.toMatch(/>-?\d+:\d\d</);
+		expect(svg).toContain("TIME'S UP");
+	});
+
+	it("is red rather than gradient", () => {
+		const svg = renderTimer(0, 300, true, true, 4);
+		expect(svg).toContain("#D13438");
+		expect(svg).not.toContain("url(#timerFill)");
+	});
+});
+
+describe("the timer bar's paint", () => {
+	it("sweeps Teams' own two colours across the fill", () => {
+		// Scaled to the fill, not the trough, so a stub still shows the whole
+		// sweep - which is what Teams does.
+		const svg = renderTimer(200, 300, true);
+		expect(svg).toContain("url(#timerFill)");
+		expect(svg).toContain("#7478E8");
+		expect(svg).toContain("#A05998");
+	});
+
+	it("goes solid red near the end", () => {
+		const svg = renderTimer(20, 300, true);
+		expect(svg).toContain("#D13438");
+		expect(svg).not.toContain('fill="url(#timerFill)"');
+	});
+
+	it("dims the fill while paused rather than recolouring it", () => {
+		const svg = renderTimer(200, 300, false);
+		expect(svg).toContain("url(#timerFill)");
+		expect(svg).toMatch(/fill-opacity="0\.5"/);
 	});
 });

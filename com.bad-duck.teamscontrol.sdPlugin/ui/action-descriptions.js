@@ -56,8 +56,11 @@ globalThis.ACTION_DESCRIPTIONS = {
 	"com.bad-duck.teamscontrol.ppt-slide-next":
 		"Shows the slide after the one you are presenting, so you can see what is coming without leaving the current slide. It comes from the presenter-view filmstrip, so presenter view has to be open, and it shows that slide fully built. Off until you turn it on, and the picture never leaves this computer.",
 
+	"com.bad-duck.teamscontrol.timer-dial":
+		"Shows the meeting timer on the touch strip: the time left, and a bar that starts full and empties as it runs. Press to start or pause it, and hold to put it back to the beginning — holding is deliberate, because a reset throws away what the timer was counting and it sits under the same finger as start. Teams only publishes the time remaining, never the length the timer was set to, so the bar is measured against the longest time seen since it appeared.",
+
 	"com.bad-duck.teamscontrol.ppt-status":
-		"Shows the current slide and the deck length, such as 3 / 19. Display only - pressing it does nothing. It holds the last known position while Teams hides its toolbar or a flyout is open, rather than going blank.",
+		"Shows how far through the deck you are, as \"3/19\". It is deliberately not pressable: everything you might want to do to a slide already has its own key, and a mis-tap during someone else's presentation is expensive. It can also show the slide itself above the count — off until you turn it on, taken when you change slide, and the picture never leaves this computer.",
 
 	"com.bad-duck.teamscontrol.ppt-ink-color-dial":
 		"Turns the selected pen, highlighter or laser through its colors. The palette belongs to the tool rather than to Teams - the pen and the highlighter offer different sets - so the dial reads whichever one is in front of it, and wraps at the ends. Turning shows the color you are heading for; it is applied when you stop. Goes quiet for the cursor and the eraser, which have no color.",

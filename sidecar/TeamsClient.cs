@@ -201,7 +201,53 @@ public sealed class SelectorConfig
     /// </summary>
     public PowerPointLiveSpec PowerPointLive { get; set; } = new();
 
+    /// <summary>
+    /// How to read and drive the meeting timer. Like PowerPoint Live this is
+    /// context rather than a plain button, because the remaining time is only
+    /// published inside an accessible name.
+    /// </summary>
+    public TimerSpec Timer { get; set; } = new();
+
     public Dictionary<string, ControlSpec> Controls { get; set; } = new();
+}
+
+/// <summary>
+/// Recognising Teams' meeting timer.
+///
+/// None of its controls carry an AutomationId, and the remaining time exists
+/// nowhere but the accessible name of the button that holds them:
+/// "Timer controls, 4 min, 57 sec remaining". Every pattern here is therefore
+/// matched against a localised string, and every one is overridable in
+/// selectors.json for that reason.
+/// </summary>
+public sealed class TimerSpec
+{
+    /// <summary>Names the button whose label carries the remaining time.</summary>
+    public string ControlsPattern { get; set; } = @"^\s*Timer controls\b";
+
+    /// <summary>The toggle, which Teams renames rather than restyling.</summary>
+    public string PausePattern { get; set; } = @"^\s*Pause timer\s*$";
+    public string ResumePattern { get; set; } = @"^\s*Resume timer\s*$";
+    public string ResetPattern { get; set; } = @"^\s*Reset timer\s*$";
+
+    /// <summary>
+    /// What the toggle becomes once time is up.
+    ///
+    /// Deliberately never pressed. Teams replaces Pause/Resume with this when
+    /// the timer expires, and it ends the timer for every person in the
+    /// meeting - not something a press meaning "pause" should ever do. It is
+    /// matched only so the expired state can be recognised.
+    /// </summary>
+    public string CancelPattern { get; set; } = @"^\s*Cancel timer for everyone\s*$";
+
+    /// <summary>
+    /// Pulls each unit out of the remaining time. Kept as three patterns rather
+    /// than one so a language that orders or words them differently only needs
+    /// its own strings, not its own parser.
+    /// </summary>
+    public string HoursPattern { get; set; } = @"(\d+)\s*hr";
+    public string MinutesPattern { get; set; } = @"(\d+)\s*min";
+    public string SecondsPattern { get; set; } = @"(\d+)\s*sec";
 }
 
 /// <summary>
@@ -1768,7 +1814,11 @@ public sealed class TeamsClient : IDisposable
     /// view - and it shows that slide fully built, because a slide that has not
     /// been reached has no live render to read.
     /// </summary>
-    public (bool ok, string? error, string? image, string? name, bool end, List<string> frames) CaptureSlide(string which, int fadeFrames = 0)
+    public (bool ok, string? error, string? image, string? name, bool end, List<string> frames) CaptureSlide(
+        string which,
+        int fadeFrames = 0,
+        int slotWidth = SlideCapture.MaxWidth,
+        int slotHeight = SlideCapture.MaxHeight)
     {
         var none = new List<string>();
         var win = ResolveMeetingWindow();
@@ -1845,8 +1895,9 @@ public sealed class TeamsClient : IDisposable
         }
 
         var (image, frames) = SlideCapture.GrabSequence(
-            which, WindowHandleOf(win), rect.X, rect.Y, rect.Width, rect.Height,
-            border: which != "next", fadeFrames: fadeFrames);
+            $"{which}:{slotWidth}x{slotHeight}", WindowHandleOf(win), rect.X, rect.Y, rect.Width, rect.Height,
+            border: which != "next", fadeFrames: fadeFrames,
+            slotWidth: slotWidth, slotHeight: slotHeight);
 
         // Minimising Teams lands here: the window reports a rectangle but will
         // not draw itself, so there is nothing to show. The next slide's name
@@ -2215,6 +2266,10 @@ public sealed class TeamsClient : IDisposable
         var role = ReadPowerPointLive(win, snap.Context);
         snap.States["ppt-live"] = role is not null;
         snap.States["ppt-presenting"] = role == "presenter";
+
+        // Read outside the toolbar check too: the timer sits in its own strip
+        // above the toolbar and stays readable while a flyout covers it.
+        ReadTimer(win, snap.Context);
 
         if (!IsToolbarVisible(win))
         {
@@ -2989,11 +3044,11 @@ public sealed class TeamsClient : IDisposable
         // is the same shape: a pattern on a filmstrip item, not a named control.
         var ink = target is InkColorTarget or InkThicknessTarget;
         var jump = target == GoToSlideTarget;
+        var timer = target is TimerToggleTarget or TimerResetTarget;
 
         ControlSpec? spec = null;
-        if (!ink && !jump && !_config.Controls.TryGetValue(target, out spec))
+        if (!ink && !jump && !timer && !_config.Controls.TryGetValue(target, out spec))
             return (false, $"unknown target '{target}'");
-
 
         // Chromium activates the Teams window when a control is invoked, so the
         // window that had focus is put back afterwards.
@@ -3001,6 +3056,7 @@ public sealed class TeamsClient : IDisposable
         try
         {
             if (jump) return GoToSlide(arg);
+            if (timer) return DriveTimer(target);
             return ink ? AdjustInk(target, arg) : InvokeCore(target, spec!, arg);
         }
         finally
@@ -3063,6 +3119,146 @@ public sealed class TeamsClient : IDisposable
         catch (Exception ex)
         {
             return (false, $"could not reach slide {wanted}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// The meeting timer, if one is up.
+    ///
+    /// Teams publishes the remaining time in exactly one place - the accessible
+    /// name of the button holding the timer controls, "Timer controls, 4 min,
+    /// 57 sec remaining" - and says whether it is running by renaming the
+    /// toggle between "Pause timer" and "Resume timer". There is no progress
+    /// bar in the tree and no total duration anywhere, so a bar has to be drawn
+    /// against the longest remaining time seen since the last reset.
+    /// </summary>
+    private void ReadTimer(AutomationElement win, Dictionary<string, string> context)
+    {
+        var timer = _config.Timer;
+
+        var controls = FindByNamePattern(win, timer.ControlsPattern);
+        if (controls is null) return;
+
+        var seconds = ParseRemaining(NameOf(controls));
+        if (seconds is null) return;
+
+        context["timer.remaining"] = seconds.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        /*
+            Once time is up Teams replaces the toggle with "Cancel timer for
+            everyone" and pins the accessible name at "0 sec remaining", even
+            though the bar itself turns red and counts upwards. So the overtime
+            is not readable here at all - only the fact of it.
+        */
+        if (FindByNamePattern(win, timer.CancelPattern) is not null)
+        {
+            context["timer.expired"] = "1";
+            context["timer.running"] = "1";
+            return;
+        }
+
+        // Which way the toggle points is the only statement of running or not.
+        var running = FindByNamePattern(win, timer.PausePattern) is not null;
+        context["timer.running"] = running ? "1" : "0";
+    }
+
+    /// <summary>Total seconds in "4 min, 57 sec remaining", or null.</summary>
+    private int? ParseRemaining(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return null;
+
+        var timer = _config.Timer;
+        var hours = MatchNumber(name, timer.HoursPattern);
+        var minutes = MatchNumber(name, timer.MinutesPattern);
+        var seconds = MatchNumber(name, timer.SecondsPattern);
+
+        if (hours is null && minutes is null && seconds is null) return null;
+        return (hours ?? 0) * 3600 + (minutes ?? 0) * 60 + (seconds ?? 0);
+    }
+
+    private static int? MatchNumber(string text, string pattern)
+    {
+        try
+        {
+            var m = Regex.Match(text, pattern, RegexOptions.IgnoreCase);
+            return m.Success && int.TryParse(m.Groups[1].Value, out var n) ? n : null;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>First element whose accessible name matches, anywhere in the window.</summary>
+    private static AutomationElement? FindByNamePattern(AutomationElement scope, string pattern)
+    {
+        Regex re;
+        try { re = new Regex(pattern, RegexOptions.IgnoreCase); }
+        catch { return null; }
+
+        try
+        {
+            foreach (var el in scope.FindAllDescendants())
+            {
+                string name;
+                try { name = el.Name ?? ""; }
+                catch { continue; }
+                if (name.Length > 0 && re.IsMatch(name)) return el;
+            }
+        }
+        catch { }
+
+        return null;
+    }
+
+    /// <summary>Target names for the timer, which has no AutomationIds at all.</summary>
+    public const string TimerToggleTarget = "timer-toggle";
+    public const string TimerResetTarget = "timer-reset";
+
+    /// <summary>
+    /// Starts or pauses the timer, or puts it back to the top.
+    ///
+    /// The toggle is whichever of Pause and Resume is showing, so one press
+    /// does the right thing without the plugin having to know which state
+    /// Teams thinks it is in.
+    /// </summary>
+    private (bool ok, string? error) DriveTimer(string target)
+    {
+        var win = ResolveMeetingWindow();
+        if (win is null) return (false, "not in a meeting");
+
+        var timer = _config.Timer;
+        if (target == TimerResetTarget)
+        {
+            var reset = FindByNamePattern(win, timer.ResetPattern);
+            if (reset is null) return (false, "no timer running");
+            return InvokeElement(reset, "the timer");
+        }
+
+        var toggle = FindByNamePattern(win, timer.PausePattern)
+            ?? FindByNamePattern(win, timer.ResumePattern);
+
+        if (toggle is null)
+        {
+            // Expired. The only button here now is "Cancel timer for everyone",
+            // which is not what a press meaning "start or pause" should reach
+            // for - so the press does nothing and says why. Holding still
+            // resets, which is the useful gesture at this point.
+            return FindByNamePattern(win, timer.CancelPattern) is not null
+                ? (false, "time is up; hold to reset")
+                : (false, "no timer running");
+        }
+
+        return InvokeElement(toggle, "the timer");
+    }
+
+    private static (bool ok, string? error) InvokeElement(AutomationElement el, string what)
+    {
+        try
+        {
+            el.Patterns.Invoke.Pattern.Invoke();
+            return (true, null);
+        }
+        catch (Exception ex)
+        {
+            return (false, $"could not reach {what}: {ex.Message}");
         }
     }
 

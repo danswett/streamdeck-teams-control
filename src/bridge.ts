@@ -305,9 +305,9 @@ class Bridge {
 	 * key's availability, and a stale one would be replayed to anything that
 	 * subscribed later.
 	 */
-	capture(which: "current" | "next", fade = 0): Promise<Thumbnail> {
+	capture(which: "current" | "next", fade = 0, size?: { w: number; h: number }): Promise<Thumbnail> {
 		const id = this.#nextId++;
-		if (!this.#send({ id, cmd: "thumb", arg: which, fade })) {
+		if (!this.#send({ id, cmd: "thumb", arg: which, fade, w: size?.w ?? 200, h: size?.h ?? 100 })) {
 			return Promise.resolve({ ok: false, error: "sidecar not running" });
 		}
 

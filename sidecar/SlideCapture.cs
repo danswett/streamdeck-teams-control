@@ -132,24 +132,29 @@ internal static class SlideCapture
     /// <summary>
     /// Forgets the last picture for a slot, so nothing fades out of it.
     ///
-    /// Pass null to forget every slot. The frames are kept only to fade from,
-    /// so once a deck stops - or the user withdraws permission to read it -
-    /// holding a slide in a process that runs for the whole session buys
-    /// nothing and keeps meeting content resident.
+    /// Keys are the slot name and the size it was composed at, because the same
+    /// slide is captured at one size for the touch strip and another for a key,
+    /// and a fade can only run between two frames of the same shape. Passing a
+    /// slot name forgets every size of it; passing null forgets everything.
+    ///
+    /// The frames are kept only to fade from, so once a deck stops - or the
+    /// user withdraws permission to read it - holding a slide in a process that
+    /// runs for the whole session buys nothing and keeps meeting content
+    /// resident.
     /// </summary>
     public static void ForgetPrevious(string? key = null)
     {
         lock (PreviousLock)
         {
-            if (key is null)
-            {
-                foreach (var bmp in Previous.Values) bmp.Dispose();
-                Previous.Clear();
-                return;
-            }
+            var doomed = Previous.Keys
+                .Where(k => key is null || k == key || k.StartsWith(key + ":", StringComparison.Ordinal))
+                .ToList();
 
-            if (!Previous.Remove(key, out var one)) return;
-            one.Dispose();
+            foreach (var k in doomed)
+            {
+                Previous[k].Dispose();
+                Previous.Remove(k);
+            }
         }
     }
 

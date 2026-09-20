@@ -58,8 +58,13 @@ export abstract class TeamsAction<T extends JsonObject = JsonObject> extends Sin
 		return undefined;
 	}
 
-	/** Produces the SVG for the current Teams state. */
-	protected abstract draw(state: TeamsState): string;
+	/**
+	 * Produces the SVG for the current Teams state.
+	 *
+	 * The key is passed so an action with per-key settings can draw them; most
+	 * keys look the same wherever they are and ignore it.
+	 */
+	protected abstract draw(state: TeamsState, action: KeyAction<T>): string;
 
 	/**
 	 * Plays a short animation on a key.
@@ -144,11 +149,16 @@ export abstract class TeamsAction<T extends JsonObject = JsonObject> extends Sin
 		}
 	}
 
+	/** Redraws every key of this action against the state already in hand. */
+	protected repaintAll(): void {
+		this.#paintAll(bridge.state);
+	}
+
 	async #paint(action: KeyAction<T>, state: TeamsState): Promise<void> {
 		// Never overwrite a frame mid-animation.
 		if (this.#animating.has(action.id)) return;
 
-		const svg = this.draw(state);
+		const svg = this.draw(state, action);
 
 		// Stream Deck redraws on every setImage, so skip identical frames.
 		if (this.#painted.get(action.id) === svg) return;

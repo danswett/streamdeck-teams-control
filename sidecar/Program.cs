@@ -12,7 +12,7 @@ namespace TeamsBridge;
 /// </summary>
 public static class Program
 {
-    private sealed record WorkItem(int Id, string Cmd, string? Target, string? Menu, string? Arg = null, int Fade = 0)
+    private sealed record WorkItem(int Id, string Cmd, string? Target, string? Menu, string? Arg = null, int Fade = 0, int Width = 200, int Height = 100)
     {
         /// <summary>
         /// When the request arrived. A menu walk takes seconds, so a handful of
@@ -26,6 +26,9 @@ public static class Program
 
     /// <summary>Most frames a single fade may ask for; see the clamp on parse.</summary>
     private const int MaxFadeFrames = 12;
+
+    /// <summary>Largest slot a caller may ask a slide to be composed into.</summary>
+    private const int MaxSlotPixels = 1024;
 
     /// <summary>How long after the last thumbnail to release the capture buffer.</summary>
     private const int CaptureBufferIdleMs = 30_000;
@@ -184,8 +187,15 @@ public static class Program
                 var fade = root.TryGetProperty("fade", out var f) && f.ValueKind == JsonValueKind.Number
                     && f.TryGetInt32(out var fv) ? Math.Clamp(fv, 0, MaxFadeFrames) : 0;
 
+                // Likewise bounded: the slot is an allocation, and a caller
+                // asking for a huge one is asking for a huge bitmap.
+                var w = root.TryGetProperty("w", out var we) && we.ValueKind == JsonValueKind.Number
+                    && we.TryGetInt32(out var wv) ? Math.Clamp(wv, 16, MaxSlotPixels) : 200;
+                var h = root.TryGetProperty("h", out var he) && he.ValueKind == JsonValueKind.Number
+                    && he.TryGetInt32(out var hv) ? Math.Clamp(hv, 16, MaxSlotPixels) : 100;
+
                 if (cmd == "shutdown") { _running = false; break; }
-                Queue.Add(new WorkItem(id, cmd, target, menu, arg, fade));
+                Queue.Add(new WorkItem(id, cmd, target, menu, arg, fade, w, h));
             }
             catch (Exception ex)
             {
@@ -430,7 +440,12 @@ public static class Program
                 // a picture: keeping it off the state channel means a thumbnail
                 // never rides along with every key's availability, and a stale
                 // one is never replayed.
-                var (ok, err, image, name, end, frames) = client.CaptureSlide(item.Arg ?? "current", item.Fade);
+                //
+                // The slot size is the caller's, because a touch-strip slot and
+                // a key are different shapes, and composing to the size it will
+                // be shown at is what keeps the picture off the wire twice.
+                var (ok, err, image, name, end, frames) = client.CaptureSlide(
+                    item.Arg ?? "current", item.Fade, item.Width, item.Height);
                 Emit(w =>
                 {
                     w.WriteString("type", "thumb");
