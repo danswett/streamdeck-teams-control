@@ -55,7 +55,7 @@ function ById($scope, [string]$id) {
     $c = New-Object System.Windows.Automation.PropertyCondition($AE::AutomationIdProperty, $id)
     return $scope.FindFirst($TS::Descendants, $c)
 }
-function Centre($el) {
+function Center($el) {
     $r = $el.Current.BoundingRectangle
     return @([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2))
 }
@@ -75,7 +75,7 @@ function Cycle([string]$label, [string]$after, [int]$gap) {
     $win = Get-Win
     $react = ById $win 'reaction-menu-button'
     if (-not $react) { Write-Host "  $label : menu button NOT in tree (flyout stuck open?)" -ForegroundColor Red; return }
-    $rc = Centre $react
+    $rc = Center $react
     Click $render $rc[0] $rc[1] $gap
     Start-Sleep -Milliseconds 900
 
@@ -92,11 +92,11 @@ function Cycle([string]$label, [string]$after, [int]$gap) {
     switch ($after) {
         'away' { Click $render $ax $ay $gap }
         'item' {
-            $ic = Centre $like
+            $ic = Center $like
             Click $render $ic[0] $ic[1] $gap
         }
         'item+move' {
-            $ic = Centre $like
+            $ic = Center $like
             Click $render $ic[0] $ic[1] $gap
             Start-Sleep -Milliseconds 250
             # Hover reset only - no button press, so no side effects.

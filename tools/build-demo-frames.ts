@@ -21,7 +21,7 @@ import { Resvg } from "@resvg/resvg-js";
 import {
 	renderEmoji,
 	renderGlyph,
-	renderLabelled,
+	renderLabeled,
 	renderLive,
 	renderReaction,
 	renderSimple,
@@ -60,7 +60,7 @@ const share = (active: boolean, available = true): string =>
 
 type Key = { svg: string; label?: string };
 
-/** A 5x3 deck, centred, with an optional caption above and note below. */
+/** A 5x3 deck, centered, with an optional caption above and note below. */
 function deck(keys: (Key | null)[], opts: { title?: string; note?: string; pressed?: number; profile?: string }): string {
 	const size = 168;
 	const gap = 22;
@@ -128,7 +128,7 @@ function attendeeDeck(o: { slide: string; behind: boolean; pressed?: number }): 
 	return [
 		{ svg: renderSimple("pptPrev", true) },
 		{ svg: renderSimple("pptNext", true) },
-		{ svg: renderLabelled("pptSlide", o.slide, "on") },
+		{ svg: renderLabeled("pptSlide", o.slide, "on") },
 		{ svg: renderSimple("pptGrid", true) },
 		{ svg: renderSimple("pptContrast", true) },
 		{ svg: renderLive(o.behind) },
@@ -149,7 +149,7 @@ function presenterDeck(o: { slide: string; activeTool: string }): (Key | null)[]
 	return [
 		{ svg: renderSimple("pptPrev", true) },
 		{ svg: renderSimple("pptNext", true) },
-		{ svg: renderLabelled("pptSlide", o.slide, "on") },
+		{ svg: renderLabeled("pptSlide", o.slide, "on") },
 		{ svg: renderSimple("pptGrid", true) },
 		{ svg: renderSimple("pptRefresh", true) },
 		t("ppt-cursor"),

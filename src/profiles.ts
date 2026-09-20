@@ -180,7 +180,7 @@ class ProfileSwitcher {
 	/** Last profile chosen per device, so only a genuine change switches. */
 	readonly #current = new Map<string, string>();
 
-	/** Serialises profile changes; see {@link ProfileSwitcher.enqueue}. */
+	/** Serializes profile changes; see {@link ProfileSwitcher.enqueue}. */
 	#queue: Promise<void> = Promise.resolve();
 
 	start(): void {
@@ -222,7 +222,7 @@ class ProfileSwitcher {
 			attached was dropped with nothing logged on either side, and a
 			profile that has never been installed is dropped with it. There is
 			no result to check - switchToProfile resolves when the request is
-			sent - so the only defence is to ask again later.
+			sent - so the only defense is to ask again later.
 		*/
 		streamDeck.devices.onDeviceDidConnect((ev) => {
 			for (const delay of DEVICE_SETTLE_MS) {

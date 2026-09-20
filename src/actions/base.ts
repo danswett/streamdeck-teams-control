@@ -20,7 +20,7 @@ export function usable(state: TeamsState, key: string): boolean {
 }
 
 /**
- * Shared behaviour for every Teams key.
+ * Shared behavior for every Teams key.
  *
  * One subscription is held per action *class* rather than per key, and state
  * changes are fanned out to whichever instances are currently visible.

@@ -27,7 +27,7 @@ import {
 	privateViewGlyph,
 	renderGlyph,
 	renderLive,
-	renderLabelled,
+	renderLabeled,
 	renderSlideCount,
 	SLIDE_KEY_H,
 	SLIDE_KEY_W,
@@ -60,7 +60,7 @@ abstract class PptAction<T extends Record<string, never> | object = object> exte
 	protected abstract readonly control: string;
 	protected abstract readonly glyph: string;
 
-	/** Tone used when the control is live; the grey "unavailable" tone is shared. */
+	/** Tone used when the control is live; the gray "unavailable" tone is shared. */
 	protected readonly tone: Tone = "on";
 
 	protected override targetFor(): string {
@@ -239,7 +239,7 @@ export class PptStatusAction extends TeamsAction<CounterSettings & JsonObject> {
 				this.#image = undefined;
 				this.#capturedAt = undefined;
 			}
-			return renderLabelled("pptSlide", "", "unavailable");
+			return renderLabeled("pptSlide", "", "unavailable");
 		}
 
 		const slide = state.context["ppt.slide"] ?? "";
@@ -250,10 +250,10 @@ export class PptStatusAction extends TeamsAction<CounterSettings & JsonObject> {
 		const label = slide && total ? `${slide}/${total}` : slide;
 
 		const allowed = action === undefined ? this.#on() : this.#allowed.get(action.id) === true;
-		if (!allowed) return renderLabelled("pptSlide", label, "on");
+		if (!allowed) return renderLabeled("pptSlide", label, "on");
 
 		this.#considerCapture(slide);
-		if (this.#image === undefined) return renderLabelled("pptSlide", label, "on");
+		if (this.#image === undefined) return renderLabeled("pptSlide", label, "on");
 
 		return renderSlideCount(this.#image, label);
 	}

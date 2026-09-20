@@ -3,8 +3,8 @@
 
     The bar carries a gradient, and the thing worth knowing is whether it is
     scaled to the fill or fixed to the whole trough: a full sweep inside a
-    nearly-empty bar means the former, a single end-colour means the latter.
-    That decides whether the colours march as it drains or stay put.
+    nearly-empty bar means the former, a single end-color means the latter.
+    That decides whether the colors march as it drains or stay put.
 
     Captures the timer strip and samples across it. Read-only - it neither
     starts, pauses nor resets the timer.
@@ -61,7 +61,7 @@ $bandY = [int]($cr.Y + $cr.Height / 2 - $wr.Top)
 
 $bmp.Save("$env:TEMP\timerbar-window.png", [System.Drawing.Imaging.ImageFormat]::Png)
 
-# Walk the row and report every run of colour, so the fill and the trough
+# Walk the row and report every run of color, so the fill and the trough
 # separate themselves without knowing where the bar starts.
 $prev = $null; $runStart = 0; $runs = @()
 for ($x = 0; $x -lt $ww; $x++) {
@@ -74,14 +74,14 @@ for ($x = 0; $x -lt $ww; $x++) {
 }
 $runs += [pscustomobject]@{ Start = $runStart; End = $ww - 1; Color = $prevColor }
 
-Write-Host "`n--- colour runs wider than 8px along that row ---"
+Write-Host "`n--- color runs wider than 8px along that row ---"
 foreach ($r in $runs) {
     $w = $r.End - $r.Start + 1
     if ($w -lt 8) { continue }
     "  x {0,5}..{1,-5} {2,5}px  #{3:X2}{4:X2}{5:X2}" -f $r.Start, $r.End, $w, $r.Color.R, $r.Color.G, $r.Color.B | Write-Host
 }
 
-# Now sample the coloured (non-grey, non-black) span at intervals, which is the fill.
+# Now sample the colored (non-gray, non-black) span at intervals, which is the fill.
 $fillX = @()
 for ($x = 0; $x -lt $ww; $x++) {
     $p = $bmp.GetPixel($x, $bandY)
@@ -89,11 +89,11 @@ for ($x = 0; $x -lt $ww; $x++) {
     $min = [Math]::Min($p.R, [Math]::Min($p.G, $p.B))
     if ($max -gt 70 -and ($max - $min) -gt 25) { $fillX += $x }
 }
-if ($fillX.Count -eq 0) { Write-Host "`nno coloured fill found on that row" -ForegroundColor Yellow; $bmp.Dispose(); return }
+if ($fillX.Count -eq 0) { Write-Host "`nno colored fill found on that row" -ForegroundColor Yellow; $bmp.Dispose(); return }
 
 $a = $fillX[0]; $b = $fillX[$fillX.Count - 1]
 "`nfill spans x {0}..{1} ({2}px)" -f $a, $b, ($b - $a + 1) | Write-Host
-Write-Host "colour across the fill:"
+Write-Host "color across the fill:"
 foreach ($f in 0.0, 0.25, 0.5, 0.75, 1.0) {
     $x = [int]($a + ($b - $a) * $f)
     $p = $bmp.GetPixel($x, $bandY)

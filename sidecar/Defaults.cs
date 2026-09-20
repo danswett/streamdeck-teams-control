@@ -47,7 +47,7 @@ public static class Defaults
             ["people"] = new() { AutomationId = "roster-button" },
 
             // ---- React flyout ----
-            // Reaction buttons are labelled with the emoji itself, so they are
+            // Reaction buttons are labeled with the emoji itself, so they are
             // matched by AutomationId only.
             ["hand"] = new()
             {

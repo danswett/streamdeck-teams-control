@@ -4,7 +4,7 @@ using Xunit;
 namespace TeamsBridge.Tests;
 
 /// <summary>
-/// The overlay behaviour matters more than it looks: a selectors.json written
+/// The overlay behavior matters more than it looks: a selectors.json written
 /// against an older version must never be able to remove a control, only
 /// change the ones it names.
 /// </summary>
@@ -202,7 +202,7 @@ public class SelectorConfigTests : IDisposable
     [Fact]
     public void A_name_only_control_is_press_only_and_scoped()
     {
-        // Matching on a name is a last resort - it is localised, and a bare name
+        // Matching on a name is a last resort - it is localized, and a bare name
         // could collide with a toolbar button. Anything driven that way must be
         // confined to the dialog it belongs to, and must stay out of snapshots,
         // where finding it would cost a scan of every popup window on each poll.
@@ -475,7 +475,7 @@ public class SelectorConfigTests : IDisposable
     [Fact]
     public void Private_view_reads_its_state_from_the_tooltip()
     {
-        // The button is labelled "Private view" whichever way it is set and
+        // The button is labeled "Private view" whichever way it is set and
         // offers no toggle pattern, so the name says nothing. Chromium puts the
         // tooltip in FullDescription, where it does change.
         var config = Program.LoadConfig(Path.Combine(Path.GetTempPath(), "no-selectors-" + Guid.NewGuid()));

@@ -29,7 +29,7 @@ import {
 	renderEmoji,
 	renderGlyph,
 	renderHandFrame,
-	renderLabelled,
+	renderLabeled,
 	renderReaction,
 	renderReactionFrame,
 	renderSimple,
@@ -193,7 +193,7 @@ function cells(s: Snap): Cell[] {
 			id: "ppt-status",
 			// Same rule the key itself uses: the total only exists while Teams is
 			// showing its toolbar counter, so the number stands alone without it.
-			svg: renderLabelled("pptSlide", slide && total ? `${slide}/${total}` : slide, "on")
+			svg: renderLabeled("pptSlide", slide && total ? `${slide}/${total}` : slide, "on")
 		},
 		{ id: "ppt-grid", svg: renderGlyph(on("ppt-grid") ? "pptGridOn" : "pptGrid", on("ppt-grid") ? "accent" : "on") }
 	];

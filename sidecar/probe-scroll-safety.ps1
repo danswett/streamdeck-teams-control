@@ -4,7 +4,7 @@
     The filmstrip items carry ScrollItem, Invoke and SelectionItem. Scrolling
     one into view is exactly what is wanted; selecting it would navigate the
     deck for everyone in the meeting. ScrollItemPattern is specified to do only
-    the former, but Teams' filmstrip is a virtualised web list and that is worth
+    the former, but Teams' filmstrip is a virtualized web list and that is worth
     confirming rather than assuming.
 
     Records the selected slide and the strip's scroll position either side of a

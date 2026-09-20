@@ -77,7 +77,7 @@ internal static class InputPoster
         return length > 0 ? new string(buffer, 0, length) : "";
     }
 
-    /// <summary>Clicks the centre of an element. Returns false if it has no usable bounds.</summary>
+    /// <summary>Clicks the center of an element. Returns false if it has no usable bounds.</summary>
     public static bool TryClick(IntPtr renderWidget, AutomationElement element)
     {
         try

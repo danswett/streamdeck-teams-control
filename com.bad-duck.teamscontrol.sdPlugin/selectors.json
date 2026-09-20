@@ -11,7 +11,7 @@
 		"",
 		"'automationId' values are locale-independent and are the preferred selector.",
 		"'activePattern' / 'inactivePattern' match the button's accessible NAME, which",
-		"IS localised - translate those to use state icons in another language. A",
+		"IS localized - translate those to use state icons in another language. A",
 		"button's name describes the action it performs, so it is the inverse of the",
 		"current state: 'Unmute mic' means you are currently muted.",
 		"",
@@ -43,7 +43,7 @@
 	"meetingProbeAutomationId": "microphone-button",
 	"powerPointLive": {
 		"$comment": [
-			"How a shared deck is recognised.",
+			"How a shared deck is recognized.",
 			"",
 			"ROLE comes from the meeting toolbar, not from the slide-show root's CSS",
 			"class. Only one of the two marker buttons can exist at a time, so they",
@@ -67,7 +67,7 @@
 		"attendeeMarkerAutomationId": "takeControlPptBtn",
 
 		"$comment2": [
-			"INK COLOUR is read from a drawing tool's accessible name, which looks",
+			"INK COLOR is read from a drawing tool's accessible name, which looks",
 			"like \"Pen: Light blue, Thickness 3\" - except while that tool's own",
 			"flyout is open, because opening it unmounts the tool button and takes",
 			"the name with it. For that window the color comes from the flyout's",
@@ -83,7 +83,7 @@
 			"flyout also holds the laser pointer's arrow options and one of those",
 			"always reports itself selected, so they are excluded by pattern.",
 			"",
-			"Both lists are localised, like the names they match."
+			"Both lists are localized, like the names they match."
 		],
 		"toolColorPattern": "^[^:]+:\\s*([^,]+?)\\s*(?:,|$)",
 		"inkColorNames": [
@@ -202,7 +202,7 @@
 				"against it instead of the name.",
 				"",
 				"'Prevent participants from moving...' means private viewing is on;",
-				"'Allow participants to move...' means it is off. Localised."
+				"'Allow participants to move...' means it is off. Localized."
 			],
 			"automationId": "toggleEnablePrivateViewingButton",
 			"stateFromFullDescription": true,

@@ -19,7 +19,7 @@ import {
 	REACTION_KEYS,
 	renderEmoji,
 	renderGlyph,
-	renderLabelled,
+	renderLabeled,
 	renderLive,
 	renderReaction,
 	renderSimple,
@@ -86,7 +86,7 @@ function key(x: number, y: number, size: number, svg: string, caption?: string):
 	return out;
 }
 
-/** Lays a row of keys out centred on the canvas. */
+/** Lays a row of keys out centered on the canvas. */
 function row(keys: { svg: string; caption?: string }[], y: number, size: number, gap: number, width: number): string {
 	const total = keys.length * size + (keys.length - 1) * gap;
 	const startX = (width - total) / 2;
@@ -135,7 +135,7 @@ function thumbnail(): string {
 			{ svg: camera(false) },
 			{ svg: renderEmoji("hand", true) },
 			{ svg: renderReaction("react-like", true) },
-			{ svg: renderLabelled("pptSlide", "12/40", "on") },
+			{ svg: renderLabeled("pptSlide", "12/40", "on") },
 			{ svg: tool("ppt-laser", true) },
 			{ svg: renderSimple("leave", true, "danger") }
 		],
@@ -244,7 +244,7 @@ function galleryPresenting(): string {
 	body += row(
 		[
 			{ svg: renderSimple("pptPrev", true), caption: "Previous" },
-			{ svg: renderLabelled("pptSlide", "12/40", "on"), caption: "Slide" },
+			{ svg: renderLabeled("pptSlide", "12/40", "on"), caption: "Slide" },
 			{ svg: renderSimple("pptNext", true), caption: "Next" },
 			{ svg: renderSimple("pptRefresh", true), caption: "Present latest" },
 			{ svg: renderSimple("pptStopPresenting", true, "danger"), caption: "Stop sharing" }
@@ -299,7 +299,7 @@ function galleryWatching(): string {
 
 /**
  * The profiles, which are the reason the deck is never showing the wrong half
- * of the plugin. Kept to three labelled groups rather than prose, because the
+ * of the plugin. Kept to three labeled groups rather than prose, because the
  * guidelines ask for minimal text on a gallery item.
  */
 function galleryProfiles(): string {
@@ -327,7 +327,7 @@ function galleryProfiles(): string {
 			else if (k === "camera") svg = camera(false);
 			else if (k === "hand") svg = renderEmoji("hand", true);
 			else if (k === "pptPen") svg = tool("ppt-pen", true);
-			else if (k === "pptSlide") svg = renderLabelled("pptSlide", "12/40", "on");
+			else if (k === "pptSlide") svg = renderLabeled("pptSlide", "12/40", "on");
 			else if (k === "pptSync") svg = renderLive(true);
 			else svg = renderSimple(k, true, k === "pptStopPresenting" ? "danger" : "on");
 			body += key(x, 400, size, svg);

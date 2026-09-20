@@ -1,586 +1,204 @@
+<div align="center">
+
+<img src="marketplace/thumbnail.png" alt="Teams Meeting Controls for Stream Deck" width="720">
+
 # Teams Meeting Controls for Stream Deck
 
+**Mute, camera, reactions, screen share and the whole of PowerPoint Live —
+from your Stream Deck, with the real state on every key.**
+
 [![build](https://github.com/danswett/streamdeck-teams-control/actions/workflows/build.yml/badge.svg)](https://github.com/danswett/streamdeck-teams-control/actions/workflows/build.yml)
+[![release](https://img.shields.io/github/v/release/danswett/streamdeck-teams-control?label=release)](https://github.com/danswett/streamdeck-teams-control/releases)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+![Windows only](https://img.shields.io/badge/platform-Windows-0078D4)
 
-Control Microsoft Teams meetings from an Elgato Stream Deck — mute, camera,
-raise hand, reactions, background blur, screen share, chat, roster and leave —
-with **live state on every key**.
+[Install](#install) · [What you can control](#what-you-can-control) ·
+[Stream Deck + XL](#stream-deck--xl) · [Privacy](#privacy) ·
+[How it works](#how-it-works)
 
-Teams does not need to be focused, it is never pulled to the front, and **no
-keystrokes are sent**.
-
-> **Windows only.** See [Why not macOS?](#why-not-macos).
+</div>
 
 ---
 
-## Why this plugin exists
+## The short version
+
+Your Stream Deck shows whether you are **actually** muted, not whether you last
+pressed something.
+
+- **Live state on every key.** The mute key knows it is muted because it asked
+  Teams, so it stays right when you mute from the Teams window, a headset
+  button, or anywhere else.
+- **Teams never needs focus.** Keep typing in your editor. Teams is never pulled
+  to the front and the cursor never moves.
+- **No keystrokes are sent.** Nothing is typed into whatever you happen to have
+  open, so there is no window for a shortcut to land in the wrong place.
+- **Everything dims when it should.** Not in a meeting? The keys go gray. No deck
+  being presented? The PowerPoint Live keys go with them.
+- **Optional profile switching.** The deck can follow the meeting — one layout
+  for a meeting, another when a deck goes up, back again when it ends.
+
+> **Windows only.** See [Why not macOS?](#why-not-macos)
+
+---
+
+## Why it exists
 
 Microsoft retired the local Teams third-party API (`ws://localhost:8124`) on
-**30 June 2026** under message centre notice **MC1266901**. That API is what
-powered Microsoft's own official Teams Stream Deck plugin, MuteMe, Dell's
-collaboration keyboards and most other hardware Teams integrations.
+**30 June 2026**, under message center notice **MC1266901**. That API powered
+Microsoft's own Teams Stream Deck plugin, MuteMe, Dell's collaboration keyboards
+and most other hardware Teams integrations.
 
-Microsoft shipped **no replacement**. The retirement notice says only that
-"published Microsoft Graph APIs" are unaffected — but Graph cannot mute your
-local Teams client. The guidance every vendor landed on was *"use keyboard
-shortcuts"*, which requires the Teams window to be focused and gives no state
-feedback at all.
+No replacement shipped. The retirement notice says only that "published
+Microsoft Graph APIs" are unaffected — but Graph cannot mute your local Teams
+client. The guidance vendors landed on was *use keyboard shortcuts*, which needs
+the Teams window focused and reports no state at all.
 
 This plugin takes a different route: it drives Teams through **UI Automation**,
 the same accessibility layer screen readers use.
 
-| | Old local API | Keyboard shortcuts | This plugin (UIA) |
+| | Old local API | Keyboard shortcuts | This plugin |
 |---|---|---|---|
-| Still works after Jun 2026 | ❌ | ✅ | ✅ |
+| Works after June 2026 | ❌ | ✅ | ✅ |
 | Works when Teams is unfocused | ✅ | ❌ | ✅ |
 | Sends synthetic keystrokes | ❌ | ✅ | ❌ |
-| Reports live mute/camera state | ✅ | ❌ | ✅ |
-| Officially supported contract | was | ✅ | ❌ (see [Stability](#stability)) |
+| Shows live mute / camera state | ✅ | ❌ | ✅ |
+| Officially supported contract | was | ✅ | ❌ — see [Stability](#stability) |
 
 ---
 
-## Actions
+## What you can control
 
-| Action | Live state shown | Notes |
+### In any meeting
+
+<img src="marketplace/gallery-2-meeting-controls.png" alt="Meeting control keys" width="600">
+
+| Action | Shows | Notes |
 |---|---|---|
-| **Mute** | ✅ muted / unmuted | Slashed `mic_off` glyph when muted |
-| **Camera** | ✅ on / off | Slashed `video_off` glyph when off |
-| **Raise Hand** | availability only | Lifts on press. Lives in the React flyout |
-| **React: Like / Love / Applause / Laugh / Wow** | availability only | Five separate actions; each pops on press |
-| **Background Blur** | availability only | Lives in the video options flyout |
+| **Mute** | ✅ muted / unmuted | Slashed glyph when muted |
+| **Camera** | ✅ on / off | Slashed glyph when off |
+| **Raise Hand** | availability only | Lifts on press |
+| **React** — Like, Love, Applause, Laugh, Wow | availability only | Five actions, each animates on press |
+| **Background Blur** | availability only | |
 | **Share Screen** | ✅ sharing / not | Opens the share tray |
 | **Chat** | availability only | Toggles the meeting chat pane |
 | **People** | availability only | Toggles the participant roster |
 | **Leave** | availability only | Press opens Teams' confirmation; hold to answer it |
 
-Every key dims to grey when you are not in a meeting, so the deck always
-reflects reality.
+### Presenting a deck
 
-### PowerPoint Live
+<img src="marketplace/gallery-3-presenting.png" alt="PowerPoint Live presenter keys" width="600">
 
-A second set of keys appears when someone shares a deck through **PowerPoint
-Live**. Teams renders that as an embedded slide-show app rather than as part of
-the meeting toolbar, so these controls simply do not exist unless a deck is up —
-which is exactly what makes the keys dim on their own, with no special-casing.
-
+A second set of keys appears when a deck is shared through **PowerPoint Live**.
 Teams gives you a different toolbar depending on whether you are watching or
-driving, and the plugin follows suit: each key declares the role it needs and
-reports itself unavailable in the other one.
+driving, and the keys follow: each one declares the role it needs and dims in
+the other.
 
 **Either role**
 
-| Action | Live state shown | Notes |
+| Action | Shows | Notes |
 |---|---|---|
-| **PPT Live: Slide Counter** | ✅ `3/19` | Not pressable. Turns gold while you are the presenter |
+| **PPT Live: Slide Counter** | ✅ `3/19` | Not pressable. Can also show the slide itself — see [Slide thumbnails](#slide-thumbnails) |
 | **PPT Live: Previous / Next Slide** | availability only | Dims at the ends of the deck |
 | **PPT Live: Grid View** | ✅ open / closed | All slides as thumbnails |
 | **PPT Live: High Contrast** | availability only | Your screen only |
-| **PPT Live: Pop Out** | availability only | Moves the shared content into its own window |
+| **PPT Live: Pop Out** | availability only | Moves the shared content to its own window |
 
-**Watching (attendee)**
+**Watching**
 
-| Action | Live state shown | Notes |
+| Action | Shows | Notes |
 |---|---|---|
-| **PPT Attendee: Sync** | ✅ lights up when out of sync | Teams only shows this button once you have browsed away, so the key being lit *is* the "you are viewing privately" signal |
-| **PPT Attendee: Take Control** | availability only | ⚠️ Makes you the presenter — see below |
+| **PPT Attendee: Sync** | ✅ lights when out of sync | Teams only offers this once you have browsed away, so a lit key *is* the "you are viewing privately" signal |
+| **PPT Attendee: Take Control** | availability only | ⚠️ Makes you the presenter |
 
-**Driving (presenter)**
+**Driving**
 
-| Action | Live state shown | Notes |
+| Action | Shows | Notes |
 |---|---|---|
-| **PPT Presenter: Laser / Pen / Highlighter / Eraser / Cursor** | ✅ active tool | Read from UI Automation's selection, so it tracks a tool you picked in Teams too |
-| **PPT Presenter: Private Viewing** | ✅ on / off | Lets attendees browse the deck on their own, or stops them. Read from the button's tooltip, which is the only place Teams reports it |
-| **PPT Presenter: Presenter View** | ✅ showing / hidden | Shows or hides your notes and thumbnails. Your screen only |
+| **PPT Presenter: Laser / Pen / Highlighter / Eraser / Cursor** | ✅ active tool, in its ink color | Tracks a tool picked in Teams too |
+| **PPT Presenter: Private Viewing** | ✅ on / off | Lets attendees browse on their own, or stops them |
+| **PPT Presenter: Presenter View** | ✅ showing / hidden | Your notes and thumbnails. Your screen only |
 | **PPT Presenter: Present Latest** | availability only | Reloads the deck to pick up saved edits |
 | **PPT Presenter: Copy Link** | availability only | Copies a link to the deck |
 | **PPT Presenter: Content Only / Layout Cameo** | availability only | Cameo dims until your camera is on |
 | **PPT Presenter: Stop Presenting** | availability only | Press opens Teams' confirmation; hold to answer it |
 
-#### Taking control changes your role
-
 **Take control** is the one key that changes which set you get. Press it as an
-attendee and Teams makes you the presenter: that key retires, *Sync to
-presenter* goes with it, and the drawing tools,
-*Private view* and *Stop presenting* light up in their place.
+attendee and Teams makes you the presenter: that key retires, *Sync* goes with
+it, and the drawing tools, *Private view* and *Stop presenting* light up in
+their place.
 
-That switch lands a moment after the press returns, so the sidecar takes a
-second snapshot ~1.2 s later. Without it a single immediate re-read would report
-the old role and leave every key a role behind.
+---
 
-Taking control turns an attendee into the presenter, and the bundled profiles
-follow that: the deck swaps to the presenter layout on the same press that
-re-lights the keys.
+## Stream Deck + XL
 
-#### Switching profile automatically
+The + XL gets its own layouts, and its six dials and touch strip get the parts
+of a presentation that a key cannot show.
 
-The plugin ships **three** profiles for every deck it has a layout for, and can
-move the deck between them as a meeting goes:
+<img src="docs/plus-xl-touch-strip.png" alt="The Stream Deck + XL touch strip showing the current slide, next slide, ink thickness, ink color and the meeting timer" width="900">
 
-| when | profile |
+| dial | shows | turn | press |
+|---|---|---|---|
+| **Current slide** | the live slide, bordered red | moves through the deck | grid view |
+| **Next slide** | the slide after it | — | — |
+| **Ink thickness** | 1 to 6, Teams' own range | sets it | — |
+| **Ink color** | the tool's palette | sets it | — |
+| **Meeting timer** | time left, and a bar that drains | — | start / pause, hold to reset |
+
+The ink dials act on whichever drawing tool is selected rather than owning one,
+so picking the pen points both at the pen. They go quiet for tools with nothing
+to set: the laser has a color but no thickness, and the cursor and eraser have
+neither.
+
+Nine columns is wide enough that the **left four columns are the meeting and are
+identical in all three layouts** — mute stays under the same finger whether or
+not anyone is presenting, and only the right five columns change.
+
+### Slide thumbnails
+
+The current-slide and next-slide dials show the deck itself, and the slide
+counter key can show the current slide above its count.
+
+**These are off until you turn them on**, in each action's settings. Everything
+else in this plugin reads which controls exist and what state they are in; these
+read what is *on* a slide. The picture is copied from the Teams window to the
+deck on your desk — nothing is uploaded, saved to disk, or written to any log.
+
+Two details worth knowing:
+
+- **The current slide is the live one.** It comes from the slide surface rather
+  than a thumbnail, so a build that has not fired yet is missing here too, and
+  ink appears as you draw it.
+- **The next slide needs presenter view open**, because its filmstrip is where
+  that picture comes from. Without it, the dial shows the slide's name instead.
+
+---
+
+## Profiles that follow the meeting
+
+The plugin ships three layouts per supported deck and can move between them as a
+meeting goes:
+
+| when | layout |
 |---|---|
 | You join a meeting | **Teams Meeting** — mute, camera, reactions, chat, leave |
-| A deck starts, and you are watching | **PowerPoint Live (Attendee)** — navigation, sync, take control |
-| A deck starts, and you are presenting | **PowerPoint Live (Presenter)** — navigation, drawing tools, presenter view, stop presenting |
+| A deck starts, and you are watching | **PowerPoint Live (Attendee)** |
+| A deck starts, and you are presenting | **PowerPoint Live (Presenter)** |
 | The deck stops | back to **Teams Meeting** |
-| You leave the meeting | back to whichever profile you were on before |
+| You leave | back to whichever profile you were on before |
 
 Each PowerPoint Live layout keeps mute, camera and leave within reach, so being
 moved onto a presentation layout never costs you the meeting basics.
 
-It is **off by default** — taking over your deck layout unasked is delightful
-once and infuriating thereafter. Turn it on in any PowerPoint Live key's
-property inspector; the setting is shared by all of them. Only the deck is
-handed back at the end — moving between the bundled profiles switches by name,
-so the profile Stream Deck returns you to is the one you were on before any of
-this started.
-
-##### The decks that have a layout
-
-| deck | `DeviceType` | model | grid | file suffix |
-|---|---|---|---|---|
-| Stream Deck | 0 | `20GBA9901` | 5 × 3 | none |
-| Stream Deck + XL | 13 | `20GBX9901` | 9 × 4, 6 dials | ` (+ XL)` |
-
-Any other deck is left alone entirely. Switching a Mini or a Pedal to a layout
-built for a grid it does not have would push most of the keys off the edge of
-it, so those decks keep whatever they are showing.
-
-The model names are worth reading twice: `20GAT9901` is the Stream Deck XL and
-`20GBX9901` is the Stream Deck + XL, and Stream Deck matches a profile to
-hardware on that string alone.
-
-On the 15-key each of the three layouts fills the deck, so a switch redraws all
-fifteen keys. Nine columns is wide enough to stop doing that: on the + XL the
-**left four columns are the meeting and are identical in all three profiles**,
-so mute stays under the same finger whether or not anyone is presenting, and
-only the right five columns change. `tests/profiles.test.ts` enforces that the
-meeting half really is identical across the three, because it is the kind of
-thing that drifts one key at a time.
-
-The extra width also buys the presenter layout a row it could not have before:
-all five drawing tools sit in one unbroken row. They are a single-select group —
-picking one drops the last — so they should read as one control rather than as
-five scattered keys. *Stop presenting* sits alone in the far corner, since it
-ends the presentation for everyone.
-
-Stream Deck only lets a plugin switch to profiles it ships itself, so the
-layouts are generated by `tools/build-profile.ts` rather than made by hand.
-They are written in Stream Deck's version 3.0 profile format; an earlier
-attempt shipped 2.0, which Stream Deck offered to install and then silently
-ignored. A deck with dials also needs an `Encoder` controller in every page,
-even an empty one, which is the same class of quiet failure.
-
-##### Shipping a changed layout
-
-**Stream Deck installs a bundled profile once and never looks at the shipped
-copy again.** Change a layout, publish the update, and every existing user
-stays on the old one — the switch still succeeds, so nothing is reported
-anywhere. It was found only by noticing that a + XL was sitting on a profile
-whose `Encoder` controller was `null` long after dials had been added.
-
-It identifies an installed profile by the plugin that installed it and the
-**path** it came from, which it writes into the installed copy's
-`PreconfiguredName`. A path it has not seen is the only thing it treats as new.
-
-So a profile carries a `revision`, and `tools/build-profile.ts` appends it to
-the file name once it is above 1:
-
-```ts
-{
-    name: "PowerPoint Live (Presenter)",
-    device: PLUS_XL,
-    revision: 2,          // -> profiles/PowerPoint Live (Presenter) (+ XL) r2
-    ...
-}
-```
-
-**Bump it whenever keys or dials move.** The profile's own name is left alone,
-so the revision never reaches the user; only the file changes. Their previous
-copy stays behind as an ordinary profile they can delete, because a plugin
-cannot remove one.
-
-Forgetting to bump it is the one mistake this scheme invites, and the failure
-is silent — the update simply reaches nobody. So each profile records a
-`layoutHash`, a fingerprint of the deck it targets and every key and dial on
-it, and **the build fails** when that moves and the revision does not:
-
-```
-1 profile(s) changed without a revision bump.
-
-  PowerPoint Live (Presenter) (+ XL)
-      layout changed but revision is still 1
-      bump revision to 2, and set layoutHash: "211ff6d3"
-```
-
-`npm run build` runs the profile builder, so this is enforced before anything
-is packaged, in CI as well as locally.
-
-**Do not retry a switch to a profile that may still be installing.** The first
-ask for a path does not install it quietly — Stream Deck puts a dialog in front
-of the user asking whether to, and holds its profile lock until they answer.
-That answer can be hours away: this was diagnosed by leaving one up overnight,
-at which point `switchToProfile` appeared to do nothing at all — no import, no
-error, nothing in any log — and the profile arrived the moment somebody clicked
-the button the next morning.
-
-A second ask while that dialog is up is answered with `Another operation is
-already in progress`, and the retries that exist to rescue a dropped switch
-cannot tell a dropped request from an unanswered question. So repeat asks for
-the same path are suppressed for 30s and given up after three, while a genuine
-change of target still switches immediately. On a two-deck machine that took
-the refusals per app start from two to zero.
-
-**A revision bump is therefore user-visible.** It is not a silent update: the
-user is asked, and they can say no — which is another reason to bump only when a
-layout genuinely moved, and never on a schedule.
-
-The fingerprint deliberately ignores the plugin version. Tying the path to the
-version would change it on every release, including the many that never touch
-a layout, and each change hands every user a new profile and strands whatever
-they had customised on the old one. It covers what the user actually sees:
-positions, actions and settings.
-
-The manifest's `Profiles` list is written by the same tool, so the declared
-path and the file on disk cannot drift apart, and `src/profiles.ts` reads the
-path back out of the manifest rather than rebuilding it — two places deciding
-which revision shipped is exactly the disagreement this is meant to prevent.
-
-Verified end to end: bumping a revision produced
-`Profile profiles/PowerPoint Live (Presenter) (+ XL) r2 installed for
-@(1)[4057/198/...]` in Stream Deck's log, and the new layout appeared. Note
-that Stream Deck re-reads the manifest when the **application** starts, not
-when plugin files change on disk, so a development install needs the app
-restarting before a newly declared profile is noticed.
-
-`tools/check-profile.mjs` compares a generated profile against one Stream Deck
-wrote itself for the same model, which is the only way to catch a profile that
-is almost right:
-
-```bash
-node tools/build-profile.ts
-node tools/check-profile.mjs "com.bad-duck.teamscontrol.sdPlugin/profiles/Teams Meeting (+ XL).streamDeckProfile"
-```
-
-#### Dials
-
-The + XL has six. The PowerPoint Live presenter layout uses the first four and
-leaves the last two empty, for whatever you want there:
-
-| dial | shows | turn | press |
-|---|---|---|---|
-| **Current slide** | the slide being presented, bordered red | moves through the deck | grid view |
-| **Next slide** | the slide after it | — | — |
-| **Ink thickness** | 1 to 6, Teams' own range | sets it | — |
-| **Ink color** | the tool's palette, wrapping | sets it | — |
-
-Turning the slide dial draws the number it is heading for over the dimmed
-thumbnail and jumps once the dial settles, the same shape as the ink dials and
-for the same reason: one UI Automation walk per gesture rather than one per
-click. The jump goes straight to the slide by invoking its filmstrip thumbnail,
-rather than walking there with Next — **Next advances the build, not the
-slide**, so on a deck with animations counting presses lands somewhere else
-entirely.
-
-**Turning needs presenter view open, and does nothing while the grid is up.**
-The filmstrip is the only list of slides that can be aimed at without moving the
-deck. The grid's tiles look like the same thing and are not: selecting one
-navigates *and* closes the grid, and `SetFocus` on one paints nothing at all —
-captures of the window before and after are identical but for the clock, because
-Teams only draws a ring for `:focus-visible`. So the grid is a view the dial can
-open and close, not a surface it can browse. `sidecar/probe-real-grid.ps1` is
-what established that, and is scoped to `fluent-grid-view` because an earlier
-probe matched "slide-sized list items", found the filmstrip, and tested the
-wrong control entirely.
-
-The + XL ships with Elgato's Volume Controller, and its input and output dials
-sit naturally in the two spare slots — but a bundled profile is installed once
-and never reconciled, so anything placed there is placed permanently. Leaving
-them empty is the reversible choice.
-
-The ink dials act on whichever drawing tool is selected rather than owning one,
-so picking the pen points both of them at the pen. They go quiet for tools that
-have nothing to set: the laser has a color but no thickness, and the cursor and
-eraser have neither.
-
-**A dial is not a key with a different shape.** A key press is one discrete
-request, and `TeamsAction` already refuses a second while one is in flight. A
-dial produces a stream of ticks, and everything behind this plugin is a UI
-Automation walk. One press per tick would queue a whole spin and go on driving
-the deck long after the user let go, which is the failure `#inFlight` exists to
-stop. So turning and pressing are kept apart: ticks accumulate into a local
-offset, the touch strip shows where the dial thinks it is straight away, and the
-work that makes it true is issued once the dial goes still. Color and thickness
-are each a single call, so a whole gesture collapses into one command.
-
-Ink color and thickness turned out to be proper UI Automation patterns rather
-than menu items — thickness is a slider carrying `RangeValue` over 1..6, and
-every color is a radio button carrying `SelectionItem` — so neither needs a
-posted click, and a change measures around 375 ms against the ~4.5 s a flyout
-walk costs. `sidecar/probe-ink-flyout.ps1` is what established that, and will
-re-establish it when Teams moves something.
-
-Three things about that flyout are worth knowing before touching it:
-
-- **The palette belongs to the tool.** The pen offers Dark yellow, Magenta and
-  Dark red where the highlighter offers Pink, Faded green, Faded blue and Faded
-  red. `inkColorNames` in `selectors.json` is a union of both and matches
-  neither, so the open flyout is always the authority; what was seen is
-  published as `ppt.palette.<tool>` for the dial to preview.
-- **Expanding a tool is not reliable once.** Teams hides the slide-show toolbar
-  when the pointer is away and rebuilds it on demand, and an expand landing
-  mid-rebuild does nothing at all. The sidecar asks twice.
-- **An open flyout unmounts the whole slide-show subtree.** A deck that is still
-  being presented then looks exactly like one that has stopped, so the flyout is
-  always closed again and the close is confirmed by watching the subtree return.
-
-#### Slide thumbnails
-
-The two leftmost dials show the deck itself. PowerPoint Live exposes no image of
-a slide anywhere in the accessibility tree — only its name — so the picture is
-taken off the Teams window with `PrintWindow(PW_RENDERFULLCONTENT)`, which draws
-the window on request and is therefore occlusion-proof. `CopyFromScreen` was
-tried first and captured whatever happened to be on top.
-
-**This is the one part of the plugin that reads meeting content rather than
-controls, so it is off until the user turns it on** — per dial, in the property
-inspector. Everything else here reads which controls exist and what state they
-are in; starting to read the slides themselves because somebody installed a
-plugin for the mute button is not a reasonable default.
-
-It is deliberately narrow: a rectangle inside the Teams window, scaled straight
-into the 200 × 100 slot it will occupy, sent to the deck on the desk. Nothing is
-uploaded, written to disk, or recorded in any log, and each picture is replaced
-by the next.
-
-Three things make that last claim true rather than merely intended:
-
-- **Turning the setting off tears down everything in flight**, not just the
-  picture — the pending capture, the fade, the watch loop, and the frame the
-  sidecar keeps to fade out of. A capture armed before the box was unticked
-  would otherwise still fire up to five seconds later. `#capture` re-checks
-  consent itself, so every route into reading a slide fails closed.
-- **A slide is never held longer than it is shown.** The sidecar keeps the last
-  frame per slot so a change can cross-fade; `forget` drops it when the deck
-  stops or the setting goes off, rather than leaving meeting content resident in
-  a process that lives for the whole session — where a crash dump would find it.
-- **The log cannot quote the channel.** A thumbnail is the largest message the
-  sidecar sends and is always split across several reads, so a sidecar that dies
-  mid-write leaves half a message in the buffer — and the fields ahead of the
-  image are the slide's own name. The unparsable-line warning reports the shape
-  and length only, and the buffer is dropped when a sidecar is respawned.
-
-Switching a thumbnail on or off is logged at info, so "was this ever on, and
-when" is answerable from an ordinary log.
-
-The two slots come from different places, which is the whole point:
-
-- **Current slide** is the live slide surface — the 16:9 image inside
-  `slideshow-app-container`, matched on shape because it carries neither name
-  nor id. Being the live render, it shows the slide *as the room sees it*: a
-  build that has not fired yet is missing here too, and ink appears as it is
-  drawn. It does not need presenter view.
-- **Next slide** can only come from the presenter-view filmstrip, so it needs
-  presenter view open, and it shows that slide **fully built** — a slide that has
-  not been reached has no live render to read. It is the next *slide*, not the
-  next build.
-
-**There is often no picture of the next slide ready to hand.** Teams scrolls the
-filmstrip so the *current* slide sits at its trailing edge, so a presenter moving
-forward has the next slide permanently just past the end of the strip — never
-drawn, and nothing to capture. It is only already capturable early in a deck or
-after the presenter has scrolled the strip by hand.
-
-The name, though, is in the accessibility tree whatever the scroll position. So
-the slot falls back to the slide's title on a card rather than an apology, which
-is the common case rather than the exceptional one. The title is wrapped and
-sized to fit the frame, and `tests/icons.test.ts` renders a spread of real and
-awkward slide names and fails if any ink escapes the slot or collides with the
-label above it.
-
-Bringing it into view is possible — the items carry `ScrollItem` — and that is
-what happens. The strip is already scrolling itself on every slide change, and
-this asks for one more notch of the same thing; the presenter keeps their
-current slide on screen either way. On a fourteen-slide deck one scroll brought
-the rest of the deck into view, so it is not a scroll per slide change: the cost
-is about 1.6s once, against ~90ms for a capture that needs no scroll.
-
-`ScrollItemPattern` only scrolls — it does not select — which matters, because
-these items also carry `Invoke` and `SelectionItem`, and selecting one would
-drive the presentation for everyone in the meeting.
-`sidecar/probe-scroll-safety.ps1` is what established that: it records the
-selected slide and the live slide surface either side of a single
-`ScrollIntoView` and fails loudly if either moves. Run it again whenever Teams
-changes the filmstrip.
-
-The title card is still the fallback, because scrolling cannot always help — the
-strip may refuse, presenter view may be closed, or Teams may be minimised, which
-reports a window rectangle but declines to draw itself.
-
-A filmstrip item reports its whole rectangle whether or not it has been scrolled
-into view, and UI Automation only calls it offscreen once *none* of it is
-showing. A half-scrolled slide is therefore offered at a rectangle that runs off
-the side of the list and over whatever is beside it — which is how a thumbnail
-came back with the chat pane down one edge. So the item is clipped to the list
-it sits in, and anything much short of whole is refused rather than cropped:
-half a slide is not a useful preview. `SlideClipTests` pins the geometry to the
-coordinates that filmstrip actually reported.
-
-Running off the end of the deck is reported as its own signal rather than as a
-failure, because the two want opposite handling. A failure should leave the last
-picture alone and retry; running out of slides means the picture is now of a
-slide the presenter has already left, so it has to go. The same rule applies to
-any failed capture once the deck has moved — **a stale thumbnail is only honest
-while the slide has not changed.**
-
-The strip clips a caption rather than shrinking it, and says nothing when it
-does, so "that slide is scrolled out of view" arrived on the deck cut in half.
-Captions now wrap and step down in size to fit. SVG offers no way to measure
-text, so the fit is estimated from a constant calibrated by rasterising the real
-thing; `tests/icons.test.ts` renders every caption the plugin can produce and
-fails if any of it touches the edge of the slot.
-
-##### Watching a slide that is not moving
-
-Ink and builds both change the slide without changing anything Teams reports —
-not the slide number, not any control's state. The sidecar emits state **only on
-change**, so a thumbnail waiting to be told would sit on a picture without the
-ink until the deck moved. Measured: one state message in fifteen seconds while
-sitting on a slide.
-
-So the live slot keeps its own clock. A capture costs about 80 ms, so the rate
-is tied to whether there is any reason to expect a change:
-
-| when | re-read every |
-|---|---|
-| a pen, highlighter or eraser is selected | 250 ms |
-| something changed in the last 12 s | 700 ms |
-| otherwise | 3 s |
-
-None of it runs at all unless a thumbnail has been switched on.
-
-Selecting a marking tool re-arms the timer immediately rather than waiting out
-the slow interval. The laser is deliberately excluded: it moves constantly and
-leaves nothing behind, so following it would spend the whole budget redrawing a
-dot. An unchanged slide encodes byte-identical, so idling costs no traffic to
-the deck.
-
-Slide changes cross-fade — six JPEG frames of about 6 KiB, blended in the
-sidecar where the bitmaps already are, at 40 ms each. Polled re-reads land
-immediately instead: ink should appear under the presenter's hand, not dissolve
-into view.
-
-`PrintWindow` has to draw the whole Teams window to hand back any part of it, so
-each capture needs a bitmap the size of that window — around 14 MB. Allocating
-one per capture put that straight onto the large object heap four times a second
-while a pen was in hand. It is now reused between captures and released thirty
-seconds after the last one, which measured 17% cheaper per capture and gives the
-memory back when nobody is presenting.
-
-### Artwork
-
-Icons are Microsoft's own **Fluent UI System Icons** and **Fluent Emoji**, both
-MIT licensed — the same sets Teams itself renders, so the keys match the app.
-They are extracted into `src/glyphs.generated.json` at build time and composed
-into SVGs at runtime, which is what allows three states per key when Stream Deck
-only supports two.
-
-The reaction and raise-hand keys animate when pressed. Stream Deck has no
-animated-image support — `setImage` rejects GIF, and the manifest's GIF support
-cannot be driven per press — so frames are pushed individually for about 620 ms,
-and only while a key is being pressed.
-
-**The action list and the keys use different artwork.** Elgato's guidelines
-require action-list icons to be a monochrome white stroke on transparent, and
-call out color as incorrect, so the reactions and raise hand appear there as
-Fluent *system* glyphs while the keys themselves show the full-color emoji.
-`tests/marketplace.test.ts` enforces that, because the artwork is generated and
-the rule is otherwise only noticed at submission time.
-
-Regenerate after changing the glyph list:
-
-```bash
-node tools/build-glyphs.ts     # extract from node_modules -> src/glyphs.generated.json
-node tools/generate-icons.ts   # manifest artwork
-node tools/preview-icons.ts    # dist/preview/icon-states.png contact sheet
-node tools/preview-animation.ts react-like   # filmstrip of the press animation
-```
-
----
-
-## How it works
-
-```
-Stream Deck app
-      │  (Stream Deck WebSocket protocol)
-      ▼
-plugin.js ── Node 24, @elgato/streamdeck v2
-      │  (JSON lines over stdin/stdout)
-      ▼
-TeamsBridge.exe ── .NET 10 + FlaUI (UIA3)
-      │  (UI Automation / COM)
-      ▼
-Microsoft Teams (ms-teams.exe, WebView2)
-```
-
-Four details make this work reliably:
-
-1. **Chromium builds its accessibility tree lazily.** A UIA walk of the Teams
-   window returns *zero* elements until a client asks for it. The sidecar sends
-   `WM_GETOBJECT`/`OBJID_CLIENT` to every Teams window first — the same signal a
-   screen reader sends. Without this the tree is empty.
-
-2. **Controls are found by `AutomationId`, not by label.** Teams exposes stable,
-   locale-independent ids on its meeting toolbar (`microphone-button`,
-   `video-button`, `hangup-button`, `share-button`, `reaction-menu-button`,
-   `chat-button`, `roster-button`, `callingButtons-showMoreBtn`), and inside the
-   React flyout (`raisehands-button`, `like-button`, `heart-button`,
-   `applause-button`, `laugh-button`, `surprised-button`).
-
-3. **Controls are pressed by posting mouse messages, not by UIA `Invoke`.** UIA's
-   Invoke works, but Chromium *activates its window* when it runs, so every key
-   press yanked Teams to the front. A `WM_LBUTTONDOWN`/`UP` posted straight to
-   the child `Chrome_RenderWidgetHostHWND` goes into that window's message queue
-   instead of through the window manager: it needs no focus, raises no window and
-   moves no cursor. Measured with 10 ms sampling, the foreground window never
-   changes. UIA `Invoke` remains the fallback for cases with no on-screen bounds,
-   such as a minimised window.
-
-   This is also why the flyouts are no longer disruptive — the popup opens
-   *behind* whatever you are working in, so you never see it.
-
-4. **State comes from the accessible name, which is the inverse of state.** The
-   label describes the action the button performs, so `Unmute mic` means you are
-   *currently muted*. This part **is** localised — see
-   [Other languages](#other-languages).
-
-Elements are cached and only re-resolved when they go stale, so a state read
-costs a single property read per control.
-
-5. **State is event-driven, not polled.** The sidecar subscribes to UI
-   Automation property-change events on the controls it has resolved, so a
-   change made in Teams itself reaches the keys without waiting for a tick.
-   Measured with a second sidecar performing the toggle so the watcher could
-   not shortcut it, an externally-made change showed up in **315 ms on average,
-   364 ms worst** over four rounds. The subscriptions themselves are close to
-   free: an A/B measurement put them at 0.00% CPU and +0.2 MB.
-
-   Polling remains as a backstop — every 3 s in a meeting, 15 s otherwise —
-   because UIA events are not guaranteed to be delivered. It catches anything
-   the event path drops rather than driving the normal case.
-
-### Cost
-
-Measured on the machine this was built on, in a live meeting:
-
-| | CPU | working set | private |
-|---|---|---|---|
-| sidecar | 1.0% | 22.5 MB | 10.5 MB |
-| plugin (node) | 0.0% | 59.6 MB | 28.9 MB |
-
-Idle, outside a meeting, the sidecar settles at ~0.6% CPU and ~12 MB. Discovery
-is the expensive operation — a *failed* UIA search walks an entire window
-subtree — so windows that turn out not to be meetings are cached as such, and a
-meeting window is re-resolved only when the cached element goes stale.
+**It is off by default.** Turn it on in any PowerPoint Live key's settings; the
+setting is shared by all of them.
+
+| deck | grid | profile suffix |
+|---|---|---|
+| Stream Deck | 5 × 3 | none |
+| Stream Deck + XL | 9 × 4, 6 dials | ` (+ XL)` |
+
+Any other deck is left alone — switching a Mini or a Pedal to a layout built for
+a grid it does not have would push most of the keys off the edge.
 
 ---
 
@@ -592,29 +210,365 @@ Download the `.streamDeckPlugin` file from
 [Releases](https://github.com/danswett/streamdeck-teams-control/releases) and
 double-click it.
 
+Stream Deck will ask whether to install the bundled profiles. Accept if you want
+[automatic profile switching](#profiles-that-follow-the-meeting); decline and
+everything else still works.
+
 ### From source
 
-Requires **Node 24+**, **.NET 10 SDK**, and **Stream Deck 7.1+**.
+Requires **Node 24+**, **.NET 10 SDK** and **Stream Deck 7.1+**.
 
 ```bash
 git clone https://github.com/danswett/streamdeck-teams-control.git
 cd streamdeck-teams-control
 npm install
-npm run build          # builds the sidecar, then the plugin bundle
+npm run build
 npx streamdeck link com.bad-duck.teamscontrol.sdPlugin
 ```
 
 Then **restart the Stream Deck app** — it only discovers newly added plugins at
-start-up; `streamdeck restart` alone is not enough the first time.
+start-up.
 
-Copying files in this way deliberately skips Stream Deck's own installer, which
-is fast but has one consequence worth knowing: **bundled profiles are only
-registered when Stream Deck installs the packaged plugin itself.** A file copy
-leaves `switchToProfile` calls silently ignored, because the profile was never
-offered for installation. To exercise the profiles, open the packed
-`dist/*.streamDeckPlugin` so Stream Deck runs its install flow, then accept the
-"contains a/some preconfigured profile(s)" prompt. Each profile is installed the
-first time the plugin asks to switch to it, so expect one prompt per profile.
+Linking copies files into place and skips Stream Deck's installer, which has one
+consequence: **bundled profiles are only registered when Stream Deck installs a
+packaged plugin itself.** To exercise the profiles, open the packed
+`dist/*.streamDeckPlugin` instead and accept the prompt.
+
+---
+
+## Privacy
+
+The plugin talks only to the local Teams window and the local Stream Deck app.
+It makes no network calls, collects no telemetry, and opens no TCP or UDP port —
+the sidecar speaks to the plugin over its own stdin and stdout.
+
+By default it reads only the **state of meeting controls**: which buttons exist,
+and whether they are on, off or unavailable. No message or meeting content.
+
+**Slide thumbnails are the exception, and are off until you switch them on.**
+With one enabled, the plugin copies the slide from the Teams window and sends it
+to your Stream Deck. That picture is never uploaded, never written to disk and
+never logged, and each one replaces the last. Turning the setting off drops the
+picture immediately, including the copy the sidecar holds for its cross-fade.
+Switching a thumbnail on or off is recorded in the plugin log, so it can be
+answered after the fact.
+
+The meeting window title is read to tell a meeting window from a chat window,
+but is never written to the log.
+
+**Before attaching a `discover` dump to an issue**, read it. It lists every
+interactive control in the meeting window — automation id, accessible name and
+enabled state. Teams labels controls by action ("Mute", "Open chat"), so an
+ordinary dump contains no names, but a pane listing people can put participant
+names in a control label. That is also why the dump has no button anywhere in
+the plugin: it has to be asked for deliberately.
+
+---
+
+# How it works
+
+```
+Stream Deck app
+      │  Stream Deck WebSocket protocol
+      ▼
+plugin.js ── Node 24, @elgato/streamdeck v2
+      │  JSON lines over stdin/stdout
+      ▼
+TeamsBridge.exe ── .NET 10 + FlaUI (UIA3)
+      │  UI Automation / COM
+      ▼
+Microsoft Teams (ms-teams.exe, WebView2)
+```
+
+Five things make this reliable:
+
+1. **Chromium builds its accessibility tree lazily.** A UIA walk of the Teams
+   window returns *zero* elements until a client asks for it. The sidecar sends
+   `WM_GETOBJECT`/`OBJID_CLIENT` to every Teams window first — the same signal a
+   screen reader sends. Without it the tree is empty.
+
+2. **Controls are found by `AutomationId`, not by label.** Teams exposes stable,
+   locale-independent ids on the meeting toolbar (`microphone-button`,
+   `video-button`, `hangup-button`, `share-button`, `reaction-menu-button`,
+   `chat-button`, `roster-button`) and inside the React flyout
+   (`raisehands-button`, `like-button`, `heart-button`, `applause-button`,
+   `laugh-button`, `surprised-button`).
+
+3. **Controls are pressed by posting mouse messages, not by UIA `Invoke`.**
+   Invoke works, but Chromium *activates its window* when it runs, which yanks
+   Teams to the front on every press. A `WM_LBUTTONDOWN`/`UP` posted to the child
+   `Chrome_RenderWidgetHostHWND` goes into that window's message queue instead:
+   no focus, no raised window, no cursor movement. Sampled every 10 ms, the
+   foreground window never changes. UIA `Invoke` stays as the fallback where
+   there are no on-screen bounds, such as a minimized window.
+
+   It is also why flyouts are not disruptive — the popup opens *behind* whatever
+   you are working in.
+
+4. **State comes from the accessible name, which is the inverse of state.** The
+   label describes the action the button performs, so `Unmute mic` means you are
+   currently muted. This part is localized — see [Other languages](#other-languages).
+
+5. **State is event-driven, not polled.** The sidecar subscribes to UI Automation
+   property-change events on the controls it has resolved, so a change made in
+   Teams itself reaches the keys without waiting for a tick — **315 ms on
+   average, 364 ms worst**, measured with a second sidecar performing the toggle
+   so the watcher could not shortcut it. The subscriptions measured at 0.00% CPU
+   and +0.2 MB.
+
+   Polling stays as a backstop — every 3 s in a meeting, 15 s otherwise — because
+   UIA events are not guaranteed to be delivered.
+
+Elements are cached and re-resolved only when they go stale, so a state read
+costs a single property read per control.
+
+### Cost
+
+Measured in a live meeting:
+
+| | CPU | working set | private |
+|---|---|---|---|
+| sidecar | 1.0% | 22.5 MB | 10.5 MB |
+| plugin (node) | 0.0% | 59.6 MB | 28.9 MB |
+
+Idle, outside a meeting, the sidecar settles at ~0.6% CPU and ~12 MB. Discovery
+is the expensive operation — a *failed* UIA search walks an entire window
+subtree — so windows that turn out not to be meetings are cached as such.
+
+---
+
+## Bundled profiles
+
+Stream Deck only lets a plugin switch to profiles it ships itself, so the
+layouts are generated by `tools/build-profile.ts` rather than made by hand. They
+use Stream Deck's version 3.0 profile format; 2.0 installs silently and does
+nothing. A deck with dials needs an `Encoder` controller in every page, even an
+empty one.
+
+`tests/profiles.test.ts` enforces that the meeting half of the three + XL
+layouts stays identical across them, which is the kind of thing that drifts one
+key at a time.
+
+### Shipping a changed layout
+
+**Stream Deck installs a bundled profile once and never looks at the shipped copy
+again.** Change a layout, publish the update, and existing users stay on the old
+one — the switch still succeeds, so nothing is reported anywhere.
+
+It identifies an installed profile by the plugin that installed it and the
+**path** it came from, which it writes into the installed copy's
+`PreconfiguredName`. A path it has not seen is the only thing it treats as new.
+
+So a profile carries a `revision`, which `tools/build-profile.ts` appends to the
+file name once it is above 1:
+
+```ts
+{
+    name: "PowerPoint Live (Presenter)",
+    device: PLUS_XL,
+    revision: 2,          // -> profiles/PowerPoint Live (Presenter) (+ XL) r2
+    ...
+}
+```
+
+**Bump it whenever keys or dials move.** The profile's own name is unchanged, so
+the revision never reaches the user. Their previous copy stays behind as an
+ordinary profile they can delete, because a plugin cannot remove one.
+
+Forgetting to bump it fails silently — the update reaches nobody. So each profile
+records a `layoutHash` covering the deck it targets and every key and dial on it,
+and **the build fails** when that moves and the revision does not:
+
+```
+1 profile(s) changed without a revision bump.
+
+  PowerPoint Live (Presenter) (+ XL)
+      layout changed but revision is still 1
+      bump revision to 2, and set layoutHash: "211ff6d3"
+```
+
+The fingerprint ignores the plugin version deliberately. Tying the path to the
+version would change it on every release, handing every user a new profile and
+stranding whatever they had customized on the old one.
+
+A few operational notes:
+
+- **A revision bump is user-visible.** Installing a profile puts a dialog in
+  front of the user, and they can decline. Bump only when a layout genuinely
+  moved, never on a schedule.
+- **That dialog holds Stream Deck's profile lock until it is answered**, which
+  may be hours. A second switch request meanwhile is refused with `Another
+  operation is already in progress`. Repeat asks for the same path are therefore
+  suppressed for 30 s and given up after three, while a genuine change of target
+  still switches immediately.
+- **Stream Deck re-reads the manifest when the app starts**, not when plugin
+  files change, so a newly declared profile needs an app restart to be noticed.
+
+`tools/check-profile.mjs` compares a generated profile against one Stream Deck
+wrote itself for the same model, which catches a profile that is almost right:
+
+```bash
+node tools/build-profile.ts
+node tools/check-profile.mjs "com.bad-duck.teamscontrol.sdPlugin/profiles/Teams Meeting (+ XL).streamDeckProfile"
+```
+
+---
+
+## Dials and the touch strip
+
+A dial is not a key with a different shape. A key press is one discrete request,
+and the key path already refuses a second while one is in flight. A dial produces
+a stream of ticks, and everything behind this plugin is a UI Automation walk —
+one walk per tick would queue a whole spin and go on driving the deck long after
+the user let go.
+
+So turning and acting are kept apart: ticks accumulate into a local value, the
+touch strip shows it immediately, and the work that makes it true is issued once
+the dial goes still. A whole gesture collapses into one command.
+
+### Ink
+
+Ink color and thickness are UI Automation patterns rather than menu items —
+thickness is a slider carrying `RangeValue` over 1..6, and every color is a
+radio button carrying `SelectionItem` — so neither needs a posted click, and a
+change measures around 375 ms against the ~4.5 s a flyout walk costs.
+`sidecar/probe-ink-flyout.ps1` re-establishes this when Teams moves something.
+
+Three things about that flyout:
+
+- **The palette belongs to the tool.** The pen offers Dark yellow, Magenta and
+  Dark red where the highlighter offers Pink, Faded green, Faded blue and Faded
+  red. `inkColorNames` in `selectors.json` is a union of both and matches
+  neither, so the open flyout is the authority.
+- **Expanding a tool is not reliable once.** Teams hides the slide-show toolbar
+  when the pointer is away and rebuilds it on demand, and an expand landing
+  mid-rebuild does nothing. The sidecar asks twice.
+- **An open flyout unmounts the whole slide-show subtree**, so a deck still being
+  presented looks exactly like one that has stopped. The flyout is always closed
+  again, and the close is confirmed by watching the subtree return.
+
+### Moving through the deck
+
+Turning the current-slide dial draws the number it is heading for over the dimmed
+thumbnail and jumps once the dial settles. The jump invokes the slide's filmstrip
+thumbnail directly rather than walking with Next — **Next advances the build, not
+the slide**, so on an animated deck counting presses lands somewhere else.
+
+**Turning needs presenter view open, and does nothing while the grid is up.** The
+filmstrip is the only list of slides that can be aimed at without moving the
+deck. The grid's tiles look equivalent and are not: selecting one navigates *and*
+closes the grid, and `SetFocus` on one paints nothing, because Teams only draws a
+ring for `:focus-visible`. `sidecar/probe-real-grid.ps1` checks this, scoped to
+`fluent-grid-view` so it cannot match the filmstrip by mistake.
+
+### Slide thumbnails
+
+PowerPoint Live exposes no image of a slide anywhere in the accessibility tree —
+only its name — so the picture is taken off the Teams window with
+`PrintWindow(PW_RENDERFULLCONTENT)`, which draws the window on request and is
+therefore occlusion-proof. `CopyFromScreen` captures whatever is on top instead.
+
+The two slots come from different places:
+
+- **Current slide** is the live slide surface: the 16:9 image inside
+  `slideshow-app-container`, matched on shape because it carries neither name nor
+  id. It needs no presenter view.
+- **Next slide** comes from the presenter-view filmstrip, so it needs presenter
+  view, and shows that slide fully built — a slide nobody has reached has no live
+  render to read.
+
+Teams scrolls the filmstrip so the *current* slide sits at its trailing edge,
+which leaves the next slide just past the end. It is scrolled into view with
+`ScrollItemPattern`, which scrolls without selecting — the distinction matters,
+because these items also carry `Invoke` and `SelectionItem`, and selecting one
+would drive the presentation for everyone in the meeting.
+`sidecar/probe-scroll-safety.ps1` fails loudly if a scroll ever moves the
+selection. When scrolling cannot help — the strip refuses, presenter view is
+closed, or Teams is minimized — the slot falls back to the slide's name on a
+card.
+
+A filmstrip item reports its whole rectangle whether or not it is scrolled into
+view, and UI Automation calls it offscreen only once *none* of it shows. A
+half-scrolled slide is therefore offered at a rectangle running over whatever is
+beside it, so items are clipped to the list they sit in and anything much short
+of whole is refused rather than cropped. `SlideClipTests` pins that geometry.
+
+#### Watching a slide that is not moving
+
+Ink and builds change a slide without changing anything Teams reports, and the
+sidecar emits state only on change — one message in fifteen seconds while sitting
+on a slide. So the live slot keeps its own clock. A capture costs about 80 ms:
+
+| when | re-read every |
+|---|---|
+| a pen, highlighter or eraser is selected | 250 ms |
+| something changed in the last 12 s | 700 ms |
+| otherwise | 3 s |
+
+None of it runs unless a thumbnail is switched on. The laser is excluded: it
+moves constantly and leaves nothing behind. An unchanged slide encodes
+byte-identical, so idling costs no traffic to the deck.
+
+Slide changes cross-fade over six JPEG frames of about 6 KiB, blended in the
+sidecar where the bitmaps already are. Polled re-reads land immediately instead,
+so ink appears under the presenter's hand rather than dissolving into view.
+
+`PrintWindow` must draw the whole Teams window to return any part of it, so each
+capture needs a bitmap the size of that window — around 14 MB. That buffer is
+reused between captures and released thirty seconds after the last one, which
+measured 17% cheaper per capture than allocating one each time.
+
+### The meeting timer
+
+None of the timer's controls carry an `AutomationId`. The remaining time exists
+in exactly one place — the accessible name of the button holding the controls,
+`Timer controls, 4 min, 57 sec remaining` — and whether it is running is said
+only by the toggle renaming itself between `Pause timer` and `Resume timer`.
+Every pattern is matched against a localized string and every one is overridable
+under `timer` in `selectors.json`, including separate hour, minute and second
+patterns so another language needs its own strings rather than its own parser.
+
+Teams publishes no duration, so the bar is drawn against the longest remaining
+time seen since the timer appeared. Setting a shorter timer while one is
+part-way through leaves the bar reading low until the next reset.
+
+Two things about the expired state:
+
+- Teams renames the toggle to **Cancel timer for everyone**, which ends the timer
+  for the whole meeting. A press meaning "pause" must never reach it, so the
+  press refuses and says to hold instead. Hold still resets, because *Reset
+  timer* survives.
+- The accessible name pins at `0 sec remaining` while the bar counts upwards in
+  red, so the overtime is not readable. It is counted locally from the moment the
+  expiry is observed; a dial that starts up already in overtime shows `TIME'S UP`
+  without a number rather than inventing one.
+
+---
+
+## Artwork
+
+Icons are Microsoft's **Fluent UI System Icons** and **Fluent Emoji**, both MIT
+licensed — the same sets Teams renders, so the keys match the app. They are
+extracted into `src/glyphs.generated.json` at build time and composed into SVGs
+at runtime, which is what allows three states per key when Stream Deck supports
+two.
+
+The reaction and raise-hand keys animate when pressed. Stream Deck has no
+animated-image support — `setImage` rejects GIF — so frames are pushed
+individually for about 620 ms, and only while a key is being pressed.
+
+**The action list and the keys use different artwork.** Elgato's guidelines
+require action-list icons to be a monochrome white stroke on transparent and call
+out color as incorrect, so reactions and raise hand appear there as Fluent
+*system* glyphs while the keys show the full-color emoji.
+`tests/marketplace.test.ts` enforces that.
+
+```bash
+node tools/build-glyphs.ts     # extract from node_modules -> src/glyphs.generated.json
+node tools/generate-icons.ts   # manifest artwork
+node tools/preview-icons.ts    # dist/preview/icon-states.png contact sheet
+node tools/preview-animation.ts react-like
+```
 
 ---
 
@@ -627,10 +581,17 @@ npm run watch           # rebuild + restart plugin on change
 npm run validate        # streamdeck validate
 npm run test            # unit tests, TypeScript and C#
 npm run pack            # -> dist/*.streamDeckPlugin
-node tools/build-glyphs.ts     # re-extract Fluent artwork
-node tools/generate-icons.ts   # regenerate manifest artwork
-node tools/build-profile.ts    # rebuild the bundled PowerPoint Live profile
+node tools/build-profile.ts    # rebuild the bundled profiles
 ```
+
+> **Manifest changes need a full Stream Deck app restart.** `streamdeck restart`
+> recycles the plugin *process*, but Stream Deck caches `manifest.json` and only
+> re-reads it when the app starts.
+
+> **Rebuilding the sidecar while the plugin runs** fails with a file lock, because
+> Stream Deck relaunches a plugin that exits, which respawns the sidecar.
+> `sidecar/rebuild.ps1` publishes to a staging folder, renames the running image
+> and drops the new one in place.
 
 ### Testing
 
@@ -642,9 +603,10 @@ the suite is in two halves.
 | | covers |
 |---|---|
 | `tests/protocol.test.ts` | stdout framing (split and merged chunks, CRLF) and state mapping |
-| `tests/icons.test.ts` | SVG validity, state artwork, the press animation returning to rest |
+| `tests/icons.test.ts` | SVG validity, state artwork, touch-strip layout and fitting |
+| `tests/profiles.test.ts` | profile generation, revisions, shared meeting block |
 | `tests/marketplace.test.ts` | Elgato artwork and manifest guidelines |
-| `sidecar/tests/` | selector parsing and overlay, regex validation, snapshot fingerprinting, PowerPoint Live role gating |
+| `sidecar/tests/` | selector parsing, regex validation, snapshot fingerprinting, role gating, slide clipping |
 
 **Integration scripts** under `sidecar/` need Teams, and most need a meeting:
 
@@ -653,30 +615,25 @@ the suite is in two halves.
 | `test-recovery.ps1` | no | malformed input, unknown commands, shutdown, respawn after a kill |
 | `test-dpi.ps1` | no | the sidecar really is per-monitor DPI aware |
 | `test-soak.ps1` | either | handle and memory drift over a long run |
-| `test-flyouts.ps1` | yes | hand, reactions and blur, twice each, to catch the swallowed click |
+| `test-flyouts.ps1` | yes | hand, reactions and blur, twice each |
 | `test-reactions.ps1` | yes | all five reactions |
 | `test-focus-strict.ps1` | yes | foreground never changes, sampled every 10 ms |
 | `test-dimming.ps1` | yes | keys stay lit while a flyout is open |
 | `test-state-latency-external.ps1` | yes | latency for a change the plugin did not make |
 | `measure-perf.ps1` | either | CPU and memory of the installed plugin |
 
-Note that `test-state-latency-external.ps1` defaults to toggling mute; pass
-`-Target camera` when audio is unavailable, such as in a remote session.
+`test-state-latency-external.ps1` toggles mute by default; pass `-Target camera`
+when audio is unavailable, such as in a remote session.
+
+`sidecar/probe-*.ps1` are read-only diagnostics that dump what a part of the
+Teams tree currently looks like. They are how every selector in this repo was
+derived, and how to re-derive one when Teams changes.
 
 Logs: `com.bad-duck.teamscontrol.sdPlugin/logs/com.bad-duck.teamscontrol.0.log`
 
-> **Manifest changes need a full Stream Deck app restart.** `streamdeck restart`
-> recycles the plugin *process*, but Stream Deck caches `manifest.json` and only
-> re-reads it when the app starts. If you add, rename or remove an action and it
-> does not show up in the actions list, quit and reopen Stream Deck.
+### The sidecar protocol
 
-> **Rebuilding the sidecar while the plugin runs** fails with a file lock:
-> Stream Deck immediately relaunches a plugin that exits, which respawns the
-> sidecar and re-locks the binary. `sidecar/rebuild.ps1` handles this by
-> publishing to a staging folder, renaming the running image (Windows allows
-> this) and dropping the new one in its place.
-
-The sidecar also runs standalone, which is the quickest way to debug UIA:
+The sidecar runs standalone, which is the quickest way to debug UIA:
 
 ```powershell
 ./sidecar/test-bridge.ps1
@@ -696,8 +653,6 @@ It speaks line-delimited JSON:
 <<< {"type":"discover","elements":[…]}
 ```
 
-Useful flags when debugging:
-
 | flag | effect |
 |---|---|
 | `--selectors <path>` | load a selector override file |
@@ -706,13 +661,12 @@ Useful flags when debugging:
 | `--debug-events` | log every subscription and event to stderr |
 | `--no-focus-guard` | skip restoring foreground after the UIA fallback |
 
-`--no-events` is the quickest way to tell whether a state problem is in the
-event path or underneath it: if behaviour is identical with it, events were
-not the cause.
+`--no-events` is the quickest way to tell whether a state problem is in the event
+path or underneath it.
 
 ### Building behind a corporate proxy
 
-If `dotnet restore` cannot reach nuget.org, pass your mirror explicitly:
+If `dotnet restore` cannot reach nuget.org, pass a mirror explicitly:
 
 ```powershell
 dotnet restore sidecar/TeamsBridge.csproj --source <your-nuget-mirror>
@@ -720,9 +674,8 @@ dotnet publish sidecar/TeamsBridge.csproj -c Release --no-restore `
   -o com.bad-duck.teamscontrol.sdPlugin/bin/sidecar
 ```
 
-The committed `NuGet.config` deliberately points at nuget.org so a clean
-checkout builds for everyone else; override it per command rather than editing
-it.
+The committed `NuGet.config` points at nuget.org so a clean checkout builds for
+everyone else; override it per command rather than editing it.
 
 ### Releasing
 
@@ -732,33 +685,22 @@ disagree.
 
 ```bash
 # bump "Version" in com.bad-duck.teamscontrol.sdPlugin/manifest.json first
-git tag -a v1.4.0 -m "v1.4.0" && git push origin v1.4.0
+git tag -a v1.9.0 -m "v1.9.0" && git push origin v1.9.0
 ```
 
-That covers GitHub. **Marketplace is a separate, manual step** — Elgato has no
-public API or CLI for submission, so a new version is uploaded by hand in Maker
-Console and then waits on review. The full procedure is in
-[`marketplace/README.md`](marketplace/README.md#publishing-a-new-version).
-
-Marketplace submission goes through Elgato's
+**Marketplace is a separate, manual step.** Elgato has no public API for
+submission, so a new version is uploaded by hand in
 [Maker Console](https://docs.elgato.com/maker-console/submitting-products/) and
-takes the same `.streamDeckPlugin` file. **No code signing certificate is
-required** — Elgato applies its own DRM to uploaded plugins — so the unsigned
-binary is not a blocker, though Windows SmartScreen may still warn on a
-sideloaded build.
-
-Everything else the submission needs — app icon, thumbnail, three gallery
-images, the listing copy and a pre-flight checklist — lives in
-[`marketplace/`](marketplace/README.md). Regenerate the images with
-`npm run marketplace`; they are rendered from the same glyph set the keys use,
-so the listing cannot drift from what ships.
+waits on review. No code signing certificate is required — Elgato applies its own
+DRM. The full procedure, listing copy and pre-flight checklist are in
+[`marketplace/`](marketplace/README.md).
 
 ---
 
 ## Stability
 
-This plugin depends on Teams' accessibility tree, which is **not a published
-API contract**. A Teams redesign can move or rename controls.
+This plugin depends on Teams' accessibility tree, which is **not a published API
+contract**. A Teams redesign can move or rename controls.
 
 That risk is contained rather than hidden:
 
@@ -766,62 +708,50 @@ That risk is contained rather than hidden:
   [`selectors.json`](com.bad-duck.teamscontrol.sdPlugin/selectors.json) beside the
   manifest. Edit it and restart the plugin — no rebuild needed. Patterns are
   compiled when the file is read, so a mistake is named and skipped at startup
-  and the working default is kept, rather than failing on every state read
-  afterwards. Matching is also bounded, so a pattern that backtracks badly
-  cannot wedge the sidecar.
-- The sidecar's stdio protocol carries a `discover` command that dumps the live
-  Teams UI tree (ids, names, accelerators, ARIA properties, toggle states), so a
-  broken selector can be re-derived in about a minute. Run
-  `bin/sidecar/TeamsBridge.exe` from a terminal and send it the line shown in
-  [the protocol section](#protocol). It is deliberately not wired to a button:
-  a dump lists every control in the meeting window, which is not something to
-  put one click away in a shipping UI.
+  and the working default kept. Matching is bounded, so a pattern that backtracks
+  badly cannot wedge the sidecar.
+- The `discover` command dumps the live Teams UI tree, so a broken selector can
+  be re-derived in about a minute. See
+  [the sidecar protocol](#the-sidecar-protocol).
 - Invocation falls back `Invoke` → `Toggle` → `LegacyIAccessible.DoDefaultAction`.
 
-Two Teams behaviours are handled explicitly rather than left to chance:
+Teams behaviors handled explicitly rather than left to chance:
 
 - **A meeting can own two windows.** Alongside the full meeting window Teams may
-  keep a *Meeting compact view*, which carries a reduced toolbar with no chat or
+  keep a *Meeting compact view* with a reduced toolbar and no chat or
   background-effects controls. Both look like meetings, so the sidecar prefers
-  whichever window exposes the full toolbar and only settles for the compact one
-  if that is all there is — otherwise chat and blur would appear unavailable.
-- **A control can exist but be disabled.** With no audio device — a remote
-  session, say — `microphone-button` is present but disabled. Mute then reports
-  as unavailable and its key dims, instead of appearing to work and doing
-  nothing.
-- **Dismissing a flyout needs care about where you click.** The meeting toolbar
-  is centred along the *top* of the window and the participant tile fills the
-  middle, so the two most obvious "empty" spots are the two worst: one re-opens
-  the reaction flyout and the other opens a profile card over the meeting. The
-  dismissal click is placed in the quiet corners of the content area and checked
-  against the controls actually on screen first.
-- **A flyout hides the whole toolbar.** A running sidecar rides that out using
-  its cached window, but one that *starts* while a flyout is open has no cache,
-  so it also looks for the flyout's own buttons before concluding there is no
-  meeting.
+  whichever window exposes the full toolbar.
+- **A control can exist but be disabled.** With no audio device,
+  `microphone-button` is present but disabled, so mute reports unavailable and
+  dims rather than appearing to work.
+- **Dismissing a flyout needs care about where you click.** The toolbar is centered
+  along the top and the participant tile fills the middle, so the two most
+  obvious "empty" spots re-open the reaction flyout and open a profile card. The
+  dismissal click goes in the quiet corners of the content area.
+- **A flyout hides the whole toolbar.** A running sidecar rides that out using its
+  cached window; one that *starts* while a flyout is open looks for the flyout's
+  own buttons before concluding there is no meeting.
 - **PowerPoint Live publishes your role as a CSS class, not a property.** The
   slide-show root carries `slideshow-app-presenter-role` or
-  `slideshow-app-attendee-role`, so the role is matched out of the class name.
-  That is a little unusual, but it is locale-independent — unlike the toolbar,
-  which is literally titled "Presenter tools" or "Audience tools".
+  `slideshow-app-attendee-role`. Unusual, but locale-independent — unlike the
+  toolbar, which is titled "Presenter tools" or "Audience tools".
 - **Some menu entries are swapped, not checked.** "Hide presenter view" is
-  replaced outright by "Show presenter view" under a different id, so a key that
-  knew only one id would work once and then fail. Those controls carry both ids.
-- **One press can change which keys exist.** Taking control of a deck turns an
-  attendee into the presenter, retiring half the PowerPoint Live keys and
-  raising the other half. That lands after the press returns, so a second
-  snapshot is taken ~1.2 s later.
+  replaced outright by "Show presenter view" under a different id, so those
+  controls carry both.
+- **One press can change which keys exist.** Taking control of a deck retires half
+  the PowerPoint Live keys and raises the other half, and that lands after the
+  press returns — so a second snapshot is taken ~1.2 s later.
 
 If Teams breaks something, please
 [open an issue](https://github.com/danswett/streamdeck-teams-control/issues)
-with a `discover` dump attached.
+with a `discover` dump attached — after reading it, per [Privacy](#privacy).
 
 ### Other languages
 
-`AutomationId`s are locale-independent, so **pressing** every control works in
-any Teams language out of the box. Only the mute/camera/share **state
-indicators** read English labels. To localise, edit the `activePattern` /
-`inactivePattern` regexes in `selectors.json`. For example, German:
+`AutomationId`s are locale-independent, so **pressing** every control works in any
+Teams language out of the box. Only the **state indicators** read English labels.
+To localize, edit the `activePattern` / `inactivePattern` regexes in
+`selectors.json`. For example, German:
 
 ```jsonc
 "mute": {
@@ -833,47 +763,23 @@ indicators** read English labels. To localise, edit the `activePattern` /
 
 PRs adding language packs are very welcome.
 
-The PowerPoint Live keys need very little translating. Role detection matches
-the automation IDs of two meeting-toolbar buttons rather than any label, and the
-drawing tools report which one is in use through UI Automation's selection
-rather than a label.
+The PowerPoint Live keys need little translating: role detection matches
+automation ids, and the drawing tools report which one is in use through UI
+Automation's selection rather than a label.
 
-The exception is ink color. While a drawing tool's flyout is open, Teams
-unmounts the tool button whose name carries the color, so the color has to be
-read from the flyout's swatches — and those carry no automation ID, only a name.
-`inkColorNames` lists them, and `arrowOptionPattern` excludes the laser
-pointer's arrow options, which share the pen's flyout and always report one of
-themselves as selected. Both are in `selectors.json`, and both need translating
-for a non-English Teams. Getting them wrong costs only immediacy: the color
-still updates, just when the flyout closes rather than on the click.
+The exceptions are **ink color** and **the timer**. While a drawing tool's
+flyout is open Teams unmounts the tool button whose name carries the color, so
+the color is read from the flyout's swatches — and those carry only a name.
+`inkColorNames` lists them, and `arrowOptionPattern` excludes the laser's arrow
+options. The timer publishes its remaining time only inside an accessible name,
+so the whole `timer` section is localized strings.
 
 ### Why not macOS?
 
-The equivalent on macOS is the `AXUIElement` accessibility API, which is a
-completely separate implementation and requires the user to grant Accessibility
-permission. It is not implemented here yet. The sidecar boundary is deliberately
-thin, so a macOS sidecar speaking the same JSON protocol would drop straight in.
-
----
-
-## Privacy
-
-The plugin talks only to the local Teams window and the local Stream Deck app.
-It makes no network calls, collects no telemetry, and reads no message or
-meeting content — only the state of the meeting toolbar buttons. The sidecar
-opens no TCP or UDP port; it speaks to the plugin over its own stdin and stdout.
-
-The meeting window title is read to tell a meeting window from a chat window,
-but it is never written to the log.
-
-**Before attaching a `discover` dump to an issue**, be aware it lists every
-interactive control in the meeting window — its automation id, accessible name
-and enabled state. Teams labels those by action ("Mute", "Open chat"), so a
-dump from an ordinary meeting contains no names, but a pane listing people can
-put participant names in a control label. Read it before posting it.
-
-That is also why the dump is not exposed as a button anywhere in the plugin:
-it has to be asked for deliberately, by running the sidecar yourself.
+The equivalent on macOS is the `AXUIElement` accessibility API — a separate
+implementation that also requires the user to grant Accessibility permission. Not
+implemented yet. The sidecar boundary is deliberately thin, so a macOS sidecar
+speaking the same JSON protocol would drop straight in.
 
 ---
 

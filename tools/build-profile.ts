@@ -132,7 +132,7 @@ type Profile = {
 	 *
 	 * Deliberately not the plugin version: that changes on every release,
 	 * including the ones that do not touch a layout, and each change would
-	 * hand every user a new profile and strand whatever they had customised on
+	 * hand every user a new profile and strand whatever they had customized on
 	 * the old one.
 	 */
 	layoutHash?: string;

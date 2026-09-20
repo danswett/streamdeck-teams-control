@@ -2,7 +2,7 @@ import { Resvg } from "@resvg/resvg-js";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { renderLabelled, renderTool } from "../src/icons.ts";
+import { renderLabeled, renderTool } from "../src/icons.ts";
 
 const out = process.argv[2];
 if (!out) throw new Error("usage: node tools/preview-tools.ts <outputDir>");
@@ -20,7 +20,7 @@ const cases: [string, string][] = [
 	["eraser", renderTool("ppt-eraser", { available: true, active: false })],
 	["eraser-active", renderTool("ppt-eraser", { available: true, active: true })],
 	["pen-unavailable", renderTool("ppt-pen", { available: false, active: false })],
-	["counter", renderLabelled("pptSlide", "16/17", "on")]
+	["counter", renderLabeled("pptSlide", "16/17", "on")]
 ];
 
 for (const [name, svg] of cases) {

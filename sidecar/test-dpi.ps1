@@ -2,7 +2,7 @@
     Verifies the DPI assumptions the posted clicks depend on.
 
     Controls are clicked at screen coordinates read from UI Automation. If the
-    sidecar is not per-monitor DPI aware, Windows virtualises those coordinates
+    sidecar is not per-monitor DPI aware, Windows virtualizes those coordinates
     and presses land somewhere else - and the symptom gives no hint of the
     cause, so it is worth asserting directly rather than inferring it from a
     click that happened to work on one monitor.
@@ -65,7 +65,7 @@ try {
     Write-Host "DPI awareness     : $name"
     Write-Host "primary DPI       : $desktopDpi ($scale%)"
 
-    # Anything below per-monitor leaves coordinates virtualised.
+    # Anything below per-monitor leaves coordinates virtualized.
     $ok = $name -in @('PER_MONITOR_AWARE_V2', 'PER_MONITOR_AWARE')
     if ($ok) {
         Write-Host "PASS - coordinates are physical pixels, clicks map correctly on scaled displays" -ForegroundColor Green

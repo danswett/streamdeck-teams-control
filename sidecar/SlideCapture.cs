@@ -305,7 +305,7 @@ internal static class SlideCapture
     /// the large object heap several times a second while a pen was in hand.
     /// Reused while the window keeps its size, and replaced when it does not.
     ///
-    /// Captures are serialised through the sidecar's work queue, so this is
+    /// Captures are serialized through the sidecar's work queue, so this is
     /// only ever touched by one of them at a time; the lock is there to keep
     /// that true if that ever stops being the case.
     /// </summary>

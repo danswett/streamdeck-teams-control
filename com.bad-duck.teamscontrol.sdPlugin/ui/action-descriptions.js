@@ -51,16 +51,16 @@ globalThis.ACTION_DESCRIPTIONS = {
 		"Advances one slide. As the presenter this moves the deck for everyone; as an attendee it moves your view only, and the Sync key brings you back. Available whenever a deck is being presented.",
 
 	"com.bad-duck.teamscontrol.ppt-slide-current":
-		"Shows the slide you are presenting on the touch strip, bordered in red the way Teams marks the live slide. It is the live slide surface rather than the filmstrip thumbnail, so a build that has not fired yet is missing here too, and ink appears as you draw it. Turn the dial to move through the deck, and press it for grid view. Turning needs presenter view open, because its filmstrip is the only list that can be aimed at without moving the deck; the picture itself does not. Off until you turn it on, and the picture never leaves this computer.",
+		"Shows the slide you are presenting on the touch strip, bordered in red the way Teams marks the live slide. It is the live slide rather than a thumbnail of it, so a build that has not fired yet is missing here too, and ink appears as you draw it. Turn the dial to move through the deck, and press it for grid view. Moving through the deck needs presenter view open; the picture itself does not. Off until you turn it on, and the picture never leaves this computer.",
 
 	"com.bad-duck.teamscontrol.ppt-slide-next":
 		"Shows the slide after the one you are presenting, so you can see what is coming without leaving the current slide. It comes from the presenter-view filmstrip, so presenter view has to be open, and it shows that slide fully built. Off until you turn it on, and the picture never leaves this computer.",
 
 	"com.bad-duck.teamscontrol.timer-dial":
-		"Shows the meeting timer on the touch strip: the time left, and a bar that starts full and empties as it runs. Press to start or pause it, and hold to put it back to the beginning — holding is deliberate, because a reset throws away what the timer was counting and it sits under the same finger as start. Teams only publishes the time remaining, never the length the timer was set to, so the bar is measured against the longest time seen since it appeared.",
+		"Shows the meeting timer on the touch strip: the time left, and a bar that starts full and empties as it runs. Press to start or pause it, and hold to reset it to the beginning. Teams publishes only the time remaining and never the length the timer was set to, so the bar is measured against the longest time seen since the timer appeared — setting a shorter timer part-way through leaves the bar reading low until the next reset.",
 
 	"com.bad-duck.teamscontrol.ppt-status":
-		"Shows how far through the deck you are, as \"3/19\". It is deliberately not pressable: everything you might want to do to a slide already has its own key, and a mis-tap during someone else's presentation is expensive. It can also show the slide itself above the count — off until you turn it on, taken when you change slide, and the picture never leaves this computer.",
+		"Shows how far through the deck you are, as \"3/19\". Not pressable: everything you might want to do to a slide already has its own key. It can also show the slide itself above the count — off until you turn it on, refreshed when you change slide, and the picture never leaves this computer.",
 
 	"com.bad-duck.teamscontrol.ppt-ink-color-dial":
 		"Turns the selected pen, highlighter or laser through its colors. The palette belongs to the tool rather than to Teams - the pen and the highlighter offer different sets - so the dial reads whichever one is in front of it, and wraps at the ends. Turning shows the color you are heading for; it is applied when you stop. Goes quiet for the cursor and the eraser, which have no color.",

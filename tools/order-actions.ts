@@ -17,7 +17,7 @@ const MANIFEST = path.join(ROOT, "com.bad-duck.teamscontrol.sdPlugin", "manifest
 
 type Action = { Name: string; UUID: string };
 
-/** Lower sorts first. Anything unrecognised keeps its place ahead of the PPT keys. */
+/** Lower sorts first. Anything unrecognized keeps its place ahead of the PPT keys. */
 function group(name: string): number {
 	if (name.startsWith("PPT Live:")) return 1;
 	if (name.startsWith("PPT Attendee:")) return 2;

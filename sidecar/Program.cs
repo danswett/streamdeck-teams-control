@@ -115,7 +115,7 @@ public static class Program
 
     /// <summary>
     /// Controls are clicked by posting to screen coordinates read from UI
-    /// Automation. Without per-monitor DPI awareness Windows would virtualise
+    /// Automation. Without per-monitor DPI awareness Windows would virtualize
     /// those coordinates and the clicks would land in the wrong place on a
     /// scaled or multi-monitor setup.
     /// </summary>

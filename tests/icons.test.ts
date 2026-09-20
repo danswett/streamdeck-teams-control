@@ -39,7 +39,7 @@ function expectSvg(svg: string): void {
  * tone it was drawn in.
  *
  * Cached, and warmed up before the suite runs. Rasterising is native work that
- * pays a one-off initialisation on first use - font enumeration especially -
+ * pays a one-off initialization on first use - font enumeration especially -
  * and on a cold CI runner that alone blew vitest's 5s default timeout, failing
  * whichever geometry test happened to go first.
  */
@@ -290,7 +290,7 @@ describe("PowerPoint Live glyph geometry", () => {
 
 	it("draws the grid as outlined squares rather than solid ones", () => {
 		const at = sampler("pptGrid");
-		// Hollow centres...
+		// Hollow centers...
 		expect(at(0.31, 0.31)).toBeLessThan(60);
 		expect(at(0.69, 0.69)).toBeLessThan(60);
 		// ...but only right if the edges above and below them are drawn.
@@ -390,7 +390,7 @@ describe("the live pill", () => {
 
 	it("says you are already live instead of dimming the pill", () => {
 		// The button only exists once you have navigated away on your own, so the
-		// two states are different facts, not enabled and disabled. A greyed-out
+		// two states are different facts, not enabled and disabled. A grayed-out
 		// pill would leave that to be interpreted; the words do not.
 		const dim = renderLive(false);
 		expect(dim).toContain(">In sync<");
@@ -736,7 +736,7 @@ describe("the timer when time is up", () => {
 });
 
 describe("the timer bar's paint", () => {
-	it("sweeps Teams' own two colours across the fill", () => {
+	it("sweeps Teams' own two colors across the fill", () => {
 		// Scaled to the fill, not the trough, so a stub still shows the whole
 		// sweep - which is what Teams does.
 		const svg = renderTimer(200, 300, true);
@@ -751,7 +751,7 @@ describe("the timer bar's paint", () => {
 		expect(svg).not.toContain('fill="url(#timerFill)"');
 	});
 
-	it("dims the fill while paused rather than recolouring it", () => {
+	it("dims the fill while paused rather than recoloring it", () => {
 		const svg = renderTimer(200, 300, false);
 		expect(svg).toContain("url(#timerFill)");
 		expect(svg).toMatch(/fill-opacity="0\.5"/);

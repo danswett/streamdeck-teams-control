@@ -49,7 +49,7 @@ for (const [control, icon] of Object.entries(TOOL_ICONS)) {
 			count++;
 		}
 	}
-	// One greyed variant per tool; an unavailable tool has no ink color.
+	// One grayed variant per tool; an unavailable tool has no ink color.
 	images[`${control}|unavailable`] = render(composeToolSvg(icon, UNAVAILABLE_COLOR, false, SIZE));
 	count++;
 	console.log(`  ${control.padEnd(18)} ${colorsFor(control).length} color(s)`);

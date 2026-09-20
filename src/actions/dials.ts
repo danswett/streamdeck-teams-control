@@ -39,7 +39,7 @@ const logger = streamDeck.logger.createScope("Dial");
 export type Feedback = Record<string, string | number>;
 
 /**
- * Shared behaviour for every dial: one subscription per action class, fanned
+ * Shared behavior for every dial: one subscription per action class, fanned
  * out to whichever dials are currently on the strip.
  */
 export abstract class TeamsDialAction<T extends JsonObject = JsonObject> extends SingletonAction<T> {
@@ -769,7 +769,7 @@ abstract class SlideThumbDialAction extends TeamsDialAction<ThumbSettings & Json
 	/** The slide's name, shown when there is no picture of it to be had. */
 	#slideName: string | undefined;
 
-	/** The slide a pending capture should be labelled with. */
+	/** The slide a pending capture should be labeled with. */
 	#wanted: string | undefined;
 
 	/** When a capture last failed, so retries are paced rather than spun. */
@@ -1113,7 +1113,7 @@ abstract class SlideThumbDialAction extends TeamsDialAction<ThumbSettings & Json
 
 		const tick = (): void => {
 			// Nothing on the strip to paint, or permission withdrawn. The loop
-			// ends here rather than being cancelled from onWillDisappear,
+			// ends here rather than being canceled from onWillDisappear,
 			// because a snapshot only arrives when something in Teams changes -
 			// so a loop stopped on the way out might have nothing to start it
 			// again.
@@ -1305,7 +1305,7 @@ export class SlideNextDialAction extends SlideThumbDialAction {
  *
  * Teams' timer is a strip above the meeting toolbar with no AutomationIds on
  * anything: the remaining time lives in an accessible name, and whether it is
- * running is said only by which way the toggle is labelled. The sidecar reads
+ * running is said only by which way the toggle is labeled. The sidecar reads
  * both into context; this draws them.
  *
  * Press to start or pause, hold to put it back to the top. Holding is the

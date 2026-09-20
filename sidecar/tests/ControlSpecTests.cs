@@ -66,7 +66,7 @@ public class ControlSpecTests
     public void A_pathological_pattern_times_out_rather_than_running_forever()
     {
         // Nested quantifiers over a long non-matching subject: the classic
-        // catastrophic-backtracking shape a localiser could write by accident.
+        // catastrophic-backtracking shape a localizer could write by accident.
         var rx = new Regex("^(a+)+$", RegexOptions.IgnoreCase, ControlSpec.MatchTimeout);
         var subject = new string('a', 40) + "!";
 

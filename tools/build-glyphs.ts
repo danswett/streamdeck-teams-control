@@ -117,7 +117,7 @@ const CONTROLS: Record<string, string> = {
 	//
 	// Fluent's system set has no applause glyph, so the two-hands icon stands in.
 	// These are not all from the 28px tier because the set does not carry every
-	// one at that size; they are normalised by viewBox when rendered.
+	// one at that size; they are normalized by viewBox when rendered.
 	"list-react-like": "thumb_like_28_filled",
 	"list-react-love": "heart_28_filled",
 	"list-react-applause": "hand_multiple_28_filled",

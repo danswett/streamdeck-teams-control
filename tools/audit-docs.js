@@ -94,7 +94,7 @@ for (const p of manifest.Profiles ?? []) {
 // Anything withdrawn. A doc naming one of these is describing a key that is
 // not there any more.
 //
-// Matched narrowly on purpose. "translating" about localisation and a note
+// Matched narrowly on purpose. "translating" about localization and a note
 // explaining that the copy must not mention a withdrawn key are both fine; it
 // is the feature being offered that is not.
 const withdrawn = [

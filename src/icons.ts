@@ -37,7 +37,7 @@ const COLORS: Record<Tone, string> = {
 	unavailable: "#4A4A4A"
 };
 
-/** Exported so the image pre-render uses exactly the same grey. */
+/** Exported so the image pre-render uses exactly the same gray. */
 export const UNAVAILABLE_COLOR = COLORS.unavailable;
 
 /**
@@ -65,7 +65,7 @@ export const REACTION_LABEL: Record<string, string> = {
 	"react-wow": "Wow"
 };
 
-/** Centres a glyph's viewBox on the key canvas at the requested fill ratio. */
+/** Centers a glyph's viewBox on the key canvas at the requested fill ratio. */
 function transformFor(def: GlyphDef, fill: number): string {
 	const [minX, minY, width, height] = def.viewBox.split(/\s+/).map(Number) as [
 		number,
@@ -142,7 +142,7 @@ type ToggleOptions = {
 export function renderToggle(opts: ToggleOptions): string {
 	const { onKey, offKey, active, available } = opts;
 
-	// With no meeting, show the resting glyph greyed out.
+	// With no meeting, show the resting glyph grayed out.
 	if (!available) return renderGlyph(active === false ? offKey : onKey, "unavailable");
 
 	if (active === undefined) return renderGlyph(onKey, "on");
@@ -179,7 +179,7 @@ export const TOOL_DEFAULT_COLOR: Record<string, string> = {
  * values are confirmed — Red and Yellow, read out of the artwork Teams itself
  * rendered — and they are marked below. The rest are Office's usual values and
  * may be slightly off until the same trick is repeated with each color
- * selected; an unrecognised name falls back to the tool's default rather than
+ * selected; an unrecognized name falls back to the tool's default rather than
  * guessing.
  */
 export const INK_COLORS: Record<string, string> = {
@@ -297,9 +297,9 @@ export function renderTool(
 }
 
 /** Fraction of the key the artwork fills when a label sits beneath it. */
-const LABELLED_FILL = 0.56;
+const LABELED_FILL = 0.56;
 /** How far the artwork lifts to make room for the label. */
-const LABELLED_LIFT = 16;
+const LABELED_LIFT = 16;
 
 function escapeText(value: string): string {
 	return value
@@ -325,7 +325,7 @@ const LIVE_RED = "#C50F1F";
  * Teams gives this control no icon at all: it is a red LIVE pill beside the
  * words "Sync to presenter", and a capture of the button returns zero SVGs. So
  * there is no Fluent glyph to match and nothing to copy - the key reproduces
- * the pill, which is the part that is recognisable at a glance.
+ * the pill, which is the part that is recognizable at a glance.
  *
  * Teams only renders the button once you have navigated away on your own, so
  * the two states are not "can press" and "cannot press" but two different
@@ -359,12 +359,12 @@ export function renderLive(available: boolean): string {
 	);
 }
 
-export function renderLabelled(key: string, label: string, tone: Tone): string {
+export function renderLabeled(key: string, label: string, tone: Tone): string {
 	const def = CONTROL_GLYPHS[key];
 	if (!def) return wrap("");
 
 	const art =
-		`<g transform="translate(0 ${-LABELLED_LIFT}) ${transformFor(def, LABELLED_FILL)}" ` +
+		`<g transform="translate(0 ${-LABELED_LIFT}) ${transformFor(def, LABELED_FILL)}" ` +
 		`fill="${COLORS[tone]}">${def.body}</g>`;
 
 	if (!label) return wrap(art);
@@ -445,7 +445,7 @@ export function renderEmojiFrame(
 	const offsetY = lift * arch;
 	const angle = tilt === 0 ? 0 : tilt * Math.sin(2 * Math.PI * t);
 
-	const centre = SIZE / 2;
+	const center = SIZE / 2;
 	const art = `<g transform="${transformFor(def, REACTION_FILL)}">${def.body}</g>`;
 	// sin(2π) is not exactly zero, so compare against the printed precision
 	// rather than 0 - otherwise the final frame carries a rotate(-0.00) and no
@@ -453,8 +453,8 @@ export function renderEmojiFrame(
 	const rotate = Math.abs(angle) < 0.005 ? "" : ` rotate(${angle.toFixed(2)})`;
 
 	return wrap(
-		`<g transform="translate(${centre} ${(centre + offsetY).toFixed(2)})${rotate} ` +
-			`scale(${scale.toFixed(4)}) translate(${-centre} ${-centre})">${art}</g>`
+		`<g transform="translate(${center} ${(center + offsetY).toFixed(2)})${rotate} ` +
+			`scale(${scale.toFixed(4)}) translate(${-center} ${-center})">${art}</g>`
 	);
 }
 
@@ -481,8 +481,8 @@ function renderEmojiGlyph(def: GlyphDef | undefined, available: boolean): string
  *
  * A dial's slot is 200x100 and is drawn as one image rather than assembled
  * from a built-in layout's icon-and-value slots, which put the icon hard left
- * and the number hard right and read as off-centre above a dial. Everything
- * here is centred on the slot, so it sits over the dial it belongs to.
+ * and the number hard right and read as off-center above a dial. Everything
+ * here is centered on the slot, so it sits over the dial it belongs to.
  * ------------------------------------------------------------------------- */
 
 /** The touch strip gives every dial the same canvas, on every device. */
@@ -504,7 +504,7 @@ function strip(body: string): string {
  * Ink thickness, drawn the way PowerPoint Live draws it.
  *
  * A tapered wedge in the ink color over a slider, which is what the flyout
- * shows - so the dial is recognisably the same control rather than a bar chart
+ * shows - so the dial is recognizably the same control rather than a bar chart
  * standing in for one.
  */
 export function renderInkThickness(color: string, value: number, min = 1, max = 6): string {
@@ -637,7 +637,7 @@ export function renderTimer(
 	/*
 		The gradient is scaled to the fill rather than to the trough, so a
 		nearly-empty bar still shows the whole sweep. That is Teams' own
-		behaviour: sampled at 20% remaining, the stub carried the full
+		behavior: sampled at 20% remaining, the stub carried the full
 		periwinkle-to-mauve run rather than just its pink end.
 	*/
 	const paint = expired || nearlyUp ? TIMER_RED : "url(#timerFill)";
@@ -675,7 +675,7 @@ export function renderTimer(
 	);
 }
 
-/** Teams' own timer colours, sampled from its bar. */
+/** Teams' own timer colors, sampled from its bar. */
 const TIMER_FROM = "#7478E8";
 const TIMER_TO = "#A05998";
 const TIMER_RED = "#D13438";
@@ -716,7 +716,7 @@ export function renderSlideJump(image: string | undefined, slide: number, total:
 	return strip(
 		backdrop +
 			// Dark enough that the number reads at a glance, light enough that
-			// the slide underneath is still recognisable.
+			// the slide underneath is still recognizable.
 			`<rect width="${STRIP_W}" height="${STRIP_H}" fill="#000000" fill-opacity="0.66" />` +
 			`<text x="100" y="${caption ? 58 : 66}" text-anchor="middle" ` +
 			`font-family="Segoe UI, system-ui, sans-serif" font-size="46" font-weight="700" ` +

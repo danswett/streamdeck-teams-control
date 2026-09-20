@@ -5,7 +5,7 @@
     A real click activates a background window because the window manager
     routes it. A posted WM_LBUTTONDOWN/UP goes directly into the target
     window's message queue, so it should neither require focus nor raise the
-    window - if Chromium honours synthetic mouse input at all.
+    window - if Chromium honors synthetic mouse input at all.
 #>
 $ErrorActionPreference = 'Continue'
 Add-Type -AssemblyName UIAutomationClient
@@ -82,7 +82,7 @@ Write-Host "render widget hwnd=$render class='$(if ($render -ne [IntPtr]::Zero) 
 $r = $mic.Current.BoundingRectangle
 $cx = [int]($r.X + $r.Width / 2)
 $cy = [int]($r.Y + $r.Height / 2)
-Write-Host "mute button centre: ($cx, $cy)  rect=$r"
+Write-Host "mute button center: ($cx, $cy)  rect=$r"
 
 $targets = @()
 if ($render -ne [IntPtr]::Zero) { $targets += , @('render widget', $render) }

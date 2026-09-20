@@ -1,8 +1,8 @@
 <#
-    Verifies the core requirement: controls work while Teams is minimised and
+    Verifies the core requirement: controls work while Teams is minimized and
     unfocused, with no keystrokes sent.
 
-    The Teams meeting window is minimised via ShowWindow (a window-manager call,
+    The Teams meeting window is minimized via ShowWindow (a window-manager call,
     not input), mute is toggled twice through the sidecar, and the reported state
     is checked after each toggle. The window is restored at the end.
 #>
@@ -68,19 +68,19 @@ function Send([string]$json, [int]$waitMs = 2000) {
 Start-Sleep -Milliseconds 1500
 Send '{"id":1,"cmd":"status"}' 1500
 
-Write-Host "`nMinimising Teams..." -ForegroundColor Yellow
+Write-Host "`nMinimizing Teams..." -ForegroundColor Yellow
 [void][Win]::ShowWindow($hwnd, $SW_MINIMIZE)
 Start-Sleep -Seconds 2
-Write-Host "  IsIconic(minimised) = $([Win]::IsIconic($hwnd))"
+Write-Host "  IsIconic(minimized) = $([Win]::IsIconic($hwnd))"
 Write-Host "  foreground window   = '$([Win]::Title([Win]::GetForegroundWindow()))'"
 
-Write-Host "`nToggling mute twice while minimised..." -ForegroundColor Yellow
+Write-Host "`nToggling mute twice while minimized..." -ForegroundColor Yellow
 Send '{"id":2,"cmd":"invoke","target":"mute"}' 2000
 Send '{"id":3,"cmd":"status"}' 1200
 Send '{"id":4,"cmd":"invoke","target":"mute"}' 2000
 Send '{"id":5,"cmd":"status"}' 1200
 
-Write-Host "`nStill minimised? $([Win]::IsIconic($hwnd))" -ForegroundColor Yellow
+Write-Host "`nStill minimized? $([Win]::IsIconic($hwnd))" -ForegroundColor Yellow
 Write-Host "Foreground window: '$([Win]::Title([Win]::GetForegroundWindow()))'"
 
 Write-Host "`nRestoring Teams..." -ForegroundColor Yellow

@@ -20,7 +20,7 @@ public sealed class ControlSpec
     /// Accessible name, for the rare control Teams ships without an
     /// AutomationId. Only the confirmation dialog's buttons are like this, and
     /// they exist solely while that dialog is up, so a name is all there is to
-    /// match on. Localised, like <see cref="OffName"/> and the state patterns.
+    /// match on. Localized, like <see cref="OffName"/> and the state patterns.
     /// </summary>
     public string? Name { get; set; }
 
@@ -91,7 +91,7 @@ public sealed class ControlSpec
     /// For buttons whose label never changes and whose state lives only in the
     /// tooltip: "Private view" stays "Private view" either way, while its
     /// description switches between allowing and preventing. Chromium publishes
-    /// the tooltip there, so it reads without hovering. Localised, like the name
+    /// the tooltip there, so it reads without hovering. Localized, like the name
     /// patterns it reuses.
     /// </summary>
     public bool StateFromFullDescription { get; set; }
@@ -152,7 +152,7 @@ public sealed class ControlSpec
 
     /// <summary>
     /// These patterns come from selectors.json, which users are invited to edit
-    /// to localise the state labels. A pattern that backtracks catastrophically
+    /// to localize the state labels. A pattern that backtracks catastrophically
     /// would otherwise wedge the UIA worker thread with no error at all, so
     /// matching is bounded and a timeout is treated as "did not match".
     /// </summary>
@@ -195,7 +195,7 @@ public sealed class SelectorConfig
     public string FullToolbarAutomationId { get; set; } = "callingButtons-showMoreBtn";
 
     /// <summary>
-    /// How to recognise a PowerPoint Live presentation and read what it is
+    /// How to recognize a PowerPoint Live presentation and read what it is
     /// showing. Separate from <see cref="Controls"/> because this is context
     /// rather than something that can be pressed.
     /// </summary>
@@ -212,12 +212,12 @@ public sealed class SelectorConfig
 }
 
 /// <summary>
-/// Recognising Teams' meeting timer.
+/// Recognizing Teams' meeting timer.
 ///
 /// None of its controls carry an AutomationId, and the remaining time exists
 /// nowhere but the accessible name of the button that holds them:
 /// "Timer controls, 4 min, 57 sec remaining". Every pattern here is therefore
-/// matched against a localised string, and every one is overridable in
+/// matched against a localized string, and every one is overridable in
 /// selectors.json for that reason.
 /// </summary>
 public sealed class TimerSpec
@@ -236,7 +236,7 @@ public sealed class TimerSpec
     /// Deliberately never pressed. Teams replaces Pause/Resume with this when
     /// the timer expires, and it ends the timer for every person in the
     /// meeting - not something a press meaning "pause" should ever do. It is
-    /// matched only so the expired state can be recognised.
+    /// matched only so the expired state can be recognized.
     /// </summary>
     public string CancelPattern { get; set; } = @"^\s*Cancel timer for everyone\s*$";
 
@@ -307,13 +307,13 @@ public sealed class PowerPointLiveSpec
     /// <summary>
     /// Pulls the ink color out of a drawing tool's accessible name: the part
     /// after the colon and before any thickness. "Pen: Light blue, Thickness 3"
-    /// gives "Light blue". Localised, like the name it reads.
+    /// gives "Light blue". Localized, like the name it reads.
     /// </summary>
     public string ToolColorPattern { get; set; } = @"^[^:]+:\s*([^,]+?)\s*(?:,|$)";
 
     /// <summary>
     /// Pulls the ink thickness out of the same accessible name the color comes
-    /// from: "Pen: Light blue, Thickness 3" gives 3. Localised, like the name it
+    /// from: "Pen: Light blue, Thickness 3" gives 3. Localized, like the name it
     /// reads. Only the pen and highlighter carry one; the laser has a color and
     /// no thickness.
     /// </summary>
@@ -342,7 +342,7 @@ public sealed class PowerPointLiveSpec
     ///
     /// A list rather than "whichever swatch is selected" because the pen's
     /// flyout also carries the laser pointer's arrow options, and one of those
-    /// always reports itself as selected too. Localised, like the names it
+    /// always reports itself as selected too. Localized, like the names it
     /// matches.
     /// </summary>
     public string[] InkColorNames { get; set; } =
@@ -371,7 +371,7 @@ public sealed class PowerPointLiveSpec
     /// The laser pointer's arrow options, which share the drawing-tool flyout
     /// with the color swatches and are the reason a color cannot simply be
     /// "the selected radio button": one of these always reports itself selected
-    /// too. Localised, like the names they match.
+    /// too. Localized, like the names they match.
     /// </summary>
     public string ArrowOptionPattern { get; set; } = @"^(No arrow|Single arrow|Double arrows)$";
 
@@ -1899,7 +1899,7 @@ public sealed class TeamsClient : IDisposable
             border: which != "next", fadeFrames: fadeFrames,
             slotWidth: slotWidth, slotHeight: slotHeight);
 
-        // Minimising Teams lands here: the window reports a rectangle but will
+        // Minimizing Teams lands here: the window reports a rectangle but will
         // not draw itself, so there is nothing to show. The next slide's name
         // is worth sending even so; the current slide's is only ever the
         // container's own "Current slide: N", which says nothing useful.
@@ -2517,7 +2517,7 @@ public sealed class TeamsClient : IDisposable
     /// <summary>
     /// Presses a control. A posted click is tried first because UIA's Invoke
     /// activates the Teams window; Invoke remains the fallback for cases where
-    /// the element has no on-screen bounds, such as a minimised window.
+    /// the element has no on-screen bounds, such as a minimized window.
     /// </summary>
     private bool Press(AutomationElement el)
     {
@@ -2684,8 +2684,8 @@ public sealed class TeamsClient : IDisposable
     /// <summary>
     /// Clicks an inert point inside the meeting window to dismiss a popup.
     ///
-    /// This used to click the horizontal centre, 80px down. In the current Teams
-    /// the meeting toolbar is centred along the top, so that point landed inside
+    /// This used to click the horizontal center, 80px down. In the current Teams
+    /// the meeting toolbar is centered along the top, so that point landed inside
     /// `reaction-menu-button` and *re-opened* the flyout it was meant to close,
     /// leaving the toolbar out of the tree and breaking the next action. The
     /// middle of the window is no better: it is the participant tile, and
@@ -2975,7 +2975,7 @@ public sealed class TeamsClient : IDisposable
         var deadline = Environment.TickCount64 + timeoutMs;
         var scopes = SearchScopes(win);
 
-        // An item Teams has greyed out — Cameo with the camera off — still
+        // An item Teams has grayed out — Cameo with the camera off — still
         // exists. Kept aside rather than ignored so the caller can say
         // "disabled" and close the menu, instead of polling to the timeout and
         // leaving the flyout orphaned on screen.
@@ -3027,7 +3027,7 @@ public sealed class TeamsClient : IDisposable
 
             if (Environment.TickCount64 >= deadline) return disabled;
 
-            // Settled on "present but greyed out": report it now rather than
+            // Settled on "present but grayed out": report it now rather than
             // making the user wait out a timeout for an answer we already have.
             if (disabled is not null && Environment.TickCount64 - disabledSince >= DisabledGraceMs)
                 return disabled;
@@ -3074,7 +3074,7 @@ public sealed class TeamsClient : IDisposable
     ///
     /// Both lists are slide-sized list items in deck order, so the index is the
     /// slide number less one - but only while the list really holds every
-    /// slide. If Teams ever virtualises one, that mapping quietly points at the
+    /// slide. If Teams ever virtualizes one, that mapping quietly points at the
     /// wrong slide, and the cost of being wrong is moving the presentation
     /// somewhere nobody asked for. So it is checked against the count Teams
     /// reports rather than assumed.
@@ -3402,7 +3402,7 @@ public sealed class TeamsClient : IDisposable
 
         // Captured before opening: once the flyout is up, Teams removes the
         // toolbar from the tree and the host can no longer be located.
-        var hostPoint = CentreOf(host);
+        var hostPoint = CenterOf(host);
 
         if (!ExpandMenu(host)) return (false, $"could not open menu '{spec.Menu}'");
         var expanded = true;
@@ -3492,7 +3492,7 @@ public sealed class TeamsClient : IDisposable
         }
     }
 
-    private static (int x, int y)? CentreOf(AutomationElement el)
+    private static (int x, int y)? CenterOf(AutomationElement el)
     {
         try
         {
