@@ -458,6 +458,10 @@ public sealed class TeamsClient : IDisposable
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
+
     private readonly SelectorConfig _config;
     private readonly bool _restoreFocus;
     private readonly UIA3Automation _automation = new();
@@ -734,9 +738,6 @@ public sealed class TeamsClient : IDisposable
         }
     }
 
-    private static readonly Dictionary<int, bool> TeamsPidCache = new();
-    private static long _pidCacheStamp;
-
     /// <summary>
     /// Teams windows already checked and found not to host a meeting: handle
     /// mapped to when it was checked and the window title at that time.
@@ -792,13 +793,8 @@ public sealed class TeamsClient : IDisposable
     /// </summary>
     private bool TryUpgradeMeetingWindow()
     {
-        AutomationElement[] children;
-        try { children = _automation.GetDesktop().FindAllChildren(); }
-        catch { return false; }
-
-        foreach (var w in children)
+        foreach (var w in TeamsWindows())
         {
-            if (!IsTeams(w)) continue;
             if (Equals(w, _meetingWindow)) continue;
             try
             {
@@ -817,33 +813,60 @@ public sealed class TeamsClient : IDisposable
         return false;
     }
 
-    private static bool IsTeams(AutomationElement el)
+    /// <summary>
+    /// Every top-level Teams window, as automation elements.
+    ///
+    /// Found through Win32 rather than by enumerating the desktop through UI
+    /// Automation. The UIA route returns every top-level window on the machine
+    /// - 21 of them on a normal desktop - and deciding which belong to Teams
+    /// means reading ProcessId off each, one cross-process call at a time.
+    /// Measured at 709-1602 ms of every idle poll, to find the two or three
+    /// windows that matter.
+    ///
+    /// EnumWindows plus GetWindowThreadProcessId answers the same question in
+    /// process, and only the survivors are turned into automation elements.
+    /// </summary>
+    private AutomationElement[] TeamsWindows()
     {
-        int pid;
-        try { pid = el.Properties.ProcessId.Value; }
-        catch { return false; }
-
-        // Process lookups are not free and the desktop is rescanned whenever no
-        // meeting is cached, so the answer is remembered briefly.
-        var now = Environment.TickCount64;
-        if (now - _pidCacheStamp > 10_000)
+        var pids = new HashSet<uint>();
+        foreach (var proc in Process.GetProcessesByName("ms-teams"))
         {
-            TeamsPidCache.Clear();
-            _pidCacheStamp = now;
+            try { pids.Add((uint)proc.Id); }
+            catch { }
+            finally { proc.Dispose(); }
         }
 
-        if (TeamsPidCache.TryGetValue(pid, out var known)) return known;
+        if (pids.Count == 0) return Array.Empty<AutomationElement>();
 
-        bool isTeams;
+        var handles = new List<IntPtr>();
         try
         {
-            using var p = Process.GetProcessById(pid);
-            isTeams = string.Equals(p.ProcessName, "ms-teams", StringComparison.OrdinalIgnoreCase);
+            EnumWindows((h, _) =>
+            {
+                GetWindowThreadProcessId(h, out var owner);
+                if (pids.Contains(owner)) handles.Add(h);
+                return true;
+            }, IntPtr.Zero);
         }
-        catch { isTeams = false; }
+        catch { return Array.Empty<AutomationElement>(); }
 
-        TeamsPidCache[pid] = isTeams;
-        return isTeams;
+        var windows = new List<AutomationElement>(handles.Count);
+        foreach (var h in handles)
+        {
+            // Teams keeps a number of invisible helper windows - IME hosts, a
+            // GDI+ surface, a DDE server - which carry no UI and would only be
+            // searched for controls that cannot be there.
+            if (!IsWindowVisible(h)) continue;
+
+            try
+            {
+                var el = _automation.FromHandle(h);
+                if (el is not null) windows.Add(el);
+            }
+            catch { /* window closed between enumerating and binding */ }
+        }
+
+        return windows.ToArray();
     }
 
     private static AutomationElement? FindById(AutomationElement scope, string automationId)
@@ -900,13 +923,29 @@ public sealed class TeamsClient : IDisposable
         catch { return false; }
     }
 
+    /// <summary>
+    /// Whether a window carries any sign of a meeting.
+    ///
+    /// One search, not one per marker. Searching them in turn meant a full
+    /// descendant walk of the window for every marker that was absent, and the
+    /// chat window holds thousands of nodes - measured at 1.0-2.1 s per idle
+    /// poll on the deep-scan path. An OR condition answers all four in the one
+    /// pass, the same shape BuildIndex uses for the snapshot.
+    /// </summary>
     private static bool HasAnyMarker(AutomationElement win)
     {
-        foreach (var marker in MeetingMarkers)
+        try
         {
-            if (FindById(win, marker) is not null) return true;
+            var found = win.FindFirstDescendant(cf =>
+            {
+                FlaUI.Core.Conditions.ConditionBase condition = cf.ByAutomationId(MeetingMarkers[0]);
+                for (var i = 1; i < MeetingMarkers.Length; i++)
+                    condition = condition.Or(cf.ByAutomationId(MeetingMarkers[i]));
+                return condition;
+            });
+            return found is not null;
         }
-        return false;
+        catch { return false; }
     }
 
     /// <summary>Locates the Teams window that currently hosts meeting controls.</summary>
@@ -958,20 +997,22 @@ public sealed class TeamsClient : IDisposable
         _cache.Clear();
         ClearControlWatches();
         EnableAccessibility();
+        _profile?.Mark("win:nudge");
         EnsureWindowWatch();
+        _profile?.Mark("win:watch");
 
         AutomationElement[] children;
-        try { children = _automation.GetDesktop().FindAllChildren(); }
+        try { children = TeamsWindows(); }
         catch { return null; }
+        _profile?.Mark($"win:enum({children.Length})");
 
         var now = Environment.TickCount64;
         AutomationElement? fallback = null;
         IntPtr fallbackHwnd = IntPtr.Zero;
+        var probed = 0;
 
         foreach (var w in children)
         {
-            if (!IsTeams(w)) continue;
-
             var hwnd = HandleOf(w);
             var title = TitleOf(hwnd);
 
@@ -996,6 +1037,7 @@ public sealed class TeamsClient : IDisposable
                 // still used on the cached window, where flyouts matter.
                 if (FindById(w, _config.MeetingProbeAutomationId) is null)
                 {
+                    probed++;
                     if (hwnd != IntPtr.Zero) _nonMeetingWindows[hwnd] = (now, title);
                     continue;
                 }
@@ -1030,6 +1072,8 @@ public sealed class TeamsClient : IDisposable
             return fallback;
         }
 
+        _profile?.Mark($"win:probe({probed})");
+
         // An open flyout removes the whole toolbar from the tree, leaving only
         // the flyout's own buttons, so the cheap probe finds nothing. A running
         // sidecar rides that out on its cached window, but one that *starts*
@@ -1045,7 +1089,6 @@ public sealed class TeamsClient : IDisposable
 
             foreach (var w in children)
             {
-                if (!IsTeams(w)) continue;
                 try
                 {
                     if (!HasAnyMarker(w)) continue;
@@ -1061,6 +1104,8 @@ public sealed class TeamsClient : IDisposable
                 }
                 catch { /* window died mid-walk */ }
             }
+
+            _profile?.Mark("win:deepScan");
         }
 
         // Drop entries for windows that have since closed.
@@ -2426,44 +2471,51 @@ public sealed class TeamsClient : IDisposable
     public MeetingSnapshot GetSnapshot()
     {
         var stages = ProfileSnapshots ? new StageLog() : null;
-
-        var snap = new MeetingSnapshot();
-
-        var win = ResolveMeetingWindow();
-        stages?.Mark("window");
-
-        // Resolved first so this can usually be answered for free. A live
-        // meeting window is proof Teams is running, and the enumeration it
-        // stands in for walks every process on the machine - measured at 12 ms
-        // of every snapshot, to answer a question the window already settles.
-        snap.TeamsRunning = win is not null || AnyTeamsProcess();
-        stages?.Mark("processes");
-
-        snap.InMeeting = win is not null;
-        if (win is null)
-        {
-            stages?.Report("snapshot(no meeting)");
-            return snap;
-        }
-
-        snap.WindowTitle = NameOf(win);
-
-        // One traversal answers every lookup below. Built here so the whole
-        // snapshot sees a consistent view, and cleared in the finally so
-        // presses outside a snapshot still resolve elements live.
-        _index = BuildIndex(win);
-        stages?.Mark("index");
         _profile = stages;
+
         try
         {
-            return Populate(snap, win);
+            var snap = new MeetingSnapshot();
+
+            var win = ResolveMeetingWindow();
+            stages?.Mark("window");
+
+            // Resolved first so this can usually be answered for free. A live
+            // meeting window is proof Teams is running, and the enumeration it
+            // stands in for walks every process on the machine - measured at
+            // 12 ms of every snapshot, to answer a question the window already
+            // settles.
+            snap.TeamsRunning = win is not null || AnyTeamsProcess();
+            stages?.Mark("processes");
+
+            snap.InMeeting = win is not null;
+            if (win is null)
+            {
+                stages?.Report("snapshot(no meeting)");
+                return snap;
+            }
+
+            snap.WindowTitle = NameOf(win);
+
+            // One traversal answers every lookup below. Built here so the whole
+            // snapshot sees a consistent view, and cleared in the finally so
+            // presses outside a snapshot still resolve elements live.
+            _index = BuildIndex(win);
+            stages?.Mark("index");
+            try
+            {
+                return Populate(snap, win);
+            }
+            finally
+            {
+                _index = null;
+                _gridPresent = null;
+                stages?.Report("snapshot");
+            }
         }
         finally
         {
-            _index = null;
-            _gridPresent = null;
             _profile = null;
-            stages?.Report("snapshot");
         }
     }
 
@@ -3270,9 +3322,8 @@ public sealed class TeamsClient : IDisposable
         var scopes = new List<AutomationElement> { win };
         try
         {
-            foreach (var w in _automation.GetDesktop().FindAllChildren())
+            foreach (var w in TeamsWindows())
             {
-                if (!IsTeams(w)) continue;
                 if (Equals(w, win)) continue;
                 scopes.Add(w);
             }
@@ -3862,6 +3913,20 @@ public sealed class TeamsClient : IDisposable
     private (bool ok, string? error) InvokeCore(string target, ControlSpec spec, string? arg = null)
     {
         var win = ResolveMeetingWindow();
+        if (win is null)
+        {
+            // Teams swaps the meeting between a full window and a compact one
+            // as focus moves, and destroys the window it is leaving. A press
+            // landing in that gap finds nothing and would be reported as "not
+            // in a meeting" to someone plainly sitting in one - observed while
+            // pressing during a flip, where the very next press succeeded.
+            //
+            // Rediscovery is what is needed, and the tree of the new window may
+            // also be asleep, so both are done before giving up.
+            EnableAccessibility(force: true);
+            Thread.Sleep(RetrySettleMs);
+            win = ResolveMeetingWindow();
+        }
         if (win is null) return (false, "not in a meeting");
 
         // A control that is already on may close from somewhere else entirely —
