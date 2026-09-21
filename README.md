@@ -428,6 +428,28 @@ Idle, outside a meeting, the sidecar settles at ~0.6% CPU and ~12 MB. Discovery
 is the expensive operation — a *failed* UIA search walks an entire window
 subtree — so windows that turn out not to be meetings are cached as such.
 
+### Direct mode (optional, off by default)
+
+One cost is visible: a control that lives inside a flyout needs that flyout
+**open on screen**, because Chromium only builds menu items into the
+accessibility tree once the popup is genuinely showing. Reactions, background
+blur, the PowerPoint Live menus and the ink palette all work this way.
+
+**Direct mode** drives those same controls by running JavaScript inside Teams'
+own page, where the menu can be opened, used and closed while styled invisible —
+nothing appears on screen, and a reaction completes in ~240 ms rather than
+seconds. It also works with Teams minimized, and can jump straight to a slide
+without opening grid view.
+
+It needs a local debugging port on Teams, which is **unauthenticated**, so the
+plugin never opens one: it only uses a port the user opened deliberately, and
+verifies the port belongs to Teams before touching it. Anything Direct mode
+cannot improve falls back to the normal path, so the worst case is the behaviour
+above.
+
+See **[docs/direct-mode.md](docs/direct-mode.md)** for the tradeoff and the
+steps.
+
 ---
 
 ## Bundled profiles

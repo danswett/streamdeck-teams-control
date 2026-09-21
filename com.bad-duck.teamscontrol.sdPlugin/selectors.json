@@ -37,9 +37,20 @@
 		"Captured from Teams 26255.500.5120.7530 on 2026-09-14, PowerPoint Live added",
 		"2026-09-17. After a Teams update, run bin/sidecar/TeamsBridge.exe from a",
 		"terminal and send it {\"id\":1,\"cmd\":\"discover\",\"menu\":\"\"} to dump the live",
-		"UI tree, then correct the ids below and restart the plugin."
+		"UI tree, then correct the ids below and restart the plugin.",
+		"",
+		"'directMode' is OPT-IN and off by default. It drives controls by running",
+		"script in Teams' own page instead of opening flyouts on screen, which needs",
+		"a local debugging port that YOU open - the plugin never opens one. That port",
+		"is unauthenticated, so read docs/direct-mode.md before enabling it. Anything",
+		"direct mode cannot do falls back to UI Automation, so turning it off is",
+		"always safe."
 	],
 	"version": 2,
+	"directMode": {
+		"enabled": false,
+		"port": 9457
+	},
 	"meetingProbeAutomationId": "microphone-button",
 	"powerPointLive": {
 		"$comment": [

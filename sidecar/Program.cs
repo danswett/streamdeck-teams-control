@@ -474,6 +474,26 @@ public static class Program
                 break;
             }
 
+            case "directmode":
+            {
+                // Its own command rather than a field on every snapshot: the
+                // answer changes only when Teams restarts or a deck goes up,
+                // and probing costs a loopback round trip that a state poll
+                // should not be paying for.
+                var status = client.ProbeDirectMode();
+                Emit(w =>
+                {
+                    w.WriteString("type", "directmode");
+                    w.WriteNumber("id", item.Id);
+                    w.WriteBoolean("ok", true);
+                    w.WriteBoolean("usable", status.Usable);
+                    w.WriteString("reason", status.Reason);
+                    w.WriteBoolean("deckShared", status.DeckShared);
+                    if (status.Browser is not null) w.WriteString("browser", status.Browser);
+                });
+                break;
+            }
+
             case "discover":            {
                 var rows = client.Discover(item.Menu);
                 Emit(w =>
@@ -584,6 +604,9 @@ public static class Program
             else
                 config.PowerPointLive = overrides.PowerPointLive;
 
+            // Opt-in and off by default, so an absent block leaves it off.
+            config.DirectMode = overrides.DirectMode;
+
             var applied = 0;
             foreach (var (key, spec) in overrides.Controls)
             {
@@ -653,8 +676,21 @@ public static class Program
                 spec.DetachedGraceMs = Math.Clamp(dgv, 0, 300_000);
         }
 
-        if (!root.TryGetProperty("controls", out var controls)) return cfg;
+        if (root.TryGetProperty("directMode", out var dm) && dm.ValueKind == JsonValueKind.Object)
+        {
+            var d = cfg.DirectMode;
+            if (dm.TryGetProperty("enabled", out var de) &&
+                de.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                d.Enabled = de.GetBoolean();
+            if (dm.TryGetProperty("port", out var dp) && dp.TryGetInt32(out var dpv))
+                d.Port = Math.Clamp(dpv, 1, 65535);
+            if (dm.TryGetProperty("timeoutMs", out var dt) && dt.TryGetInt32(out var dtv))
+                d.TimeoutMs = Math.Clamp(dtv, 250, 10_000);
+            if (dm.TryGetProperty("probeTtlMs", out var pt) && pt.TryGetInt32(out var ptv))
+                d.ProbeTtlMs = Math.Clamp(ptv, 1_000, 120_000);
+        }
 
+        if (!root.TryGetProperty("controls", out var controls)) return cfg;
         foreach (var prop in controls.EnumerateObject())
         {
             var o = prop.Value;

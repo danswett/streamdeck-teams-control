@@ -208,6 +208,13 @@ public sealed class SelectorConfig
     /// </summary>
     public TimerSpec Timer { get; set; } = new();
 
+    /// <summary>
+    /// The opt-in JavaScript path. Off by default, and never switched on by the
+    /// plugin: it only works when the user has opened a debugging port on Teams
+    /// themselves. See docs/direct-mode.md.
+    /// </summary>
+    public DirectModeSpec DirectMode { get; set; } = new();
+
     public Dictionary<string, ControlSpec> Controls { get; set; } = new();
 }
 
@@ -519,6 +526,24 @@ public sealed class TeamsClient : IDisposable
     {
         _config = config;
         _restoreFocus = restoreFocus;
+        _dom = new DomActuator(config.DirectMode);
+        _dom.UseProbeElement(config.MeetingProbeAutomationId);
+    }
+
+    /// <summary>
+    /// The opt-in JavaScript path. Always constructed, but inert unless the
+    /// user has both enabled it and opened a debugging port themselves.
+    /// </summary>
+    private readonly DomActuator _dom;
+
+    /// <summary>What Direct mode currently sees, for reporting to the plugin.</summary>
+    public DirectModeStatus DirectModeStatus => _dom.Status;
+
+    /// <summary>Re-checks the debugging port and reports what it found.</summary>
+    public DirectModeStatus ProbeDirectMode()
+    {
+        _dom.Probe();
+        return _dom.Status;
     }
 
     /// <summary>
@@ -2189,7 +2214,7 @@ public sealed class TeamsClient : IDisposable
             do
             {
                 if (FindAnywhere(win, root) is not null) return true;
-                Thread.Sleep(60);
+                Thread.Sleep(PollIntervalMs);
             } while (Environment.TickCount64 < until);
             return false;
         }
@@ -2717,25 +2742,80 @@ public sealed class TeamsClient : IDisposable
                 (AtX(0.88), AtY(0.28)),
                 (AtX(0.50), AtY(0.93))
             };
-            var occupied = ClickableBounds(win);
-
             // The slide surface is not inert. Clicking it during PowerPoint Live
             // advances the deck — for everyone, if you are the one presenting —
             // so a dismissal that landed there was silently driving the
             // presentation. It carries no clickable children of its own, so
             // nothing else would have excluded it.
             var slides = PowerPointSurfaceBounds(win);
-            if (slides is { } s) occupied.Add(s);
+
+            // Asking what is at five points is far cheaper than enumerating
+            // everything that could be at any of them. Walking the window's
+            // descendants for their bounds measured as the single largest cost
+            // of a flyout press — 969 ms of a 1390 ms reaction, against an open
+            // that took 0 ms — because a meeting window with a popup up is a
+            // very large tree, and every element costs a cross-process property
+            // read. A hit test is one read per candidate.
+            List<System.Drawing.Rectangle>? occupied = null;
 
             foreach (var (x, y) in candidates)
             {
-                if (occupied.Any(b => b.Contains(x, y))) continue;
+                if (slides is { } s && s.Contains(x, y)) continue;
+
+                var hit = OccupiedAt(x, y);
+                if (hit is null)
+                {
+                    // Hit testing is unavailable, so fall back to the exhaustive
+                    // walk — once, and only if it is actually needed.
+                    occupied ??= ClickableBounds(win);
+                    if (occupied.Any(b => b.Contains(x, y))) continue;
+                }
+                else if (hit.Value)
+                {
+                    continue;
+                }
+
                 if (InputPoster.TryClickPoint(_renderWidget, x, y)) return true;
             }
 
             return false;
         }
         catch { return false; }
+    }
+
+    /// <summary>
+    /// Whether a clickable control sits at a screen point, or null when the
+    /// question could not be answered and the caller should fall back.
+    ///
+    /// The element under a point is usually a leaf — the text inside a button
+    /// rather than the button — so a few ancestors are checked too. Kept short
+    /// because everything in a meeting window is inside *some* container, and
+    /// walking to the top would call everything occupied.
+    /// </summary>
+    private bool? OccupiedAt(int x, int y)
+    {
+        try
+        {
+            var el = _automation.FromPoint(new System.Drawing.Point(x, y));
+            if (el is null) return false;
+
+            var node = el;
+            for (var i = 0; i < 4 && node is not null; i++)
+            {
+                ControlType type;
+                try { type = node.Properties.ControlType.ValueOrDefault; }
+                catch { return null; }
+
+                if (type is ControlType.Button or ControlType.MenuItem or ControlType.ListItem
+                    or ControlType.CheckBox or ControlType.RadioButton or ControlType.Hyperlink)
+                    return true;
+
+                node = SafeParent(node);
+            }
+
+            return false;
+        }
+        catch { return null; }
     }
 
     /// <summary>
@@ -2848,6 +2928,35 @@ public sealed class TeamsClient : IDisposable
         return IsToolbarVisible(win);
     }
 
+    /// <summary>
+    /// How often a wait re-checks the tree.
+    ///
+    /// Every timeout in the flyout path is a ceiling that exits as soon as the
+    /// condition holds, so what a user actually sees is dominated by this
+    /// interval rather than by the ceilings. Teams was measured answering a
+    /// menu open in roughly 25 ms - a reaction flyout driven end to end took
+    /// 238 ms including the item click and the dismissal - so polling at 60-80
+    /// ms spent most of a press waiting for an answer that had already arrived.
+    ///
+    /// A UIA property read is cheap next to the popup it is inspecting, and the
+    /// wait is bounded, so the extra reads cost far less than the latency they
+    /// remove.
+    /// </summary>
+    private const int PollIntervalMs = 25;
+
+    /// <summary>
+    /// How often to re-scan for an item that has not appeared yet.
+    ///
+    /// Deliberately slower than <see cref="PollIntervalMs"/>. A dismissal check
+    /// is one property read, but a search for an element that is not there yet
+    /// walks an entire window subtree — the expensive case the README calls out
+    /// — so scanning three times as often would triple that cost to learn the
+    /// same thing. The item appears when Teams populates the menu, which was
+    /// measured at roughly 450 ms for a reaction flyout and is not influenced
+    /// by how often it is asked for.
+    /// </summary>
+    private const int PopupScanIntervalMs = 60;
+
     private bool WaitForDismissed(AutomationElement win, AutomationElement? host, int timeoutMs)
     {
         var deadline = Environment.TickCount64 + timeoutMs;
@@ -2855,7 +2964,7 @@ public sealed class TeamsClient : IDisposable
         {
             if (IsFlyoutClosed(win, host)) return true;
             if (Environment.TickCount64 >= deadline) return false;
-            Thread.Sleep(60);
+            Thread.Sleep(PollIntervalMs);
         }
     }
 
@@ -2866,7 +2975,7 @@ public sealed class TeamsClient : IDisposable
         {
             if (IsToolbarVisible(win)) return true;
             if (Environment.TickCount64 >= deadline) return false;
-            Thread.Sleep(60);
+            Thread.Sleep(PollIntervalMs);
         }
     }
 
@@ -3032,7 +3141,7 @@ public sealed class TeamsClient : IDisposable
             if (disabled is not null && Environment.TickCount64 - disabledSince >= DisabledGraceMs)
                 return disabled;
 
-            Thread.Sleep(80);
+            Thread.Sleep(PopupScanIntervalMs);
         }
     }
 
@@ -3050,6 +3159,11 @@ public sealed class TeamsClient : IDisposable
         if (!ink && !jump && !timer && !_config.Controls.TryGetValue(target, out spec))
             return (false, $"unknown target '{target}'");
 
+        // Direct mode runs first when it is available. It is deliberately
+        // outside the focus guard below: evaluating script in the page never
+        // activates the Teams window, so there is no focus to put back.
+        if (TryDirect(target, spec, arg, jump, timer, ink) is { } handled) return handled;
+
         // Chromium activates the Teams window when a control is invoked, so the
         // window that had focus is put back afterwards.
         var previousFocus = _restoreFocus ? FocusGuard.Capture() : IntPtr.Zero;
@@ -3062,6 +3176,58 @@ public sealed class TeamsClient : IDisposable
         finally
         {
             if (previousFocus != IntPtr.Zero) FocusGuard.RestoreAfter(previousFocus);
+        }
+    }
+
+    /// <summary>
+    /// Attempts the press through Direct mode, returning null when it did not
+    /// take it so the caller runs the UI Automation path.
+    ///
+    /// A declined press is silent, because declining is the normal state of
+    /// affairs: Direct mode is off unless the user opened a debugging port. A
+    /// press that was taken and then failed is logged, because that is a real
+    /// fault worth seeing even though the fallback hides it from the user.
+    /// </summary>
+    private (bool ok, string? error)? TryDirect(
+        string target, ControlSpec? spec, string? arg, bool jump, bool timer, bool ink)
+    {
+        // The timer has no ids to find anything by, and ink colour is read back
+        // out of a flyout the UIA path already knows how to drive. Neither is
+        // worth a second implementation yet.
+        if (timer || ink) return null;
+
+        try
+        {
+            if (jump)
+            {
+                if (!int.TryParse(arg, out var slide)) return null;
+                var outcome = _dom.GoToSlide(slide);
+                return Settle(outcome, target);
+            }
+
+            if (spec is null) return null;
+
+            var direct = _dom.Invoke(target, spec, arg, IsSlideShowControl(spec), out var wasChecked);
+            if (direct is { Handled: true, Ok: true } && wasChecked.HasValue)
+                _lastStates[target] = !wasChecked.Value;
+
+            return Settle(direct, target);
+        }
+        catch (Exception ex)
+        {
+            // Never let the optional path take a press down with it.
+            Console.Error.WriteLine($"direct mode threw for '{target}': {ex.Message}; falling back");
+            return null;
+        }
+
+        static (bool ok, string? error)? Settle(DomOutcome outcome, string target)
+        {
+            if (!outcome.Handled) return null;
+            if (outcome.Ok) return (true, null);
+
+            Console.Error.WriteLine(
+                $"direct mode could not press '{target}': {outcome.Error}; falling back to UI Automation");
+            return null;
         }
     }
 
@@ -3323,6 +3489,66 @@ public sealed class TeamsClient : IDisposable
         return null;
     }
 
+    /// <summary>
+    /// How long to let a popup settle after an item is chosen, before clicking
+    /// inert space. A ceiling, not a cost: the wait returns as soon as the
+    /// flyout has gone.
+    /// </summary>
+    private const int PostSelectSettleMs = 200;
+
+    /// <summary>
+    /// Pause before re-pressing a menu trigger Teams swallowed the first click
+    /// on. Pressing again immediately is read as a double-click on the same
+    /// control, which opens and closes the menu.
+    /// </summary>
+    private const int RetrySettleMs = 120;
+
+    /// <summary>
+    /// Settle after opening a nested menu. The item search that follows polls
+    /// anyway, so this only has to outlast the frame in which the submenu
+    /// replaces its parent, not the time it takes to populate.
+    /// </summary>
+    private const int SubmenuSettleMs = 80;
+
+    /// <summary>
+    /// A flyout operation slower than this is worth a line in the log.
+    ///
+    /// Every timeout on this path is a ceiling with an early exit, so the
+    /// interesting number is what a press actually cost, not what it was
+    /// allowed to. Recorded per stage so a regression names the stage that
+    /// caused it rather than just the total.
+    /// </summary>
+    private const int SlowFlyoutMs = 750;
+
+    /// <summary>
+    /// Records how long each stage of a flyout walk took, and reports the whole
+    /// breakdown when the total is slow enough to be worth looking at.
+    ///
+    /// Every timeout on this path is a ceiling with an early exit, so the number
+    /// that matters is what a press actually cost. Kept per stage because
+    /// "3 seconds" is not actionable but "dismiss=2800ms" names the culprit.
+    /// </summary>
+    private sealed class StageLog
+    {
+        private readonly long _start = Environment.TickCount64;
+        private long _last = Environment.TickCount64;
+        private readonly List<string> _stages = new(5);
+
+        public void Mark(string stage)
+        {
+            var now = Environment.TickCount64;
+            _stages.Add($"{stage}={now - _last}ms");
+            _last = now;
+        }
+
+        public void ReportIfSlow(string target, int thresholdMs)
+        {
+            var total = Environment.TickCount64 - _start;
+            if (total < thresholdMs) return;
+            Console.Error.WriteLine($"slow flyout '{target}': {total}ms [{string.Join(' ', _stages)}]");
+        }
+    }
+
     private (bool ok, string? error) InvokeCore(string target, ControlSpec spec, string? arg = null)
     {
         var win = ResolveMeetingWindow();
@@ -3404,8 +3630,10 @@ public sealed class TeamsClient : IDisposable
         // toolbar from the tree and the host can no longer be located.
         var hostPoint = CenterOf(host);
 
+        var stages = new StageLog();
         if (!ExpandMenu(host)) return (false, $"could not open menu '{spec.Menu}'");
         var expanded = true;
+        stages.Mark("open");
 
         AutomationElement? item = null;
         try
@@ -3417,12 +3645,13 @@ public sealed class TeamsClient : IDisposable
                 var sub = FindInPopup(win, new[] { spec.Submenu }, null, 2000);
                 if (sub is null) return (false, $"submenu '{spec.Submenu}' not found");
                 if (!ExpandMenu(sub)) return (false, $"could not open submenu '{spec.Submenu}'");
-                Thread.Sleep(250);
+                Thread.Sleep(SubmenuSettleMs);
             }
 
             // Background-effect menus are large and populate lazily, so allow
             // a little longer than a simple reaction flyout.
             item = FindInPopup(win, itemIds, itemNameRx, 2500);
+            stages.Mark("find");
 
             // If the toolbar is still showing, the menu never opened. Teams
             // swallows exactly one click on the trigger after a previous
@@ -3431,16 +3660,17 @@ public sealed class TeamsClient : IDisposable
             if (item is null && IsToolbarVisible(win))
             {
                 Console.Error.WriteLine($"menu '{spec.Menu}' did not open; pressing it again");
-                Thread.Sleep(200);
+                Thread.Sleep(RetrySettleMs);
                 if (ExpandMenu(host))
                 {
                     if (!string.IsNullOrEmpty(spec.Submenu))
                     {
                         var sub = FindInPopup(win, new[] { spec.Submenu }, null, 1500);
-                        if (sub is not null) { ExpandMenu(sub); Thread.Sleep(250); }
+                        if (sub is not null) { ExpandMenu(sub); Thread.Sleep(SubmenuSettleMs); }
                     }
                     item = FindInPopup(win, itemIds, itemNameRx, 2000);
                 }
+                stages.Mark("retry");
             }
 
             if (item is null)
@@ -3472,6 +3702,7 @@ public sealed class TeamsClient : IDisposable
             var wasChecked = IsChecked(item);
 
             if (!Press(item)) return (false, $"could not invoke item for '{target}'");
+            stages.Mark("click");
 
             if (wasChecked.HasValue) _lastStates[target] = !wasChecked.Value;
 
@@ -3480,8 +3711,16 @@ public sealed class TeamsClient : IDisposable
             // menu button. A click on inert space dismisses the popup and clears
             // the suppression, so the following press works first time instead
             // of needing the retry below.
-            Thread.Sleep(200);
+            //
+            // The wait is for the popup to settle before clicking away, not a
+            // fixed cost: it returns the moment the flyout has gone, which is
+            // the common case. The click still happens either way, because
+            // clearing the swallowed-click state is the half of this that has
+            // nothing to do with whether the popup is still up.
+            WaitForDismissed(win, host, PostSelectSettleMs);
+            stages.Mark("settle");
             TryClickAway(win);
+            stages.Mark("away");
             return (true, null);
         }
         finally
@@ -3489,6 +3728,8 @@ public sealed class TeamsClient : IDisposable
             // Always required: the flyout does not reliably close by itself, and
             // leaving it open hides the toolbar.
             DismissFlyout(win, item, host, hostPoint);
+            stages.Mark("dismiss");
+            stages.ReportIfSlow(target, SlowFlyoutMs);
         }
     }
 
