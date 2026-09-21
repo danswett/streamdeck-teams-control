@@ -10,7 +10,8 @@ from your Stream Deck, with the real state on every key.**
 [![build](https://github.com/danswett/streamdeck-teams-control/actions/workflows/build.yml/badge.svg)](https://github.com/danswett/streamdeck-teams-control/actions/workflows/build.yml)
 [![release](https://img.shields.io/github/v/release/danswett/streamdeck-teams-control?label=release)](https://github.com/danswett/streamdeck-teams-control/releases)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-![Windows only](https://img.shields.io/badge/platform-Windows-0078D4)
+![Windows](https://img.shields.io/badge/platform-Windows-0078D4)
+![macOS](https://img.shields.io/badge/platform-macOS-000000)
 
 [Install](#install) · [What you can control](#what-you-can-control) ·
 [Dials](#dials-and-the-touch-strip) · [Your deck](#every-deck-and-what-it-gets) ·
@@ -40,7 +41,9 @@ pressed something.
   get layouts built for their own grid, and the decks with dials get those too.
   [See what yours gets.](#every-deck-and-what-it-gets)
 
-> **Windows only.** See [Why not macOS?](#why-not-macos)
+> **Windows** is the fully worked-out path (focus-free clicks, PowerPoint Live
+> ink, slide thumbnails). **macOS** is a first-cut sidecar: meeting toolbar,
+> reactions, live mute/camera state. See [macOS](#macos).
 
 ---
 
@@ -365,10 +368,11 @@ Stream Deck app
 plugin.js ── Node 24, @elgato/streamdeck v2
       │  JSON lines over stdin/stdout
       ▼
-TeamsBridge.exe ── .NET 10 + FlaUI (UIA3)
-      │  UI Automation / COM
+Windows: TeamsBridge.exe ── .NET 10 + FlaUI (UIA3)
+macOS:   TeamsBridge     ── Swift + AXUIElement
+      │
       ▼
-Microsoft Teams (ms-teams.exe, WebView2)
+Microsoft Teams
 ```
 
 Five things make this reliable:
@@ -987,12 +991,26 @@ the color is read from the flyout's swatches — and those carry only a name.
 options. The timer publishes its remaining time only inside an accessible name,
 so the whole `timer` section is localized strings.
 
-### Why not macOS?
+### macOS
 
-The equivalent on macOS is the `AXUIElement` accessibility API — a separate
-implementation that also requires the user to grant Accessibility permission. Not
-implemented yet. The sidecar boundary is deliberately thin, so a macOS sidecar
-speaking the same JSON protocol would drop straight in.
+The sidecar boundary is the whole Mac port: `plugin.js` is unchanged, and
+`sidecar-macos/` is a Swift binary that speaks the same JSON-lines protocol.
+Chromium exposes the Windows automation ids on **`AXDOMIdentifier`**. `AXPress`
+does not activate Teams, but it does raise the window ~50–160 ms later; the
+sidecar `AXRaise`s the previous app afterwards (about 300 ms of flash).
+
+Build on a Mac:
+
+```bash
+npm run build:sidecar:macos
+```
+
+Grant **Accessibility** to Stream Deck (the responsible process when it spawns
+the helper), then fully quit and reopen it.
+
+Still missing vs Windows, on purpose for this cut: `AXObserver` (the sidecar
+polls), PowerPoint Live ink colour / slide thumbnails (`thumb` / `forget`),
+and a signed/notarized helper. Tracking: [#4](https://github.com/danswett/streamdeck-teams-control/issues/4).
 
 ---
 

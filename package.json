@@ -10,6 +10,7 @@
 		"build:plugin": "rollup -c",
 		"build:profiles": "node tools/build-profile.ts",
 		"build:sidecar": "dotnet publish sidecar/TeamsBridge.csproj -c Release -o com.bad-duck.teamscontrol.sdPlugin/bin/sidecar --nologo",
+		"build:sidecar:macos": "swift build -c release --package-path sidecar-macos && mkdir -p com.bad-duck.teamscontrol.sdPlugin/bin/sidecar && cp \"$(swift build -c release --package-path sidecar-macos --show-bin-path)/TeamsBridge\" com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge",
 		"watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.bad-duck.teamscontrol\"",
 		"validate": "streamdeck validate com.bad-duck.teamscontrol.sdPlugin",
 		"test": "npm run audit && npm run test:ts && npm run test:cs",

@@ -11,8 +11,8 @@ permissions:
 
 jobs:
   build:
-    # The sidecar is a win-x64 UI Automation host and the Stream Deck CLI packs
-    # on Windows, so there is nothing to gain from a matrix here.
+    # The .NET sidecar is a win-x64 UI Automation host and the Stream Deck CLI
+    # packs on Windows. The Swift sidecar is built in sidecar-macos below.
     runs-on: windows-latest
 
     steps:
@@ -54,3 +54,10 @@ jobs:
           name: com.bad-duck.teamscontrol.streamDeckPlugin
           path: dist/*.streamDeckPlugin
           if-no-files-found: error
+
+  sidecar-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build Swift sidecar
+        run: npm run build:sidecar:macos
