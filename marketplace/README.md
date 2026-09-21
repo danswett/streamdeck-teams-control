@@ -146,7 +146,44 @@ The first-release notes are kept further down for reference only — they descri
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
 
-### Version 1.9.6 — the notes for this submission
+### Version 1.9.7 — the notes for this submission
+
+No new actions and no profile changed, so by the 1.9.5 test this looks like a
+release with nothing to advertise. It is the opposite. Two of the things the
+listing already promises were not actually true, and now are.
+
+Pressing a reaction while presenting through PowerPoint Live could advance the
+deck — for everyone watching, if you were the one presenting. Closing the
+reactions flyout posts a click at a spot picked to be inert, and the slide
+surface was excluded by asking the accessibility tree where it was. Opening a
+flyout removes the slide-show subtree from that tree, so at the one moment the
+exclusion was needed it found nothing and the click landed on the slide.
+Measured: the deck moved from slide 5 to 6. The plugin no longer posts that
+click at all while a deck is up; the flyout is closed by asking the menu to
+collapse itself, which has no side effect.
+
+Separately, the keys could go grey during a meeting that was still running, and
+stay that way. Teams builds its accessibility tree only while something is using
+it and takes it down again afterwards; the plugin woke it once per window and
+never again, so when it went back to sleep the meeting was lost for good.
+
+The rest is speed. A reaction press now returns in about a quarter of the time,
+the state behind every key is read roughly ten times faster, and sitting outside
+a meeting costs about a twentieth of what it did.
+
+```
+Reactions no longer move your slides.
+
+If you pressed a reaction while presenting through PowerPoint Live, the plugin could advance your deck — for everyone watching. It does not any more.
+
+Two other fixes worth knowing about. The keys could go grey in the middle of a meeting that was still running, and stay grey until you restarted; that is fixed. And a reaction that worked once and then did nothing for the rest of the meeting now works every time.
+
+Everything is quicker as well: reactions land about four times faster, the keys follow what you do in Teams about ten times faster, and the plugin is far lighter when you are not in a meeting at all.
+```
+
+654 characters.
+
+### Version 1.9.6 — submitted
 
 The first release since 1.9.4 with anything a user can see, so it carries 1.9.5
 with it. 1.9.5 was tagged and built but deliberately not submitted: nothing in it
