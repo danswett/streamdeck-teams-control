@@ -165,6 +165,53 @@ public class DirectModeTests
     }
 
     [Fact]
+    public void A_menu_item_matched_by_name_is_declined()
+    {
+        // A pattern from config would have to be compiled by the page's own
+        // regex engine, where no match timeout exists and the CDP timeout
+        // cannot interrupt a regex already running - so a backtracking pattern
+        // would freeze Teams rather than fail a press. UI Automation matches
+        // the same entry under ControlSpec.MatchTimeout.
+        var script = DomActuator.BuildMenuWalk(new ControlSpec
+        {
+            Menu = "video-button-configure",
+            MenuItemName = @"^\s*standard\s+blur\s*$"
+        }, null);
+
+        Assert.Null(script);
+    }
+
+    [Fact]
+    public void A_menu_item_with_an_off_name_is_declined_too()
+    {
+        // The radio-group "off" entry is matched the same way, so it carries
+        // the same hazard even when the primary entry has an id.
+        var script = DomActuator.BuildMenuWalk(new ControlSpec
+        {
+            Menu = "video-button-configure",
+            MenuItemAutomationId = "blur-button",
+            MenuItemOffName = @"^\s*no\s+background\s+effect\s*$"
+        }, null);
+
+        Assert.Null(script);
+    }
+
+    [Fact]
+    public void No_regular_expression_is_ever_injected_into_the_page()
+    {
+        // Belt and braces: whatever else changes, the generated program must
+        // not contain a regex constructor.
+        var script = DomActuator.BuildMenuWalk(new ControlSpec
+        {
+            Menu = "reaction-menu-button",
+            MenuItemAutomationId = "applause-button"
+        }, null);
+
+        Assert.NotNull(script);
+        Assert.DoesNotContain("RegExp", script);
+    }
+
+    [Fact]
     public void A_menu_walk_carries_the_trigger_and_the_item()
     {
         var script = DomActuator.BuildMenuWalk(new ControlSpec
@@ -253,6 +300,43 @@ public class DirectModeTests
         var js = DomActuator.JsArray(new[] { "a", null, "", "b" });
 
         Assert.Equal("[\"a\",\"b\"]", js);
+    }
+
+    [Fact]
+    public void A_control_that_closes_from_somewhere_else_is_declined()
+    {
+    	// Grid view opens from the slide toolbar and closes from a button
+    	// inside the overlay it opened. Clicking the opener again does not
+    	// close it - and an open grid unmounts the slide-show subtree, so
+    	// getting this wrong strands the deck rather than failing one press.
+    	var spec = new ControlSpec
+    	{
+    		AutomationId = "gridViewToolbarButton",
+    		Surface = "slideShow",
+    		ActiveWhenPresentAutomationId = "fluent-grid-view",
+    		OffName = @"^\s*close\s+grid\s+view\s*$"
+    	};
+
+    	var outcome = new DomActuator(new DirectModeSpec { Enabled = false })
+    		.Invoke("ppt-grid", spec, null, true, out _);
+
+    	Assert.False(outcome.Handled);
+    }
+
+    [Fact]
+    public void A_control_behind_a_nested_menu_is_declined()
+    {
+    	var spec = new ControlSpec
+    	{
+    		Menu = "toolbarChangeViewButton",
+    		Submenu = "translateSlidesButton",
+    		MenuItemAutomationId = "translate-de"
+    	};
+
+    	var outcome = new DomActuator(new DirectModeSpec { Enabled = false })
+    		.Invoke("ppt-translate", spec, null, true, out _);
+
+    	Assert.False(outcome.Handled);
     }
 
     // ----------------------------------------------------- argument fill
