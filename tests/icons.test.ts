@@ -728,32 +728,76 @@ describe("the timer when time is up", () => {
 		expect(svg).toContain("TIME'S UP");
 	});
 
-	it("is red rather than gradient", () => {
+	it("reddens both ends once time is up", () => {
 		const svg = renderTimer(0, 300, true, true, 4);
-		expect(svg).toContain("#D13438");
-		expect(svg).not.toContain("url(#timerFill)");
+		const stops = [...svg.matchAll(/stop-color="(#[0-9a-f]{6})"/gi)].map((m) => m[1].toUpperCase());
+		expect(stops).toHaveLength(2);
+		for (const s of stops) expect(s).toBe("#D13438");
 	});
 });
 
 describe("the timer bar's paint", () => {
-	it("sweeps Teams' own two colors across the fill", () => {
-		// Scaled to the fill, not the trough, so a stub still shows the whole
-		// sweep - which is what Teams does.
-		const svg = renderTimer(200, 300, true);
-		expect(svg).toContain("url(#timerFill)");
-		expect(svg).toContain("#7478E8");
-		expect(svg).toContain("#A05998");
+	/** The two gradient stops, left end first. */
+	function stops(svg: string): [string, string] {
+		const m = [...svg.matchAll(/stop-color="(#[0-9a-f]{6})"/gi)].map((x) => x[1].toUpperCase());
+		return [m[0], m[1]];
+	}
+
+	const red = (hex: string): number => parseInt(hex.slice(1, 3), 16);
+
+	it("is a flat color while there is plenty of time", () => {
+		// Captured from Teams: the bar carries no gradient at all until the
+		// last stretch. Both stops identical is what draws as flat.
+		for (const frac of [1, 0.8, 0.6, 0.5]) {
+			const [a, b] = stops(renderTimer(300 * frac, 300, true));
+			expect(a, `at ${frac}`).toBe("#7579EB");
+			expect(b, `at ${frac}`).toBe("#7579EB");
+		}
 	});
 
-	it("goes solid red near the end", () => {
-		const svg = renderTimer(20, 300, true);
-		expect(svg).toContain("#D13438");
-		expect(svg).not.toContain('fill="url(#timerFill)"');
+	it("opens a gradient as time runs down, reddest at the end of the bar", () => {
+		const [a, b] = stops(renderTimer(300 * 0.3, 300, true));
+		expect(a).not.toBe(b);
+		expect(red(b), "the right end leads").toBeGreaterThan(red(a));
+	});
+
+	it("reddens steadily rather than switching at a threshold", () => {
+		// The complaint that started this: the old bar stayed blue and then
+		// snapped to red. Each step down must be at least as red as the last,
+		// and the run as a whole must actually travel.
+		const seen = [0.5, 0.4, 0.3, 0.2, 0.1, 0.02].map((f) => red(stops(renderTimer(300 * f, 300, true))[1]));
+		for (let i = 1; i < seen.length; i++) expect(seen[i]).toBeGreaterThanOrEqual(seen[i - 1]);
+		expect(seen[seen.length - 1] - seen[0]).toBeGreaterThan(60);
 	});
 
 	it("dims the fill while paused rather than recoloring it", () => {
 		const svg = renderTimer(200, 300, false);
-		expect(svg).toContain("url(#timerFill)");
-		expect(svg).toMatch(/fill-opacity="0\.5"/);
+		expect(stops(svg)[0]).toBe("#7579EB");
+		expect(svg).toMatch(/fill-opacity="0\.500"/);
+	});
+
+	it("pulses when time is up, then settles solid", () => {
+		const opacity = (t: number): number =>
+			Number(/fill-opacity="([\d.]+)"/.exec(renderTimer(0, 300, true, true, t))![1]);
+
+		// Three dips about a second apart, then steady.
+		expect(opacity(0)).toBeCloseTo(0.28, 2);
+		expect(opacity(0.5)).toBeCloseTo(1, 2);
+		expect(opacity(1)).toBeCloseTo(0.28, 2);
+		expect(opacity(5)).toBe(1);
+	});
+
+	it("draws the fill on fractional pixels so it creeps rather than steps", () => {
+		// A minute-long timer moves the edge about a tenth of a pixel a frame;
+		// rounding that is what made the old bar jump once a second. The fill
+		// is the second rect - the first is the trough it sits in.
+		const fillWidth = (frac: number): string => {
+			const rects = [...renderTimer(300 * frac, 300, true).matchAll(/<rect [^>]*width="([\d.]+)"/g)];
+			return rects[rects.length - 1][1];
+		};
+
+		const widths = [0.61, 0.605, 0.6].map(fillWidth);
+		expect(new Set(widths).size, `each step should differ: ${widths.join(", ")}`).toBe(3);
+		expect(widths.some((w) => w.includes(".")), "should not be integers").toBe(true);
 	});
 });

@@ -1313,6 +1313,18 @@ export class SlideNextDialAction extends SlideThumbDialAction {
  * timer was counting, and it sits under the same finger as start.
  * ------------------------------------------------------------------------- */
 
+/**
+ * How often the timer bar is redrawn while it is moving.
+ *
+ * Teams' bar drains continuously; this plugin only hears about whole seconds,
+ * so the frames in between are drawn locally. 25 a second is enough that the
+ * fill and the reddening read as motion rather than as steps.
+ */
+const FRAME_MS = 40;
+
+/** When the expiry flash has finished and the bar can stop being redrawn. */
+const FLASH_SETTLES_MS = 3200;
+
 /** How long the dial must be held before a press becomes a reset. */
 const TIMER_HOLD_MS = 700;
 
@@ -1334,6 +1346,18 @@ export class TimerDialAction extends TeamsDialAction {
 	#total: number | undefined;
 
 	/**
+	 * The last reading from Teams, and when it arrived.
+	 *
+	 * Teams reports whole seconds, and the sidecar only publishes a change, so
+	 * a dial drawing straight from that steps once a second. The reading is an
+	 * anchor instead: time is carried forward from it between updates, and each
+	 * new reading snaps back to the truth.
+	 */
+	#anchorRemaining: number | undefined;
+	#anchorAt = 0;
+	#lastReading: number | undefined;
+
+	/**
 	 * When the timer was first seen expired, so the overtime can be counted.
 	 *
 	 * Teams shows a negative count once time is up, and publishes none of it:
@@ -1350,7 +1374,7 @@ export class TimerDialAction extends TeamsDialAction {
 	readonly #holds = new Map<string, NodeJS.Timeout>();
 	readonly #fired = new Set<string>();
 
-	/** Ticks the overtime count while it is climbing. */
+	/** Drives the bar between readings; see FRAME_MS. */
 	#tick: NodeJS.Timeout | undefined;
 
 	protected override layout(): string {
@@ -1358,62 +1382,94 @@ export class TimerDialAction extends TeamsDialAction {
 	}
 
 	protected override draw(state: TeamsState): Feedback {
-		const remaining = Number(state.context["timer.remaining"] ?? NaN);
+		const reading = Number(state.context["timer.remaining"] ?? NaN);
 
-		if (!state.inMeeting || !Number.isFinite(remaining)) {
-			this.#total = undefined;
-			this.#expiredAt = undefined;
-			this.#sawRunning = false;
-			this.#stopTicking();
+		if (!state.inMeeting || !Number.isFinite(reading)) {
+			this.#forget();
 			return { canvas: toPixmap(renderStripIdle("Timer", state.inMeeting ? "none set" : "no meeting")) };
 		}
 
 		const expired = state.context["timer.expired"] === "1";
+		const running = state.context["timer.running"] === "1";
+		const now = Date.now();
 
-		if (expired) {
-			// Only start counting if this dial watched it run out; see #expiredAt.
-			if (this.#expiredAt === undefined && this.#sawRunning) this.#expiredAt = Date.now();
-			this.#startTicking();
-		} else {
-			this.#expiredAt = undefined;
-			this.#sawRunning = remaining > 0;
-			this.#stopTicking();
-			if (this.#total === undefined || remaining > this.#total) this.#total = remaining;
+		// A new reading re-anchors; the same one is carried forward.
+		if (reading !== this.#lastReading) {
+			this.#lastReading = reading;
+			this.#anchorRemaining = reading;
+			this.#anchorAt = now;
 		}
 
-		const overtime =
-			this.#expiredAt === undefined ? undefined : Math.floor((Date.now() - this.#expiredAt) / 1000);
+		if (expired) {
+			if (this.#expiredAt === undefined && this.#sawRunning) this.#expiredAt = now;
+		} else {
+			this.#expiredAt = undefined;
+			this.#sawRunning = reading > 0;
+			if (this.#total === undefined || reading > this.#total) this.#total = reading;
+		}
+
+		/*
+			Only a running timer moves on its own. A paused one is drawn from
+			the reading, so it does not creep while nobody is counting.
+		*/
+		const elapsed = (now - this.#anchorAt) / 1000;
+		const live =
+			running && !expired
+				? Math.max(0, (this.#anchorRemaining ?? reading) - elapsed)
+				: reading;
+
+		this.#animate(running || expired);
 
 		return {
 			canvas: toPixmap(
 				renderTimer(
-					remaining,
-					this.#total ?? Math.max(1, remaining),
-					state.context["timer.running"] === "1",
+					live,
+					this.#total ?? Math.max(1, reading),
+					running,
 					expired,
-					overtime
+					this.#expiredAt === undefined ? undefined : (now - this.#expiredAt) / 1000
 				)
 			)
 		};
 	}
 
 	/**
-	 * Repaints once a second while in overtime.
+	 * Repaints between readings so the bar drains rather than steps.
 	 *
-	 * Nothing else would: the sidecar's reading stops changing at zero, so no
-	 * snapshot arrives to drive the count.
+	 * The fill creeps about a tenth of a pixel per frame on a minute-long
+	 * timer, so this is what turns a once-a-second jump into movement. It stops
+	 * whenever there is nothing moving, which is most of the time.
 	 */
-	#startTicking(): void {
+	#animate(moving: boolean): void {
+		if (!moving) {
+			this.#stopTicking();
+			return;
+		}
 		if (this.#tick !== undefined) return;
+
 		this.#tick = setInterval(() => {
-			if (this.#expiredAt === undefined) return;
+			// The flash settles, and a paused bar stops: neither needs frames.
+			if (this.#expiredAt !== undefined && Date.now() - this.#expiredAt > FLASH_SETTLES_MS) {
+				this.#stopTicking();
+				this.repaintAll();
+				return;
+			}
 			this.repaintAll();
-		}, 1000);
+		}, FRAME_MS);
 	}
 
 	#stopTicking(): void {
 		if (this.#tick) clearInterval(this.#tick);
 		this.#tick = undefined;
+	}
+
+	#forget(): void {
+		this.#total = undefined;
+		this.#anchorRemaining = undefined;
+		this.#lastReading = undefined;
+		this.#expiredAt = undefined;
+		this.#sawRunning = false;
+		this.#stopTicking();
 	}
 
 	override onDialDown(ev: DialDownEvent<JsonObject>): void {

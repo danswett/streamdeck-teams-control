@@ -604,6 +604,22 @@ const STRIP_TEXT_WIDTH = 186;
  * when it runs out, because the point of a timer on a desk is to be readable
  * without being looked at directly.
  */
+/**
+ * The meeting timer: what is left of it, and how much of it that is.
+ *
+ * Drawn to match Teams' own bar, which was captured at 10 Hz across a full
+ * run and fitted rather than guessed (sidecar/probe-timer-run.ps1). Three
+ * things came out of that, none of them obvious:
+ *
+ *   - The bar is a flat color for most of a run, not a gradient. A gradient
+ *     only appears as time runs down, and only across the part still filled.
+ *   - The two ends redden on different schedules. The right end - the end of
+ *     the timer - starts going red at about 42% remaining, the left end at
+ *     about 25%, which is what makes the gradient open up and then close again
+ *     as the whole bar arrives at red.
+ *   - It never snaps. At zero it flashes three times over about 2.6 seconds
+ *     and then holds solid red.
+ */
 export function renderTimer(
 	remaining: number,
 	total: number,
@@ -611,51 +627,40 @@ export function renderTimer(
 	expired = false,
 	overtime?: number
 ): string {
-	const left = Math.max(0, Math.round(remaining));
-	const span = Math.max(1, Math.round(total));
-	const fraction = expired ? 1 : Math.max(0, Math.min(1, left / span));
+	const left = Math.max(0, remaining);
+	const span = Math.max(1, total);
+	const fraction = expired ? 0 : Math.max(0, Math.min(1, left / span));
 
-	const clock = expired ? (overtime === undefined ? "" : `-${hhmmss(overtime)}`) : hhmmss(left);
+	const clock = expired
+		? overtime === undefined
+			? ""
+			: `-${hhmmss(Math.floor(overtime))}`
+		: hhmmss(Math.round(left));
 
-	// Teams turns the whole bar red once time is up, and turns it red near the
-	// end rather than only at zero. Matched, because a timer on a desk has to
-	// be readable without being looked at directly.
-	const nearlyUp = !expired && (fraction <= 0.1 || left <= 30);
-	const ink = expired ? TIMER_RED : running ? "#FFFFFF" : "#A8A8B2";
+	// Fitted from the capture: each end ramps from its own threshold to zero.
+	const uLeft = expired ? 1 : clamp01(1 - fraction / 0.25);
+	const uRight = expired ? 1 : clamp01(1 - fraction / 0.42);
+	const from = mixHex(TIMER_BLUE, TIMER_RED, uLeft);
+	const to = mixHex(TIMER_BLUE, TIMER_RED, uRight);
+
+	// The clock reddens with the bar rather than switching at a threshold, so
+	// the urgency arrives gradually. White at the start keeps it legible.
+	const ink = expired ? TIMER_RED : running ? mixHex("#FFFFFF", TIMER_RED, uLeft) : "#A8A8B2";
 	const size = clock.length > 5 ? 34 : 42;
 
 	const x = 16;
 	const width = STRIP_W - x * 2;
-	const filled = expired ? width : Math.max(0, Math.round(width * fraction));
 
-	// Anchored to the right, so the bar drains left to right and the edge that
-	// moves travels the same way as the reading eye - which is the direction
-	// Teams drains its own. Anchoring it left drains the other way, which reads
-	// as time being added rather than spent.
+	// Fractional, not rounded: the bar creeps about a tenth of a pixel per
+	// frame, so rounding is the difference between a smooth drain and a step
+	// once a second.
+	const filled = expired ? width : width * fraction;
 	const filledX = x + width - filled;
-
-	/*
-		The gradient is scaled to the fill rather than to the trough, so a
-		nearly-empty bar still shows the whole sweep. That is Teams' own
-		behavior: sampled at 20% remaining, the stub carried the full
-		periwinkle-to-mauve run rather than just its pink end.
-	*/
-	const paint = expired || nearlyUp ? TIMER_RED : "url(#timerFill)";
-
-	const caption = expired
-		? `<text x="100" y="92" text-anchor="middle" ` +
-			`font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" ` +
-			`letter-spacing="1.4" fill="#D13438">TIME'S UP</text>`
-		: running
-			? ""
-			: `<text x="100" y="92" text-anchor="middle" ` +
-				`font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" ` +
-				`letter-spacing="1.4" fill="#7E7E88">PAUSED</text>`;
 
 	return strip(
 		`<defs><linearGradient id="timerFill" x1="0" y1="0" x2="1" y2="0">` +
-			`<stop offset="0" stop-color="${TIMER_FROM}" />` +
-			`<stop offset="1" stop-color="${TIMER_TO}" />` +
+			`<stop offset="0" stop-color="${from}" />` +
+			`<stop offset="1" stop-color="${to}" />` +
 			`</linearGradient></defs>` +
 			(clock
 				? `<text x="100" y="${running || expired ? 52 : 48}" text-anchor="middle" ` +
@@ -667,18 +672,60 @@ export function renderTimer(
 			// The trough stays visible at zero so the bar reads as empty rather
 			// than as a control that has gone away.
 			`<rect x="${x}" y="64" width="${width}" height="10" rx="5" fill="#2A2A31" />` +
-			(filled > 0
-				? `<rect x="${filledX}" y="64" width="${filled}" height="10" rx="5" ` +
-					`fill="${paint}" fill-opacity="${running || expired ? 1 : 0.5}" />`
+			(filled > 0.2
+				? `<rect x="${filledX.toFixed(2)}" y="64" width="${filled.toFixed(2)}" height="10" rx="5" ` +
+					`fill="url(#timerFill)" fill-opacity="${fillOpacity(running, expired, overtime).toFixed(3)}" />`
 				: "") +
-			(clock ? caption : "")
+			(clock
+				? expired
+					? `<text x="100" y="92" text-anchor="middle" ` +
+						`font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" ` +
+						`letter-spacing="1.4" fill="${TIMER_RED}">TIME'S UP</text>`
+					: running
+						? ""
+						: `<text x="100" y="92" text-anchor="middle" ` +
+							`font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" ` +
+							`letter-spacing="1.4" fill="#7E7E88">PAUSED</text>`
+				: "")
 	);
 }
 
+/**
+ * How opaque the fill is.
+ *
+ * Teams pulses the bar three times when time runs out, about a second apart,
+ * dipping to roughly a quarter and coming back, and then leaves it solid. A
+ * paused bar is dimmed so it reads as not advancing.
+ */
+function fillOpacity(running: boolean, expired: boolean, overtime?: number): number {
+	if (!expired) return running ? 1 : 0.5;
+	if (overtime === undefined || overtime >= FLASH_FOR_S) return 1;
+
+	// Starts at the dim end, which is where the capture starts too.
+	const phase = Math.sin(Math.PI * overtime) ** 2;
+	return FLASH_MIN + (1 - FLASH_MIN) * phase;
+}
+
 /** Teams' own timer colors, sampled from its bar. */
-const TIMER_FROM = "#7478E8";
-const TIMER_TO = "#A05998";
+const TIMER_BLUE = "#7579EB";
 const TIMER_RED = "#D13438";
+
+/** How long the bar pulses once time is up, and how far down each pulse dips. */
+const FLASH_FOR_S = 2.6;
+const FLASH_MIN = 0.28;
+
+function clamp01(n: number): number {
+	return Math.max(0, Math.min(1, n));
+}
+
+/** Blends two #rrggbb colors; t of 0 is all `a`, 1 is all `b`. */
+function mixHex(a: string, b: string, t: number): string {
+	const k = clamp01(t);
+	const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
+	const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
+	const out = pa.map((v, i) => Math.round(v + (pb[i] - v) * k));
+	return `#${out.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
 
 /** m:ss, or h:mm:ss once there is an hour to show. */
 function hhmmss(seconds: number): string {

@@ -532,6 +532,27 @@ Teams publishes no duration, so the bar is drawn against the longest remaining
 time seen since the timer appeared. Setting a shorter timer while one is
 part-way through leaves the bar reading low until the next reset.
 
+The bar is drawn to match Teams' own, which was captured at 10 Hz across a full
+run and fitted rather than guessed — `sidecar/probe-timer-run.ps1` records the
+fill boundary and sixteen sampled colors per frame, and will re-derive the model
+if Teams restyles it. Three things came out of that capture that guesswork had
+got wrong:
+
+- **The bar is flat for most of a run.** A gradient only appears near the end,
+  and only across the part still filled.
+- **The two ends redden on different schedules** — the right end from about 42%
+  remaining, the left from about 25%. That is what makes the gradient open up
+  and then close again as the whole bar arrives at red.
+- **It never snaps.** At zero it pulses three times about a second apart, dipping
+  to roughly a quarter opacity, then holds solid red.
+
+Teams only reports whole seconds, so drawing straight from that steps once a
+second. Each reading is used as an anchor instead and the frames between are
+drawn locally at 25 fps, with the fill on fractional pixels — on a minute-long
+timer the edge moves about a tenth of a pixel per frame, so rounding it is the
+difference between a drain and a step. The loop runs only while something is
+moving and costs about 0.5% of a core.
+
 Two things about the expired state:
 
 - Teams renames the toggle to **Cancel timer for everyone**, which ends the timer
