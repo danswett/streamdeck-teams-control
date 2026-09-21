@@ -9,7 +9,7 @@ probe results this is based on.
 npm run build:sidecar:macos
 ```
 
-Writes `com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge`.
+Writes `com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge`. CI copies that Mach-O next to `TeamsBridge.exe` and packs on macOS so the executable bit survives.
 
 Accessibility permission is required (typically granted to Stream Deck.app, the
 responsible process when it spawns this helper). Do not sandbox the binary.
