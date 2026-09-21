@@ -146,6 +146,34 @@ The first-release notes are kept further down for reference only — they descri
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
 
+### Version 1.9.6 — the notes for this submission
+
+The first release since 1.9.4 with anything a user can see, so it carries 1.9.5
+with it. 1.9.5 was tagged and built but deliberately not submitted: nothing in it
+was user-visible.
+
+What changed is small and worth saying plainly. Profile switching existed in
+1.9.4 and almost nobody could find it, because the setting only appeared in the
+PowerPoint Live keys' settings — so anyone who had placed a mute key and nothing
+else had no way to discover the feature existed. It is the same setting, still
+off until you turn it on, now visible from nearly every key in the plugin.
+
+Deliberately not changed: it stays **off by default**. Moving someone's deck
+between profiles without being asked is delightful once and infuriating
+afterwards, and an update should not start doing it to people who never opted in.
+
+```
+Profile switching is easier to find.
+
+The plugin can move your deck between its three layouts as a meeting goes — Teams Meeting when you join, PowerPoint Live when a deck goes up, and back to your own profile when you leave. That setting used to appear only in the PowerPoint Live keys' settings, so if you had placed a mute key and nothing else, you would never have known it was there. It now appears on nearly every key in the plugin.
+
+It is still off until you switch it on, and it still hands your deck back when you turn it off or leave a meeting.
+
+Also includes the 1.9.5 build, which had no user-visible changes.
+```
+
+620 characters.
+
 ### Version 1.9.5 — tagged and built, deliberately not submitted
 
 Nothing in it is user-visible. The action list is identical to 1.9.4 (38 before,
@@ -163,9 +191,9 @@ almost no one should switch on.
 Fold it into the next submission that does carry user-visible change. The
 internal audience for Direct mode is served by the repo doc instead.
 
-### Version 1.9.4 — the notes for this submission
+### Version 1.9.4 — submitted
 
-Submitted after 1.8.3 is live, so these describe only what changed on top of it.
+Submitted after 1.8.3 was live, so these describe only what changed on top of it.
 Everything about PowerPoint Live and the meeting keys is in the notes below,
 which is what people will already have.
 
