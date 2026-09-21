@@ -139,11 +139,14 @@ The first-release notes are kept further down for reference only — they descri
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
 
-### Version 1.9.0 — the notes for this submission
+### Version 1.9.1 — the notes for this submission
 
 Submitted after 1.8.3 is live, so these describe only what changed on top of it.
 Everything about PowerPoint Live and the profiles is in the notes below, which
 is what people will already have.
+
+1.9.0 was tagged and built on GitHub but never submitted here, so its changes
+are folded into these notes rather than split across two entries.
 
 ```
 Stream Deck + XL support.
