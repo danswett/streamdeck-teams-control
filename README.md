@@ -797,6 +797,43 @@ npm run pack            # -> dist/*.streamDeckPlugin
 node tools/build-profile.ts    # rebuild the bundled profiles
 ```
 
+### Which copy is Stream Deck running?
+
+Stream Deck loads a plugin from `%APPDATA%\Elgato\StreamDeck\Plugins`, and that
+can be one of two quite different things:
+
+| mode | what runs | good for |
+|---|---|---|
+| **dev** | a junction to this repo | build, restart, done - no packaging step |
+| **release** | a real copy installed from `dist/` | exactly what a user gets |
+
+Installing a `.streamDeckPlugin` replaces a junction with a real copy. After
+that, building updates the repo while Stream Deck goes on running the copy, and
+nothing says so: a fixed bug once kept reproducing for an afternoon against a
+sidecar built the previous day, while every rebuild reported success.
+
+So ask first:
+
+```powershell
+.\sidecar\use-plugin.ps1            # which mode, and whether it is stale
+.\sidecar\use-plugin.ps1 dev        # junction to this repo
+.\sidecar\use-plugin.ps1 release    # install dist/*.streamDeckPlugin
+```
+
+Status reports whether the running build is newer than the newest `.ts`/`.cs`
+source, which is the question that actually matters:
+
+```
+mode: release (installed copy)
+  sidecar built:    9/21/2026 2:48:54 PM
+  STALE: TeamsClient.cs changed 3:13:36 PM, after the running build
+```
+
+Develop in **dev**, then switch to **release** and re-test before shipping - a
+junction also runs uncommitted changes and the files `.sdignore` keeps out of
+the package. `sidecar/rebuild.ps1` refuses to run in release mode for the same
+reason.
+
 > **Manifest changes need a full Stream Deck app restart.** `streamdeck restart`
 > recycles the plugin *process*, but Stream Deck caches `manifest.json` and only
 > re-reads it when the app starts.
