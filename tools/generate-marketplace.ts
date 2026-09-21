@@ -27,6 +27,7 @@ import {
 	renderTool
 } from "../src/icons.ts";
 import { appIconSvg } from "./app-icon.ts";
+import { DECKS } from "./decks.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Committed rather than written to dist/: these are submission deliverables
@@ -349,6 +350,72 @@ function galleryProfiles(): string {
 	return canvas(W, H, body);
 }
 
+/**
+ * Which decks are covered, drawn as the grids themselves.
+ *
+ * Naming seven products in a list would be read as a specification; the shapes
+ * are recognizable at a glance, and the point of the item is that the reader
+ * finds their own deck in it.
+ */
+function galleryDecks(): string {
+	let body = `<text x="${W / 2}" y="130" fill="${TEXT}" font-family="${FONT}" font-size="60"
+		font-weight="600" text-anchor="middle">Every Stream Deck, its own layout</text>`;
+
+	// Four across, then three: the bottom row holds the wide decks, which need
+	// the room, and the split keeps every grid at a readable cell size.
+	const rows = [DECKS.slice(0, 4), DECKS.slice(4)];
+	const boxH = 210;
+
+	rows.forEach((group, ri) => {
+		const boxW = W / group.length;
+		const top = 200 + ri * (boxH + 145);
+
+		group.forEach((deck, gi) => {
+			const cx = boxW * gi + boxW / 2;
+
+			// Square cells, sized so the whole grid fits its share of the row.
+			const gap = 6;
+			const cell = Math.min(
+				(boxW * 0.72 - gap * (deck.columns - 1)) / deck.columns,
+				(boxH - gap * (deck.rows - 1)) / deck.rows,
+				46
+			);
+			const gridW = deck.columns * cell + (deck.columns - 1) * gap;
+			const gridH = deck.rows * cell + (deck.rows - 1) * gap;
+			const x0 = cx - gridW / 2;
+			const y0 = top + (boxH - gridH) / 2;
+
+			for (let r = 0; r < deck.rows; r++) {
+				for (let c = 0; c < deck.columns; c++) {
+					body +=
+						`<rect x="${(x0 + c * (cell + gap)).toFixed(1)}" y="${(y0 + r * (cell + gap)).toFixed(1)}" ` +
+						`width="${cell.toFixed(1)}" height="${cell.toFixed(1)}" rx="${(cell * 0.16).toFixed(1)}" ` +
+						`fill="${KEY_BG}" stroke="${ACCENT}" stroke-width="2" />`;
+				}
+			}
+
+			// Dials sit under the grid, as they do on the hardware.
+			if (deck.encoders > 0) {
+				const dialGap = gridW / deck.encoders;
+				for (let d = 0; d < deck.encoders; d++) {
+					body +=
+						`<circle cx="${(x0 + dialGap * (d + 0.5)).toFixed(1)}" cy="${(y0 + gridH + 26).toFixed(1)}" ` +
+						`r="9" fill="${ACCENT}" />`;
+				}
+			}
+
+			body += `<text x="${cx}" y="${top + boxH + 58}" fill="${TEXT}" font-family="${FONT}"
+				font-size="28" text-anchor="middle">${deck.label}</text>`;
+			body += `<text x="${cx}" y="${top + boxH + 92}" fill="${MUTED}" font-family="${FONT}"
+				font-size="23" text-anchor="middle">${deck.columns} x ${deck.rows}${
+					deck.encoders ? ` &#183; ${deck.encoders} dials` : ""
+				}</text>`;
+		});
+	});
+
+	return canvas(W, H, body);
+}
+
 /** Keys dim when there is no meeting, which is the other half of "live state". */
 function galleryIdle(): string {
 	let body = `<text x="${W / 2}" y="200" fill="${TEXT}" font-family="${FONT}" font-size="60"
@@ -385,12 +452,13 @@ write("gallery-2-meeting-controls.png", galleryActions(), W);
 write("gallery-3-presenting.png", galleryPresenting(), W);
 write("gallery-4-watching.png", galleryWatching(), W);
 write("gallery-5-profiles.png", galleryProfiles(), W);
-write("gallery-6-no-meeting.png", galleryIdle(), W);
+write("gallery-6-decks.png", galleryDecks(), W);
+write("gallery-7-no-meeting.png", galleryIdle(), W);
 
 // Renamed as the set grew past the original three; without this the old files
 // sit in the folder and a submission can pick up a gallery item that no longer
 // matches anything the plugin does.
-for (const stale of ["gallery-2-actions.png", "gallery-3-no-meeting.png"]) {
+for (const stale of ["gallery-2-actions.png", "gallery-3-no-meeting.png", "gallery-6-no-meeting.png"]) {
 	const file = path.join(OUT, stale);
 	if (existsSync(file)) {
 		rmSync(file);

@@ -202,15 +202,66 @@ setting is shared by all of them.
 
 ### Every deck, and what it gets
 
-| deck | grid | dials | layouts |
-|---|---|---|---|
-| Stream Deck Mini | 3 × 2 | — | [see them](docs/profiles/mini.png) |
-| Stream Deck | 5 × 3 | — | [see them](docs/profiles/stream-deck.png) |
-| Stream Deck + | 4 × 2 | 4, with a touch strip | [see them](docs/profiles/plus.png) |
-| Stream Deck Neo | 4 × 2 | — | [see them](docs/profiles/neo.png) |
-| Stream Deck XL | 8 × 4 | — | [see them](docs/profiles/xl.png) |
-| Stream Deck Studio | 16 × 2 | 2, no screen | [see them](docs/profiles/studio.png) |
-| Stream Deck + XL | 9 × 4 | 6, with a touch strip | [see them](docs/profiles/plus-xl.png) |
+| deck | grid | dials |
+|---|---|---|
+| Stream Deck Mini | 3 × 2 | — |
+| Stream Deck | 5 × 3 | — |
+| Stream Deck + | 4 × 2 | 4, with a touch strip |
+| Stream Deck Neo | 4 × 2 | — |
+| Stream Deck XL | 8 × 4 | — |
+| Stream Deck Studio | 16 × 2 | 2, no screen |
+| Stream Deck + XL | 9 × 4 | 6, with a touch strip |
+
+Open any deck below to see all three of its layouts, key by key.
+
+<details>
+<summary><b>Stream Deck Mini</b> — 3 × 2</summary>
+
+<img src="docs/profiles/mini.png" alt="The three Stream Deck Mini layouts" width="330">
+
+</details>
+
+<details>
+<summary><b>Stream Deck</b> — 5 × 3</summary>
+
+<img src="docs/profiles/stream-deck.png" alt="The three Stream Deck layouts" width="440">
+
+</details>
+
+<details>
+<summary><b>Stream Deck +</b> — 4 × 2 and four dials</summary>
+
+<img src="docs/profiles/plus.png" alt="The three Stream Deck + layouts" width="380">
+
+</details>
+
+<details>
+<summary><b>Stream Deck Neo</b> — 4 × 2</summary>
+
+<img src="docs/profiles/neo.png" alt="The three Stream Deck Neo layouts" width="380">
+
+</details>
+
+<details>
+<summary><b>Stream Deck XL</b> — 8 × 4</summary>
+
+<img src="docs/profiles/xl.png" alt="The three Stream Deck XL layouts" width="700">
+
+</details>
+
+<details>
+<summary><b>Stream Deck Studio</b> — 16 × 2 and two dials</summary>
+
+<img src="docs/profiles/studio.png" alt="The three Stream Deck Studio layouts" width="900">
+
+</details>
+
+<details>
+<summary><b>Stream Deck + XL</b> — 9 × 4 and six dials</summary>
+
+<img src="docs/profiles/plus-xl.png" alt="The three Stream Deck + XL layouts" width="780">
+
+</details>
 
 Those pictures are generated from the profiles that actually ship, by
 `npm run profiles`, so they cannot drift from what installs. The keys are drawn

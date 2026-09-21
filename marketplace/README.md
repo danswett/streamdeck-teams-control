@@ -16,17 +16,24 @@ shows the artwork that actually ships.
 |---|---|---|
 | `app-icon-288.png` | App icon | 288 × 288 PNG |
 | `thumbnail.png` | Thumbnail | 1920 × 960 PNG |
-| `gallery-1-live-state.png` | Gallery 1 of 6 | 1920 × 960 PNG |
-| `gallery-2-meeting-controls.png` | Gallery 2 of 6 | 1920 × 960 PNG |
-| `gallery-3-presenting.png` | Gallery 3 of 6 | 1920 × 960 PNG |
-| `gallery-4-watching.png` | Gallery 4 of 6 | 1920 × 960 PNG |
-| `gallery-5-profiles.png` | Gallery 5 of 6 | 1920 × 960 PNG |
-| `gallery-6-no-meeting.png` | Gallery 6 of 6 | 1920 × 960 PNG |
+| `gallery-1-live-state.png` | Gallery 1 of 7 | 1920 × 960 PNG |
+| `gallery-2-meeting-controls.png` | Gallery 2 of 7 | 1920 × 960 PNG |
+| `gallery-3-presenting.png` | Gallery 3 of 7 | 1920 × 960 PNG |
+| `gallery-4-watching.png` | Gallery 4 of 7 | 1920 × 960 PNG |
+| `gallery-5-profiles.png` | Gallery 5 of 7 | 1920 × 960 PNG |
+| `gallery-6-decks.png` | Gallery 6 of 7 | 1920 × 960 PNG |
+| `gallery-7-no-meeting.png` | Gallery 7 of 7 | 1920 × 960 PNG |
 | `demo.mp4` | Gallery video | 1920 × 1080 MP4, under 250 MB |
 
-Elgato requires three gallery items and allows up to ten. Six is the point at
+Elgato requires three gallery items and allows up to ten. Seven is the point at
 which the two halves of the plugin — meetings and PowerPoint Live — are both
-shown in both roles, without repeating a layout.
+shown in both roles, without repeating a layout, and a reader can find their own
+deck in the set.
+
+The deck item draws the grids rather than listing seven product names, because
+the shapes are recognizable at a glance and the list is not. It is generated
+from the same `tools/decks.ts` table the layouts are built from, so it cannot
+advertise a deck the plugin does not ship a layout for.
 
 The video is generated too, by `node tools/build-demo-frames.ts` followed by
 the ffmpeg line it prints. Every key in it is drawn by the same functions the
@@ -325,7 +332,7 @@ to maker@elgato.com.
       published listing currently shows the 215-character manifest text, which
       is below Elgato's 250-character minimum for a description and says
       nothing about PowerPoint Live.
-- [ ] The **Media** tab carries all six gallery items, not the original three.
+- [ ] The **Media** tab carries all seven gallery items, not the original three.
 
 Media and copy are versioned separately from the product file, so the two
 uploads below are independent: a new version does not refresh the description or
