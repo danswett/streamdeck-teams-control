@@ -36,9 +36,9 @@ pressed something.
   being presented? The PowerPoint Live keys go with them.
 - **Optional profile switching.** The deck can follow the meeting — one layout
   for a meeting, another when a deck goes up, back again when it ends.
-- **Every Stream Deck is covered.** Mini, Stream Deck, +, Neo, XL, Studio and
-  + XL each get layouts built for their own grid, and the decks with dials get
-  those too. [See what yours gets.](#every-deck-and-what-it-gets)
+- **Every Stream Deck is covered.** Mini, Stream Deck, +, Neo, XL and + XL each
+  get layouts built for their own grid, and the decks with dials get those too.
+  [See what yours gets.](#every-deck-and-what-it-gets)
 
 > **Windows only.** See [Why not macOS?](#why-not-macos)
 
@@ -152,10 +152,6 @@ Every strip gives a dial the same canvas, so a + shows exactly what a + XL does
 than a + can hold while presenting, so on that deck the timer keeps its dial on
 the meeting and attendee layouts instead.
 
-The **Stream Deck Studio** has two dials and no screen behind them. It gets ink
-thickness and color, which you read the result of in Teams rather than on the
-deck; a slide thumbnail would have had nowhere to appear.
-
 The ink dials act on whichever drawing tool is selected rather than owning one,
 so picking the pen points both at the pen. They go quiet for tools with nothing
 to set: the laser has a color but no thickness, and the cursor and eraser have
@@ -209,7 +205,6 @@ setting is shared by all of them.
 | Stream Deck + | 4 × 2 | 4, with a touch strip |
 | Stream Deck Neo | 4 × 2 | — |
 | Stream Deck XL | 8 × 4 | — |
-| Stream Deck Studio | 16 × 2 | 2, no screen |
 | Stream Deck + XL | 9 × 4 | 6, with a touch strip |
 
 Open any deck below to see all three of its layouts, key by key.
@@ -250,13 +245,6 @@ Open any deck below to see all three of its layouts, key by key.
 </details>
 
 <details>
-<summary><b>Stream Deck Studio</b> — 16 × 2 and two dials</summary>
-
-<img src="docs/profiles/studio.png" alt="The three Stream Deck Studio layouts" width="900">
-
-</details>
-
-<details>
 <summary><b>Stream Deck + XL</b> — 9 × 4 and six dials</summary>
 
 <img src="docs/profiles/plus-xl.png" alt="The three Stream Deck + XL layouts" width="780">
@@ -270,26 +258,36 @@ something that appears on the hardware.
 
 A deck only gets a layout when its grid is fixed and published. That leaves out
 the Pedal, which publishes no key layout, and Stream Deck Mobile and the Virtual
-deck, which are whatever size you make them. Those are left alone entirely
-rather than handed a layout built for a grid they do not have.
+deck, which are whatever size you make them. The Studio is left out for a
+different reason — its grid is published, but it is a rack-mounted broadcast
+deck, not something you are likely to be running a Teams meeting from.
 
 <details>
 <summary>What changes between decks</summary>
 
-**Sixteen keys or more** — Stream Deck XL, Studio and + XL hold the meeting
-still underneath the presentation: the same meeting keys are in the same places
-in all three layouts, so a profile switch never moves mute out from under the
-finger already reaching for it. Only the presentation half changes.
+**Every PowerPoint Live layout is built from the + XL presenter layout**, which
+was laid out by hand on the hardware. Two things carry over from it everywhere:
 
-**Eight keys or fewer** — the Mini, Stream Deck, + and Neo do not have the room
-for that, so each layout uses every key for whatever is happening now. Mute is
-in all of them.
+- **Previous, the slide counter, then next** — always those three, always
+  adjacent, always in that order.
+- **On the bottom row**, which is the row a hand finds without looking. Reading
+  the slide number means looking at the deck; reaching for the next slide should
+  not. Grid view follows them, and on the bigger decks the drawing tools follow
+  that.
+
+Both are enforced by `tests/profiles.test.ts` rather than left to care.
+
+**Stream Deck XL and + XL** hold the meeting still underneath the presentation:
+the same meeting keys are in the same places in all three layouts, so a profile
+switch never moves mute out from under the finger already reaching for it. Only
+the presentation half changes.
+
+**Mini, Stream Deck, + and Neo** do not have the room for that, so each layout
+spends every key on whatever is happening now. Mute is in all of them.
 
 **Dials** follow the same rule as keys: what fits, fits. A + has four and the
 presenter layout uses all of them, so the meeting timer keeps its dial on that
-deck's other two layouts instead. The Studio has two dials and no screen behind
-them, so it gets the two controls you read the result of in Teams — ink
-thickness and color — rather than a slide thumbnail with nowhere to appear.
+deck's other two layouts instead.
 
 </details>
 
@@ -428,6 +426,28 @@ Idle, outside a meeting, the sidecar settles at ~0.6% CPU and ~12 MB. Discovery
 is the expensive operation — a *failed* UIA search walks an entire window
 subtree — so windows that turn out not to be meetings are cached as such.
 
+### Direct mode (optional, off by default)
+
+One cost is visible: a control that lives inside a flyout needs that flyout
+**open on screen**, because Chromium only builds menu items into the
+accessibility tree once the popup is genuinely showing. Reactions, background
+blur, the PowerPoint Live menus and the ink palette all work this way.
+
+**Direct mode** drives those same controls by running JavaScript inside Teams'
+own page, where the menu can be opened, used and closed while styled invisible —
+nothing appears on screen, and a reaction completes in ~240 ms rather than
+seconds. It also works with Teams minimized, and can jump straight to a slide
+without opening grid view.
+
+It needs a local debugging port on Teams, which is **unauthenticated**, so the
+plugin never opens one: it only uses a port the user opened deliberately, and
+verifies the port belongs to Teams before touching it. Anything Direct mode
+cannot improve falls back to the normal path, so the worst case is the behaviour
+above.
+
+See **[docs/direct-mode.md](docs/direct-mode.md)** for the tradeoff and the
+steps.
+
 ---
 
 ## Bundled profiles
@@ -438,16 +458,16 @@ use Stream Deck's version 3.0 profile format; 2.0 installs silently and does
 nothing. A deck with dials needs an `Encoder` controller in every page, even an
 empty one.
 
-Twenty-one of them ship — three states across seven decks — and
+Eighteen of them ship — three states across six decks — and
 `tools/decks.ts` is the one place that says how big each deck is. A profile does
 not record its own grid, so the builder and the picture generator would
 otherwise each need their own copy of those numbers.
 
 `tests/profiles.test.ts` checks the things that drift one key at a time: that
-mute survives into every layout, that the shared meeting block really is
-identical across the decks wide enough to hold one, that the + and the Neo have
-not diverged despite having the same grid, and that no key lands outside its
-deck.
+mute survives into every layout, that the slide navigation stays together and on
+the bottom row, that the shared meeting block really is identical across the
+decks wide enough to hold one, that the + and the Neo have not diverged despite
+having the same grid, and that no key lands outside its deck.
 
 Two behaviors decide how all this is shipped, and both were established by
 experiment rather than from the documentation:

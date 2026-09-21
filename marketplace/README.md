@@ -146,33 +146,39 @@ The first-release notes are kept further down for reference only — they descri
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
 
-### Version 1.9.3 — the notes for this submission
+### Version 1.9.4 — the notes for this submission
 
 Submitted after 1.8.3 is live, so these describe only what changed on top of it.
 Everything about PowerPoint Live and the meeting keys is in the notes below,
 which is what people will already have.
 
-1.9.0, 1.9.1 and 1.9.2 were tagged and built on GitHub but never submitted here,
-so their changes are folded into these notes rather than split across four
-entries.
+1.9.0 through 1.9.3 were tagged and built on GitHub but never submitted here, so
+their changes are folded into these notes rather than split across five entries.
+
+The last paragraph is not decoration. The two 15-key PowerPoint Live layouts
+changed, and Stream Deck cannot update a profile in place — anyone who already
+has them keeps the old copy alongside the new one, and will want to know which
+is which.
 
 ```
 Every Stream Deck now has its own layouts.
 
-Mini, Stream Deck, +, Neo, XL, Studio and + XL each get three profiles built for their own grid: meeting controls when you join, attendee or presenter tools when a deck goes up, and back again when it ends. Mute is on every one of them, so being moved onto a presentation layout never costs you it.
+Mini, Stream Deck, +, Neo, XL and + XL each get three profiles built for their own grid: meeting controls when you join, attendee or presenter tools when a deck goes up, and back again when it ends. Mute is on every one of them, so being moved onto a presentation layout never costs you it.
 
-On the decks wide enough to hold it, the meeting keys stay in the same place in all three layouts, so a profile switch does not move mute out from under the finger already reaching for it.
+Slide navigation is laid out the same way everywhere: previous, the slide counter, then next, side by side on the bottom row, where your hand finds them without looking. On the wider decks the meeting keys stay put across all three layouts, so mute never moves out from under the finger reaching for it.
 
-The dials on a + and a + XL set ink thickness and color for whichever drawing tool you have picked, move through the deck, and run the meeting timer. The touch strip shows the slide you are presenting and the one coming next. The Studio's two dials set ink thickness and color.
-
-The slide counter key can show the current slide above its count.
+The dials on a + and a + XL set ink thickness and color for whichever drawing tool you have picked, move through the deck, and run the meeting timer. The touch strip shows the slide you are presenting and the one coming next, and the slide counter key can show the current slide above its count.
 
 Slide pictures are off until you switch them on, per control. They are copied from the Teams window straight to your Stream Deck and go nowhere else: nothing is uploaded, saved to disk, or written to any log.
 
-Stream Deck will ask before installing a profile, and declining leaves everything else working.
+If you already use the 15-key PowerPoint Live profiles, the redesigned ones arrive named "r2" and are used automatically. The originals stay in your profile list until you delete them.
 ```
 
-1,185 characters.
+1,332 characters.
+
+### Version 1.9.3 — tagged and built, never submitted
+
+Folded into the 1.9.4 notes above.
 
 ### Version 1.9.2 — tagged and built, never submitted
 

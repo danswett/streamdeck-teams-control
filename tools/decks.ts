@@ -10,6 +10,11 @@
  * Every deck here has a grid that is fixed and published. The ones missing
  * have neither: the Pedal publishes no key layout, and Stream Deck Mobile and
  * the Virtual deck are whatever size the user makes them.
+ *
+ * The Studio is left out for a different reason. Its grid is published and a
+ * layout for it worked, but it is a rack-mounted broadcast deck - the odds of
+ * one sitting in front of somebody running a Teams meeting are slim enough
+ * that three more profiles were not worth carrying.
  */
 
 export type Deck = {
@@ -42,8 +47,7 @@ export type Deck = {
 	 *
 	 * Every strip gives a dial the same 200x100 canvas - the + spreads 800px
 	 * across four dials and the + XL 1200px across six - which is why one set
-	 * of dial artwork serves both. The Studio has dials and no strip at all,
-	 * so a dial that reports its state by drawing has nowhere to draw it.
+	 * of dial artwork serves both.
 	 */
 	stripWidth: number;
 	/**
@@ -127,26 +131,6 @@ export const NEO: Deck = {
 	slug: "neo"
 };
 
-/**
- * Stream Deck Studio: 32 keys in a 16x2 grid, with a dial at each end.
- * Manifest DeviceType 10.
- *
- * Two rows of sixteen is a different shape of problem to every other deck: it
- * is all width and no height, so a column of related keys is not available and
- * groups have to run left to right instead.
- */
-export const STUDIO: Deck = {
-	deviceType: 10,
-	model: "",
-	columns: 16,
-	rows: 2,
-	encoders: 2,
-	stripWidth: 0,
-	suffix: " (Studio)",
-	label: "Stream Deck Studio",
-	slug: "studio"
-};
-
 /** Stream Deck + XL: 36 keys in a 9x4 grid, plus six dials. Manifest DeviceType 13. */
 export const PLUS_XL: Deck = {
 	deviceType: 13,
@@ -161,4 +145,4 @@ export const PLUS_XL: Deck = {
 };
 
 /** Every deck with a bundled layout, smallest grid first. */
-export const DECKS: Deck[] = [MINI, STREAM_DECK, PLUS, NEO, XL, STUDIO, PLUS_XL];
+export const DECKS: Deck[] = [MINI, STREAM_DECK, PLUS, NEO, XL, PLUS_XL];

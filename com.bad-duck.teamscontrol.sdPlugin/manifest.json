@@ -1,7 +1,7 @@
 {
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
 	"Name": "Teams Meeting Controls",
-	"Version": "1.9.3.0",
+	"Version": "1.9.4.0",
 	"Author": "Bad Duck Software",
 	"Description": "Control Microsoft Teams meetings and PowerPoint Live from your Stream Deck: mute, camera, raise hand, reactions, blur, slide navigation and drawing tools. Every key shows the real state. Teams never needs focus, and no keystrokes are sent.",
 	"Category": "Teams Meeting Controls",
@@ -38,13 +38,13 @@
 			"DontAutoSwitchWhenInstalled": true
 		},
 		{
-			"Name": "profiles/PowerPoint Live (Attendee)",
+			"Name": "profiles/PowerPoint Live (Attendee) r2",
 			"DeviceType": 0,
 			"Readonly": false,
 			"DontAutoSwitchWhenInstalled": true
 		},
 		{
-			"Name": "profiles/PowerPoint Live (Presenter)",
+			"Name": "profiles/PowerPoint Live (Presenter) r2",
 			"DeviceType": 0,
 			"Readonly": false,
 			"DontAutoSwitchWhenInstalled": true
@@ -136,24 +136,6 @@
 		{
 			"Name": "profiles/PowerPoint Live (Presenter) (Neo)",
 			"DeviceType": 9,
-			"Readonly": false,
-			"DontAutoSwitchWhenInstalled": true
-		},
-		{
-			"Name": "profiles/Teams Meeting (Studio)",
-			"DeviceType": 10,
-			"Readonly": false,
-			"DontAutoSwitchWhenInstalled": true
-		},
-		{
-			"Name": "profiles/PowerPoint Live (Attendee) (Studio)",
-			"DeviceType": 10,
-			"Readonly": false,
-			"DontAutoSwitchWhenInstalled": true
-		},
-		{
-			"Name": "profiles/PowerPoint Live (Presenter) (Studio)",
-			"DeviceType": 10,
 			"Readonly": false,
 			"DontAutoSwitchWhenInstalled": true
 		}

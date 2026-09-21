@@ -79,7 +79,6 @@ describe("the bundled profiles", () => {
 		{ label: "XL", suffix: " (XL)", deviceType: 2, columns: 8, rows: 4, dials: 0 },
 		{ label: "+", suffix: " (+)", deviceType: 7, columns: 4, rows: 2, dials: 4 },
 		{ label: "Neo", suffix: " (Neo)", deviceType: 9, columns: 4, rows: 2, dials: 0 },
-		{ label: "Studio", suffix: " (Studio)", deviceType: 10, columns: 16, rows: 2, dials: 2 },
 		{ label: "+ XL", suffix: " (+ XL)", deviceType: 13, columns: 9, rows: 4, dials: 6 }
 	];
 
@@ -259,13 +258,7 @@ describe("the bundled profiles", () => {
 
 	it.each([
 		["XL", DeviceType.StreamDeckXL, [ATTENDEE, PRESENTER]],
-		["Studio", DeviceType.StreamDeckStudio, [ATTENDEE, PRESENTER]],
-		// The + XL presenter is deliberately not in this list. It was laid out
-		// by hand in the Stream Deck app and read back, so it places the
-		// meeting keys where they were dragged rather than where the shared
-		// block puts them. Asserting it here would only force the two to be
-		// edited together, which is the opposite of the point.
-		["+ XL", DeviceType.StreamDeckPlusXL, [ATTENDEE]]
+		["+ XL", DeviceType.StreamDeckPlusXL, [ATTENDEE, PRESENTER]]
 	] as const)(
 		"keeps the meeting keys in the same place across the %s layouts",
 		(label, device, others) => {
@@ -288,6 +281,42 @@ describe("the bundled profiles", () => {
 			}
 		}
 	);
+
+	it.each(
+		bundled
+			.filter((b) => b.base !== MEETING)
+			.map((b) => [b.name, b] as const)
+	)("%s puts the slide navigation together on the bottom row", (_label, b) => {
+		/*
+			Previous, the slide counter, then next - adjacent, in that order,
+			on the row a hand finds without looking. Reading the slide number
+			means looking at the deck; reaching for the next slide should not,
+			and a layout that scatters the three makes it mean both.
+
+			Taken from the + XL presenter layout, which was laid out by hand on
+			the hardware; every other PowerPoint Live layout is built from it.
+		*/
+		const at = new Map(
+			Object.entries(keypad(b.name)).map(([pos, a]) => [a.UUID, pos] as const)
+		);
+
+		const prev = at.get("com.bad-duck.teamscontrol.ppt-prev");
+		const status = at.get("com.bad-duck.teamscontrol.ppt-status");
+		const next = at.get("com.bad-duck.teamscontrol.ppt-next");
+
+		expect(prev, `${b.name} has no previous-slide key`).toBeDefined();
+		expect(status, `${b.name} has no slide counter`).toBeDefined();
+		expect(next, `${b.name} has no next-slide key`).toBeDefined();
+
+		const [pc, pr] = prev!.split(",").map(Number);
+		const [sc, sr] = status!.split(",").map(Number);
+		const [nc, nr] = next!.split(",").map(Number);
+
+		const bottom = b.deck.rows - 1;
+		expect(pr, `${b.name} has the slide navigation off the bottom row`).toBe(bottom);
+		expect([sr, nr], `${b.name} splits the slide navigation across rows`).toEqual([pr, pr]);
+		expect([sc, nc], `${b.name} has the slide navigation out of order`).toEqual([pc + 1, pc + 2]);
+	});
 
 	it("gives the + and the Neo identical keys, because they have identical grids", () => {
 		// Four by two either way, and neither has room for a key the other
@@ -338,7 +367,6 @@ describe("picking the file for a deck", () => {
 				DeviceType.StreamDeckXL,
 				DeviceType.StreamDeckPlus,
 				DeviceType.StreamDeckNeo,
-				DeviceType.StreamDeckStudio,
 				DeviceType.StreamDeckPlusXL
 			]) {
 				const resolved = profilePath(base, device);
@@ -356,6 +384,11 @@ describe("picking the file for a deck", () => {
 		// Pedal publishes no key layout, and Mobile and the Virtual deck are
 		// whatever size the user makes them, so a layout built for any of them
 		// would be a guess about where the keys are.
+		//
+		// The Studio is left out for a different reason: its grid is published
+		// and a layout for it worked, but it is a rack-mounted broadcast deck
+		// and unlikely to be sitting in front of anyone in a Teams meeting.
+		expect(profilePath(MEETING, DeviceType.StreamDeckStudio)).toBeNull();
 		expect(profilePath(MEETING, DeviceType.StreamDeckPedal)).toBeNull();
 		expect(profilePath(MEETING, DeviceType.StreamDeckMobile)).toBeNull();
 		expect(profilePath(MEETING, DeviceType.VirtualStreamDeck)).toBeNull();

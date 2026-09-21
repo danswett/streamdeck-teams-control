@@ -29,7 +29,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { type Deck as Device, MINI, NEO, PLUS, PLUS_XL, STREAM_DECK, STUDIO, XL } from "./decks.ts";
+import { type Deck as Device, MINI, NEO, PLUS, PLUS_XL, STREAM_DECK, XL } from "./decks.ts";
 
 import AdmZip from "adm-zip";
 
@@ -136,11 +136,23 @@ function layoutFingerprint(profile: Profile): string {
  * the right five columns change. Leave sits in the far corner, diagonally
  * opposite mute, because the two worst keys to confuse are those.
  */
-const XL_MEETING: Layout = {
+/**
+ * The meeting keys on a deck wide enough to hold them still.
+ *
+ * Taken from the + XL presenter layout, which was laid out by hand on the
+ * hardware and is the reference every other layout is built from. Leave is the
+ * one thing that moves: it belongs in the far top corner, and which column
+ * that is depends on the deck.
+ *
+ * These positions are identical in all three of a deck's profiles, so a
+ * profile switch never moves mute out from under the finger reaching for it.
+ */
+const meetingBlock = (leaveColumn: number): Layout => ({
 	"0,0": { action: "mute", name: "Mute" },
 	"1,0": { action: "camera", name: "Camera" },
 	"2,0": { action: "blur", name: "Background Blur" },
 	"3,0": { action: "share", name: "Share Screen" },
+	[`${leaveColumn},0`]: { action: "leave", name: "Leave" },
 
 	"0,1": { action: "hand", name: "Raise Hand" },
 	"1,1": { action: "chat", name: "Chat" },
@@ -150,35 +162,22 @@ const XL_MEETING: Layout = {
 	"1,2": { action: "react-love", name: "React: Love" },
 	"2,2": { action: "react-applause", name: "React: Applause" },
 	"3,2": { action: "react-laugh", name: "React: Laugh" },
-
-	"0,3": { action: "react-wow", name: "React: Wow" },
-	"3,3": { action: "leave", name: "Leave" }
-};
+	"4,2": { action: "react-wow", name: "React: Wow" }
+});
 
 /**
- * The meeting keys on the Studio, which is sixteen wide and two deep.
+ * Moving through the deck: back, where you are, forward.
  *
- * Nothing can be stacked into a column on two rows, so the grouping runs
- * along each row instead: controls on the top, reactions underneath. Leave
- * takes the far end of the bottom row, as far from mute as the deck allows.
+ * These three are always adjacent and always in this order, on every deck that
+ * ships a PowerPoint Live layout, and always on the bottom row - the row an
+ * unsighted hand finds first. Reading the slide number means looking at the
+ * deck; reaching for the next slide should not.
  */
-const STUDIO_MEETING: Layout = {
-	"0,0": { action: "mute", name: "Mute" },
-	"1,0": { action: "camera", name: "Camera" },
-	"2,0": { action: "blur", name: "Background Blur" },
-	"3,0": { action: "share", name: "Share Screen" },
-	"4,0": { action: "hand", name: "Raise Hand" },
-	"5,0": { action: "chat", name: "Chat" },
-	"6,0": { action: "people", name: "People" },
-
-	"0,1": { action: "react-like", name: "React: Like" },
-	"1,1": { action: "react-love", name: "React: Love" },
-	"2,1": { action: "react-applause", name: "React: Applause" },
-	"3,1": { action: "react-laugh", name: "React: Laugh" },
-	"4,1": { action: "react-wow", name: "React: Wow" },
-
-	"15,1": { action: "leave", name: "Leave" }
-};
+const slideNav = (row: number, column = 0): Layout => ({
+	[`${column},${row}`]: { action: "ppt-prev", name: "PPT Live: Previous Slide" },
+	[`${column + 1},${row}`]: { action: "ppt-status", name: "PPT Live: Slide Counter" },
+	[`${column + 2},${row}`]: { action: "ppt-next", name: "PPT Live: Next Slide" }
+});
 
 /* ------------------------------------------------------------------------- *
  * The eight-key decks: Stream Deck + and Neo, both 4x2.
@@ -187,6 +186,9 @@ const STUDIO_MEETING: Layout = {
  * presentation the way the + XL does, so each profile uses all eight for
  * whatever is happening now. Mute survives into every one of them - being
  * moved onto a presentation layout must never be what costs you the mute key.
+ *
+ * The bottom row is the + XL's bottom row as far as it reaches: the slide
+ * navigation, then grid view.
  *
  * The + has four dials and the Neo has none, and neither has room for a key
  * the other lacks, so the two share these three blocks exactly.
@@ -205,36 +207,29 @@ const EIGHT_MEETING: Layout = {
 };
 
 const EIGHT_ATTENDEE: Layout = {
-	"0,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
-	"1,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
-	"2,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
-	"3,0": { action: "ppt-grid", name: "PPT Live: Grid View" },
+	"0,0": { action: "mute", name: "Mute" },
+	"1,0": { action: "camera", name: "Camera" },
+	// Navigation moves your own view only, so Sync is what gets you back.
+	"2,0": { action: "ppt-sync", name: "PPT Attendee: Sync" },
+	"3,0": { action: "ppt-take-control", name: "PPT Attendee: Take Control" },
 
-	// Navigation moves your own view only, so Sync sits directly under it.
-	"0,1": { action: "ppt-sync", name: "PPT Attendee: Sync" },
-	"1,1": { action: "ppt-take-control", name: "PPT Attendee: Take Control" },
-	"2,1": { action: "mute", name: "Mute" },
-	"3,1": { action: "camera", name: "Camera" }
+	...slideNav(1),
+	"3,1": { action: "ppt-grid", name: "PPT Live: Grid View" }
 };
 
 /**
- * The drawing tools take the whole bottom row, as they do on the 15-key: they
- * are a single-select group and read as one control.
- *
- * Cursor is in it rather than the eraser. Cursor is how drawing is switched
- * off again, so a deck that offers a pen without it can put the presentation
- * into a state it cannot get out of.
+ * Cursor is in the tools rather than the eraser. Cursor is how drawing is
+ * switched off again, so a deck that offers a pen without it can put the
+ * presentation into a state it cannot get out of.
  */
 const EIGHT_PRESENTER: Layout = {
-	"0,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
-	"1,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
-	"2,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
-	"3,0": { action: "mute", name: "Mute" },
+	"0,0": { action: "mute", name: "Mute" },
+	"1,0": { action: "ppt-cursor", name: "PPT Presenter: Cursor" },
+	"2,0": { action: "ppt-laser", name: "PPT Presenter: Laser Pointer" },
+	"3,0": { action: "ppt-pen", name: "PPT Presenter: Pen" },
 
-	"0,1": { action: "ppt-cursor", name: "PPT Presenter: Cursor" },
-	"1,1": { action: "ppt-laser", name: "PPT Presenter: Laser Pointer" },
-	"2,1": { action: "ppt-pen", name: "PPT Presenter: Pen" },
-	"3,1": { action: "ppt-highlighter", name: "PPT Presenter: Highlighter" }
+	...slideNav(1),
+	"3,1": { action: "ppt-grid", name: "PPT Live: Grid View" }
 };
 
 /** The timer, which is a meeting control rather than a PowerPoint one. */
@@ -277,48 +272,56 @@ const PROFILES: Profile[] = [
 		name: "PowerPoint Live (Attendee)",
 		device: STREAM_DECK,
 		uuid: "2E5C7D3F-9B68-4E4A-8F21-4D8C3B7A6E95",
-		layoutHash: "39c73331",
+		layoutHash: "2f39b420",
+		/*
+			The slide navigation moved to the bottom row. This layout has
+			shipped, and Stream Deck will not update one in place, so reaching
+			anyone who already has it costs a new path - and leaves their old
+			copy behind under the unsuffixed name.
+		*/
+		revision: 2,
 		page: "a1b2c3d4-0002-4e85-a0b7-2f6c1e5d8a34",
-		// Watching someone else's deck. Navigation moves your own view only, so
-		// Sync sits directly under it to get back to the presenter.
+		// Watching someone else's deck. The meeting keys keep the top row they
+		// have in the meeting profile, and the slide navigation takes the
+		// bottom one.
 		layout: {
-			"0,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
-			"1,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
-			"2,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
-			"3,0": { action: "ppt-grid", name: "PPT Live: Grid View" },
-			"4,0": { action: "ppt-high-contrast", name: "PPT Live: High Contrast" },
+			"0,0": { action: "mute", name: "Mute" },
+			"1,0": { action: "camera", name: "Camera" },
+			"2,0": { action: "blur", name: "Background Blur" },
+			"3,0": { action: "share", name: "Share Screen" },
+			"4,0": { action: "leave", name: "Leave" },
 
-			"0,1": { action: "ppt-sync", name: "PPT Attendee: Sync" },
-			"1,1": { action: "ppt-popout", name: "PPT Live: Pop Out" },
+			"0,1": { action: "hand", name: "Raise Hand" },
+			"1,1": { action: "chat", name: "Chat" },
+			// Navigation moves your own view only, so Sync is what gets you back.
+			"2,1": { action: "ppt-sync", name: "PPT Attendee: Sync" },
+			"3,1": { action: "ppt-popout", name: "PPT Live: Pop Out" },
 			// Taking control makes you the presenter, which swaps this whole
 			// profile out for the presenter one.
-			"2,1": { action: "ppt-take-control", name: "PPT Attendee: Take Control" },
-			"3,1": { action: "share", name: "Share Screen" },
-			"4,1": { action: "blur", name: "Background Blur" },
+			"4,1": { action: "ppt-take-control", name: "PPT Attendee: Take Control" },
 
-			// The meeting basics stay reachable, so being moved onto a
-			// presentation layout never costs you the mute key.
-			"0,2": { action: "mute", name: "Mute" },
-			"1,2": { action: "camera", name: "Camera" },
-			"2,2": { action: "hand", name: "Raise Hand" },
-			"3,2": { action: "chat", name: "Chat" },
-			"4,2": { action: "leave", name: "Leave" }
+			...slideNav(2),
+			"3,2": { action: "ppt-grid", name: "PPT Live: Grid View" },
+			"4,2": { action: "ppt-high-contrast", name: "PPT Live: High Contrast" }
 		}
 	},
 	{
 		name: "PowerPoint Live (Presenter)",
 		device: STREAM_DECK,
 		uuid: "3D6E8A4B-1C79-4F5B-9A32-5E9D4C8B7F06",
-		layoutHash: "32fe1499",
+		layoutHash: "8f6b0afa",
+		// Shipped, and changed - see the attendee layout above.
+		revision: 2,
 		page: "a1b2c3d4-0003-4e85-a0b7-2f6c1e5d8a34",
 		// Driving the deck. The drawing tools get their own row because they are
-		// a single-select group and read as one control.
+		// a single-select group and read as one control, and the slide
+		// navigation takes the bottom one.
 		layout: {
-			"0,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
-			"1,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
-			"2,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
-			"3,0": { action: "ppt-grid", name: "PPT Live: Grid View" },
-			"4,0": { action: "ppt-refresh", name: "PPT Presenter: Present Latest" },
+			"0,0": { action: "mute", name: "Mute" },
+			"1,0": { action: "camera", name: "Camera" },
+			"2,0": { action: "ppt-hide-presenter-view", name: "PPT Presenter: Presenter View" },
+			"3,0": { action: "ppt-private-view", name: "PPT Presenter: Private Viewing" },
+			"4,0": { action: "ppt-stop-presenting", name: "PPT Presenter: Stop Presenting" },
 
 			"0,1": { action: "ppt-cursor", name: "PPT Presenter: Cursor" },
 			"1,1": { action: "ppt-laser", name: "PPT Presenter: Laser Pointer" },
@@ -326,14 +329,9 @@ const PROFILES: Profile[] = [
 			"3,1": { action: "ppt-highlighter", name: "PPT Presenter: Highlighter" },
 			"4,1": { action: "ppt-eraser", name: "PPT Presenter: Eraser" },
 
-			"0,2": { action: "mute", name: "Mute" },
-			"1,2": { action: "camera", name: "Camera" },
-			"2,2": { action: "ppt-hide-presenter-view", name: "PPT Presenter: Presenter View" },
-			"3,2": { action: "ppt-private-view", name: "PPT Presenter: Private Viewing" },
-			"4,2": {
-				action: "ppt-stop-presenting",
-				name: "PPT Presenter: Stop Presenting"
-			}
+			...slideNav(2),
+			"3,2": { action: "ppt-grid", name: "PPT Live: Grid View" },
+			"4,2": { action: "ppt-refresh", name: "PPT Presenter: Present Latest" }
 		}
 	},
 
@@ -350,34 +348,33 @@ const PROFILES: Profile[] = [
 		name: "Teams Meeting",
 		device: PLUS_XL,
 		uuid: "4A7C9E1D-2B83-4F6A-8D45-6E1F0C3B9A72",
-		layoutHash: "dbef26ef",
+		layoutHash: "5cfea916",
 		page: "a1b2c3d4-0011-4e85-a0b7-2f6c1e5d8a34",
 		dials: { ...TIMER_DIAL },
-		layout: { ...XL_MEETING }
+		layout: { ...meetingBlock(8) }
 	},
 	{
 		name: "PowerPoint Live (Attendee)",
 		device: PLUS_XL,
 		uuid: "5B8D0F2E-3C94-4A7B-9E56-7F2A1D4C8B63",
-		layoutHash: "3a4dd498",
+		layoutHash: "b6f59993",
 		page: "a1b2c3d4-0012-4e85-a0b7-2f6c1e5d8a34",
 		dials: { ...TIMER_DIAL },
 		layout: {
-			...XL_MEETING,
+			...meetingBlock(8),
 
-			// Watching someone else's deck. Navigation moves your own view
-			// only, so Sync sits directly under it to get back to the presenter.
-			"4,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
-			"5,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
-			"6,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
-			"7,0": { action: "ppt-grid", name: "PPT Live: Grid View" },
-			"8,0": { action: "ppt-high-contrast", name: "PPT Live: High Contrast" },
-
-			"4,1": { action: "ppt-sync", name: "PPT Attendee: Sync" },
-			"5,1": { action: "ppt-popout", name: "PPT Live: Pop Out" },
+			// The presenter profile's bottom row as far as an attendee needs
+			// it: the slide navigation, grid view, then the keys that decide
+			// whose deck you are looking at.
+			...slideNav(3),
+			"3,3": { action: "ppt-grid", name: "PPT Live: Grid View" },
+			// Navigation moves your own view only, so Sync is what gets you back.
+			"4,3": { action: "ppt-sync", name: "PPT Attendee: Sync" },
+			"5,3": { action: "ppt-popout", name: "PPT Live: Pop Out" },
 			// Taking control makes you the presenter, which swaps this whole
 			// profile out for the presenter one.
-			"6,1": { action: "ppt-take-control", name: "PPT Attendee: Take Control" }
+			"6,3": { action: "ppt-take-control", name: "PPT Attendee: Take Control" },
+			"7,3": { action: "ppt-high-contrast", name: "PPT Live: High Contrast" }
 		}
 	},
 	{
@@ -400,26 +397,13 @@ const PROFILES: Profile[] = [
 		},
 		/*
 			Laid out by hand in the Stream Deck app and read back with
-			tools/read-profile.mjs, so this one does not spread XL_MEETING the
-			way the other two + XL profiles do - the meeting keys sit where they
-			were dragged rather than where the shared block puts them.
+			tools/read-profile.mjs. It is the reference the other layouts are
+			built from: the meeting block, then the slide navigation on the
+			bottom row with grid view and the drawing tools after it.
 		*/
 		layout: {
-			"0,0": { action: "mute", name: "Mute" },
-			"1,0": { action: "camera", name: "Camera" },
-			"2,0": { action: "blur", name: "Background Blur" },
-			"3,0": { action: "share", name: "Share Screen" },
-			"8,0": { action: "leave", name: "Leave" },
+			...meetingBlock(8),
 
-			"0,1": { action: "hand", name: "Raise Hand" },
-			"1,1": { action: "chat", name: "Chat" },
-			"2,1": { action: "people", name: "People" },
-
-			"0,2": { action: "react-like", name: "React: Like" },
-			"1,2": { action: "react-love", name: "React: Love" },
-			"2,2": { action: "react-applause", name: "React: Applause" },
-			"3,2": { action: "react-laugh", name: "React: Laugh" },
-			"4,2": { action: "react-wow", name: "React: Wow" },
 			"5,2": { action: "ppt-refresh", name: "PPT Presenter: Present Latest" },
 			"6,2": { action: "ppt-private-view", name: "PPT Presenter: Private Viewing" },
 			"7,2": { action: "ppt-copy-link", name: "PPT Presenter: Copy Link" },
@@ -427,9 +411,7 @@ const PROFILES: Profile[] = [
 
 			// Navigation and the drawing tools together along the bottom, under
 			// the dials that configure them.
-			"0,3": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
-			"1,3": { action: "ppt-status", name: "PPT Live: Slide Counter" },
-			"2,3": { action: "ppt-next", name: "PPT Live: Next Slide" },
+			...slideNav(3),
 			"3,3": { action: "ppt-grid", name: "PPT Live: Grid View" },
 			"4,3": { action: "ppt-cursor", name: "PPT Presenter: Cursor" },
 			"5,3": { action: "ppt-laser", name: "PPT Presenter: Laser Pointer" },
@@ -466,23 +448,22 @@ const PROFILES: Profile[] = [
 		name: "PowerPoint Live (Attendee)",
 		device: MINI,
 		uuid: "8E1A3C5B-6F27-4D0E-9B89-0C5D4A7F2E96",
-		layoutHash: "6a7ad660",
+		layoutHash: "9ecc3c65",
 		page: "a1b2c3d4-0022-4e85-a0b7-2f6c1e5d8a34",
 		layout: {
-			"0,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
-			"1,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
-			"2,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
+			"0,0": { action: "mute", name: "Mute" },
+			"1,0": { action: "camera", name: "Camera" },
+			// Navigation moves your own view only, so Sync is what gets you back.
+			"2,0": { action: "ppt-sync", name: "PPT Attendee: Sync" },
 
-			"0,1": { action: "ppt-sync", name: "PPT Attendee: Sync" },
-			"1,1": { action: "mute", name: "Mute" },
-			"2,1": { action: "camera", name: "Camera" }
+			...slideNav(1)
 		}
 	},
 	{
 		name: "PowerPoint Live (Presenter)",
 		device: MINI,
 		uuid: "9F2B4D6C-7038-4E1F-8C90-1D6E5B8A3F07",
-		layoutHash: "63e1a3e2",
+		layoutHash: "5df1bca3",
 		page: "a1b2c3d4-0023-4e85-a0b7-2f6c1e5d8a34",
 		/*
 			Cursor rather than the pen, on a deck with room for one of them.
@@ -490,13 +471,11 @@ const PROFILES: Profile[] = [
 			back strands the presentation in a state the deck cannot undo.
 		*/
 		layout: {
-			"0,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
-			"1,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
-			"2,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
+			"0,0": { action: "mute", name: "Mute" },
+			"1,0": { action: "ppt-cursor", name: "PPT Presenter: Cursor" },
+			"2,0": { action: "ppt-laser", name: "PPT Presenter: Laser Pointer" },
 
-			"0,1": { action: "ppt-cursor", name: "PPT Presenter: Cursor" },
-			"1,1": { action: "ppt-laser", name: "PPT Presenter: Laser Pointer" },
-			"2,1": { action: "mute", name: "Mute" }
+			...slideNav(1)
 		}
 	},
 
@@ -511,67 +490,66 @@ const PROFILES: Profile[] = [
 		name: "Teams Meeting",
 		device: XL,
 		uuid: "0A3C5E7D-8149-4F20-9DA1-2E7F6C9B4018",
-		layoutHash: "7aa184d7",
+		layoutHash: "a1ac84b5",
 		page: "a1b2c3d4-0031-4e85-a0b7-2f6c1e5d8a34",
-		layout: { ...XL_MEETING }
+		layout: { ...meetingBlock(7) }
 	},
 	{
 		name: "PowerPoint Live (Attendee)",
 		device: XL,
 		uuid: "1B4D6F8E-925A-4031-8EB2-3F807DAC5129",
-		layoutHash: "8700754f",
+		layoutHash: "eaa8f031",
 		page: "a1b2c3d4-0032-4e85-a0b7-2f6c1e5d8a34",
 		layout: {
-			...XL_MEETING,
+			...meetingBlock(7),
 
-			"4,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
-			"5,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
-			"6,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
-			"7,0": { action: "ppt-grid", name: "PPT Live: Grid View" },
-
-			"4,1": { action: "ppt-sync", name: "PPT Attendee: Sync" },
-			"5,1": { action: "ppt-popout", name: "PPT Live: Pop Out" },
-			"6,1": { action: "ppt-take-control", name: "PPT Attendee: Take Control" },
-			"7,1": { action: "ppt-high-contrast", name: "PPT Live: High Contrast" }
+			...slideNav(3),
+			"3,3": { action: "ppt-grid", name: "PPT Live: Grid View" },
+			// Navigation moves your own view only, so Sync is what gets you back.
+			"4,3": { action: "ppt-sync", name: "PPT Attendee: Sync" },
+			"5,3": { action: "ppt-popout", name: "PPT Live: Pop Out" },
+			// Taking control makes you the presenter, which swaps this whole
+			// profile out for the presenter one.
+			"6,3": { action: "ppt-take-control", name: "PPT Attendee: Take Control" },
+			"7,3": { action: "ppt-high-contrast", name: "PPT Live: High Contrast" }
 		}
 	},
 	{
 		name: "PowerPoint Live (Presenter)",
 		device: XL,
 		uuid: "2C5E708F-A36B-4142-9FC3-40918EBD623A",
-		layoutHash: "fafb431a",
+		layoutHash: "bf8300b2",
 		page: "a1b2c3d4-0033-4e85-a0b7-2f6c1e5d8a34",
 		/*
-			Four full columns, so the presentation gets a row per job:
-			navigation, the drawing tools, what to show, and how to show it.
-			It is the only deck with no dials and room for every key, which is
-			why the layout keys appear here and nowhere else.
+			The + XL presenter with a column taken away, which is one key more
+			than its bottom row can hold. The eraser is what moves: it sits
+			directly above the highlighter, at the end of the row the rest of
+			its group could not reach.
+
+			Stop Presenting is kept two rows clear of Leave. They are the two
+			keys that end something, and they should not be neighbours.
 		*/
 		layout: {
-			...XL_MEETING,
+			...meetingBlock(7),
 
-			"4,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
-			"5,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
-			"6,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
-			"7,0": { action: "ppt-grid", name: "PPT Live: Grid View" },
+			"3,1": { action: "ppt-layout-content", name: "PPT Presenter: Content Only" },
+			"4,1": { action: "ppt-layout-cameo", name: "PPT Presenter: Layout Cameo" },
+			"5,1": { action: "ppt-refresh", name: "PPT Presenter: Present Latest" },
+			"6,1": { action: "ppt-private-view", name: "PPT Presenter: Private Viewing" },
+			"7,1": { action: "ppt-copy-link", name: "PPT Presenter: Copy Link" },
 
-			"4,1": { action: "ppt-cursor", name: "PPT Presenter: Cursor" },
-			"5,1": { action: "ppt-laser", name: "PPT Presenter: Laser Pointer" },
-			"6,1": { action: "ppt-pen", name: "PPT Presenter: Pen" },
-			"7,1": { action: "ppt-highlighter", name: "PPT Presenter: Highlighter" },
+			"5,2": { action: "ppt-hide-presenter-view", name: "PPT Presenter: Presenter View" },
+			"6,2": { action: "ppt-stop-presenting", name: "PPT Presenter: Stop Presenting" },
+			"7,2": { action: "ppt-eraser", name: "PPT Presenter: Eraser" },
 
-			"4,2": { action: "ppt-eraser", name: "PPT Presenter: Eraser" },
-			"5,2": { action: "ppt-refresh", name: "PPT Presenter: Present Latest" },
-			"6,2": { action: "ppt-private-view", name: "PPT Presenter: Private Viewing" },
-			"7,2": { action: "ppt-copy-link", name: "PPT Presenter: Copy Link" },
-
-			"4,3": { action: "ppt-hide-presenter-view", name: "PPT Presenter: Presenter View" },
-			"5,3": { action: "ppt-layout-content", name: "PPT Presenter: Content Only" },
-			"6,3": { action: "ppt-layout-cameo", name: "PPT Presenter: Layout Cameo" },
-			"7,3": { action: "ppt-stop-presenting", name: "PPT Presenter: Stop Presenting" }
+			...slideNav(3),
+			"3,3": { action: "ppt-grid", name: "PPT Live: Grid View" },
+			"4,3": { action: "ppt-cursor", name: "PPT Presenter: Cursor" },
+			"5,3": { action: "ppt-laser", name: "PPT Presenter: Laser Pointer" },
+			"6,3": { action: "ppt-pen", name: "PPT Presenter: Pen" },
+			"7,3": { action: "ppt-highlighter", name: "PPT Presenter: Highlighter" }
 		}
 	},
-
 	/* --------------------------------------------------------------------- *
 	 * Stream Deck + - 4x2 and four dials
 	 * --------------------------------------------------------------------- */
@@ -588,7 +566,7 @@ const PROFILES: Profile[] = [
 		name: "PowerPoint Live (Attendee)",
 		device: PLUS,
 		uuid: "4E7092AB-C58D-4364-91E5-62B3A0DF845C",
-		layoutHash: "702d8595",
+		layoutHash: "5a646598",
 		page: "a1b2c3d4-0042-4e85-a0b7-2f6c1e5d8a34",
 		dials: { ...TIMER_DIAL },
 		layout: { ...EIGHT_ATTENDEE }
@@ -597,7 +575,7 @@ const PROFILES: Profile[] = [
 		name: "PowerPoint Live (Presenter)",
 		device: PLUS,
 		uuid: "5F81A3BC-D69E-4475-82F6-73C4B1E0956D",
-		layoutHash: "676ecda6",
+		layoutHash: "0b6bd091",
 		page: "a1b2c3d4-0043-4e85-a0b7-2f6c1e5d8a34",
 		/*
 			Four dials and five things that want one, so the timer is the one
@@ -634,7 +612,7 @@ const PROFILES: Profile[] = [
 		name: "PowerPoint Live (Attendee)",
 		device: NEO,
 		uuid: "71A3C5DE-F8B0-4697-84B8-95E6D302B78F",
-		layoutHash: "0335b850",
+		layoutHash: "5f085bd4",
 		page: "a1b2c3d4-0052-4e85-a0b7-2f6c1e5d8a34",
 		layout: { ...EIGHT_ATTENDEE }
 	},
@@ -642,80 +620,9 @@ const PROFILES: Profile[] = [
 		name: "PowerPoint Live (Presenter)",
 		device: NEO,
 		uuid: "82B4D6EF-09C1-47A8-95C9-A6F7E413C890",
-		layoutHash: "4c0a30aa",
+		layoutHash: "0644f73d",
 		page: "a1b2c3d4-0053-4e85-a0b7-2f6c1e5d8a34",
 		layout: { ...EIGHT_PRESENTER }
-	},
-
-	/* --------------------------------------------------------------------- *
-	 * Stream Deck Studio - 16x2 and a dial at each end
-	 * --------------------------------------------------------------------- */
-	{
-		name: "Teams Meeting",
-		device: STUDIO,
-		uuid: "93C5E700-1AD2-48B9-86DA-B708F524D9A1",
-		layoutHash: "f21f2bfa",
-		page: "a1b2c3d4-0061-4e85-a0b7-2f6c1e5d8a34",
-		layout: { ...STUDIO_MEETING }
-	},
-	{
-		name: "PowerPoint Live (Attendee)",
-		device: STUDIO,
-		uuid: "A4D6F811-2BE3-49CA-97EB-C819064E5AB2",
-		layoutHash: "36e59fb8",
-		page: "a1b2c3d4-0062-4e85-a0b7-2f6c1e5d8a34",
-		// Column seven is left empty on purpose: on a deck this wide it is the
-		// only thing separating the meeting from the presentation.
-		layout: {
-			...STUDIO_MEETING,
-
-			"8,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
-			"9,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
-			"10,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
-			"11,0": { action: "ppt-grid", name: "PPT Live: Grid View" },
-			"12,0": { action: "ppt-high-contrast", name: "PPT Live: High Contrast" },
-			"13,0": { action: "ppt-popout", name: "PPT Live: Pop Out" },
-
-			"8,1": { action: "ppt-sync", name: "PPT Attendee: Sync" },
-			"9,1": { action: "ppt-take-control", name: "PPT Attendee: Take Control" }
-		}
-	},
-	{
-		name: "PowerPoint Live (Presenter)",
-		device: STUDIO,
-		uuid: "B5E70922-3CF4-4ADB-88FC-D92A17506BC3",
-		layoutHash: "6d9af02a",
-		page: "a1b2c3d4-0063-4e85-a0b7-2f6c1e5d8a34",
-		/*
-			Two dials and no screen to draw on, so they carry the two controls
-			whose result you read in Teams rather than on the deck. A slide
-			thumbnail or the timer would have had nowhere to appear.
-		*/
-		dials: {
-			"0,0": { action: "ppt-ink-thickness-dial", name: "PPT Presenter: Ink Thickness" },
-			"1,0": { action: "ppt-ink-color-dial", name: "PPT Presenter: Ink Color" }
-		},
-		layout: {
-			...STUDIO_MEETING,
-
-			"8,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
-			"9,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
-			"10,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
-			"11,0": { action: "ppt-grid", name: "PPT Live: Grid View" },
-			"12,0": { action: "ppt-refresh", name: "PPT Presenter: Present Latest" },
-			"13,0": { action: "ppt-private-view", name: "PPT Presenter: Private Viewing" },
-			// Kept off the bottom row, which ends at Leave: two keys that end
-			// something should not sit next to each other.
-			"14,0": { action: "ppt-stop-presenting", name: "PPT Presenter: Stop Presenting" },
-
-			"8,1": { action: "ppt-cursor", name: "PPT Presenter: Cursor" },
-			"9,1": { action: "ppt-laser", name: "PPT Presenter: Laser Pointer" },
-			"10,1": { action: "ppt-pen", name: "PPT Presenter: Pen" },
-			"11,1": { action: "ppt-highlighter", name: "PPT Presenter: Highlighter" },
-			"12,1": { action: "ppt-eraser", name: "PPT Presenter: Eraser" },
-			"13,1": { action: "ppt-hide-presenter-view", name: "PPT Presenter: Presenter View" },
-			"14,1": { action: "ppt-copy-link", name: "PPT Presenter: Copy Link" }
-		}
 	}
 ];
 

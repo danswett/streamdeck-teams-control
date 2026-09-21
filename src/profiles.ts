@@ -45,7 +45,9 @@ export const PRESENTER = "PowerPoint Live (Presenter)";
  * to build against: the Pedal is three keys with no published layout, and
  * Stream Deck Mobile and the Virtual deck are whatever size the user makes
  * them. Corsair and SCUF keyboards are reported as Stream Decks too, and are
- * left alone for the same reason.
+ * left alone for the same reason. The Studio has a fixed grid and is left out
+ * anyway - it is a rack-mounted broadcast deck, not something anyone is likely
+ * to be running a Teams meeting from.
  */
 const SUPPORTED = new Map<DeviceType, string>([
 	[DeviceType.StreamDeck, ""],
@@ -53,7 +55,6 @@ const SUPPORTED = new Map<DeviceType, string>([
 	[DeviceType.StreamDeckXL, " (XL)"],
 	[DeviceType.StreamDeckPlus, " (+)"],
 	[DeviceType.StreamDeckNeo, " (Neo)"],
-	[DeviceType.StreamDeckStudio, " (Studio)"],
 	[DeviceType.StreamDeckPlusXL, " (+ XL)"]
 ]);
 
