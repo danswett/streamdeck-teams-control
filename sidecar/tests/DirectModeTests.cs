@@ -270,4 +270,59 @@ public class DirectModeTests
     {
         Assert.Equal("like-button", DomActuator.Fill("like-button", "ignored"));
     }
+
+    [Fact]
+    public void An_argument_going_into_a_name_pattern_is_regex_escaped()
+    {
+        // The same {arg} reaches an id in one place and a pattern in another.
+        // The UI Automation path escapes it for the pattern; without the same
+        // treatment here one config entry would mean a literal on one path and
+        // live regex syntax on the other.
+        var filled = DomActuator.Fill("^{arg}$", "a.b(c)", forRegex: true);
+
+        Assert.DoesNotContain("(c)", filled);
+        Assert.Contains(@"a\.b", filled);
+    }
+
+    // ------------------------------------------------- connection guards
+
+    [Theory]
+    [InlineData("ws://127.0.0.1:9457/devtools/page/AB", true)]
+    [InlineData("ws://[::1]:9457/devtools/page/AB", true)]
+    public void A_loopback_target_on_the_configured_port_is_connectable(string url, bool expected)
+    {
+        Assert.Equal(expected, Cdp.IsConnectable(url, 9457));
+    }
+
+    [Theory]
+    // A different port: the endpoint would be choosing where we connect.
+    [InlineData("ws://127.0.0.1:9999/devtools/page/AB")]
+    // Off-box entirely.
+    [InlineData("ws://192.0.2.1:9457/devtools/page/AB")]
+    [InlineData("ws://evil.example:9457/devtools/page/AB")]
+    // Wrong scheme.
+    [InlineData("http://127.0.0.1:9457/devtools/page/AB")]
+    [InlineData("file:///c:/windows/system32/cmd.exe")]
+    // Not a URL at all.
+    [InlineData("not a url")]
+    [InlineData("")]
+    public void A_target_we_did_not_ask_for_is_refused(string url)
+    {
+        // Proven necessary: an endpoint advertising a URL on another port had
+        // the sidecar connect to that port instead.
+        Assert.False(Cdp.IsConnectable(url, 9457));
+    }
+
+    [Theory]
+    [InlineData("https://pods.edog.officeapps.live.com/slideshow.aspx", true)]
+    [InlineData("https://x.officeapps.live.com/slideshow.aspx?id=1", true)]
+    // Substring matches that are not the slide show.
+    [InlineData("https://attacker.example/evil?x=slideshow.aspx", false)]
+    [InlineData("https://officeapps.live.com.attacker.example/slideshow.aspx", false)]
+    [InlineData("http://pods.officeapps.live.com/slideshow.aspx", false)]
+    [InlineData("https://pods.officeapps.live.com/notslideshow", false)]
+    public void Only_the_real_slide_show_document_is_driven(string url, bool expected)
+    {
+        Assert.Equal(expected, DomActuator.IsSlideShowTarget(url));
+    }
 }

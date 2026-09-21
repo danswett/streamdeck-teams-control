@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace TeamsBridge;
 
@@ -112,15 +113,34 @@ internal sealed class DomActuator
             return;
         }
 
+        // Ask the operating system who holds the socket, rather than asking the
+        // socket who it is. The endpoint reports its own targets, so a check
+        // against the URL it returns is self-assertion: any local process can
+        // claim to be Teams, and a browser with a teams.microsoft.com tab open
+        // claims it truthfully while still being the wrong thing to drive.
+        //
+        // The socket belongs to the WebView2 browser process rather than to
+        // Teams itself, so the walk up to the host application is the check
+        // that matters, not the direct owner.
+        var (owned, owner) = PortOwner.IsOwnedBy(_spec.Port, TeamsProcessName);
+        if (!owned)
+        {
+            _status = DirectModeStatus.Off(owner is null
+                ? $"could not establish who owns port {_spec.Port}"
+                : $"port {_spec.Port} belongs to {owner}, which is not Teams");
+            return;
+        }
+
         var teamsPages = targets
             .Where(t => t.Type == "page" &&
                         t.Url.StartsWith("https://teams.microsoft.com/", StringComparison.OrdinalIgnoreCase))
+            .Take(MaxPagesToProbe)
             .ToList();
 
         if (teamsPages.Count == 0)
         {
             _status = DirectModeStatus.Off(
-                $"port {_spec.Port} is open but belongs to another application");
+                $"port {_spec.Port} is open but has no Teams window");
             return;
         }
 
@@ -158,8 +178,7 @@ internal sealed class DomActuator
             return;
         }
 
-        _slideShow = targets.FirstOrDefault(t =>
-            t.Url.Contains("slideshow.aspx", StringComparison.OrdinalIgnoreCase));
+        _slideShow = targets.FirstOrDefault(t => IsSlideShowTarget(t.Url));
 
         _status = new DirectModeStatus(
             true,
@@ -175,6 +194,34 @@ internal sealed class DomActuator
     }
 
     private string _probeElementId = "microphone-button";
+
+    /// <summary>The process that must own the port before it will be used.</summary>
+    private const string TeamsProcessName = "ms-teams";
+
+    /// <summary>
+    /// How many candidate pages to interrogate before giving up.
+    ///
+    /// Each one costs a connect and an evaluation, so an endpoint advertising
+    /// a long list of Teams-looking pages turns discovery into a stall on the
+    /// single worker thread that also serves key presses: sixty of them was
+    /// measured blocking it for ninety seconds. Teams keeps a handful of page
+    /// targets, so a small ceiling costs nothing real.
+    /// </summary>
+    private const int MaxPagesToProbe = 8;
+
+    /// <summary>
+    /// Whether a target is genuinely the PowerPoint Live slide show.
+    ///
+    /// Matched on host and path rather than by looking for "slideshow.aspx"
+    /// anywhere in the URL, which a query string can satisfy.
+    /// </summary>
+    internal static bool IsSlideShowTarget(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return false;
+        if (uri.Scheme != Uri.UriSchemeHttps) return false;
+        if (!uri.Host.EndsWith(".officeapps.live.com", StringComparison.OrdinalIgnoreCase)) return false;
+        return uri.AbsolutePath.EndsWith("/slideshow.aspx", StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// The element that proves a page target is the meeting window. Taken from
@@ -213,12 +260,9 @@ internal sealed class DomActuator
         if (spec.IsPressOnly) return DomOutcome.Declined;
 
         var page = TargetFor(slideShowSurface);
-        if (page is null)
-        {
-            return slideShowSurface
-                ? DomOutcome.Declined            // no deck shared: nothing to talk to
-                : DomOutcome.Declined;
-        }
+        // No target: for a slide-show control that simply means no deck is
+        // shared. Either way UI Automation is the answer, not an error.
+        if (page is null) return DomOutcome.Declined;
 
         var script = string.IsNullOrEmpty(spec.Menu)
             ? BuildDirectClick(spec, arg)
@@ -365,7 +409,7 @@ internal sealed class DomActuator
             Fill(spec.MenuItemToggleAutomationId, arg)
         }.Where(x => !string.IsNullOrEmpty(x)).ToArray();
 
-        var namePattern = Fill(spec.MenuItemName, arg);
+        var namePattern = Fill(spec.MenuItemName, arg, forRegex: true);
         var offPattern = spec.MenuItemOffName;
 
         // Nothing to look for: the UIA path can still find it by other means.
@@ -482,12 +526,22 @@ internal sealed class DomActuator
     /// <summary>
     /// Substitutes a key's configured argument into a selector, matching the
     /// UI Automation path's placeholder so one config serves both.
+    ///
+    /// <paramref name="forRegex"/> matters: the same <c>{arg}</c> reaches an
+    /// id in one place and a name *pattern* in another, and the UI Automation
+    /// path escapes it for the latter. Without the same treatment here, one
+    /// config entry would mean a literal on one path and live regex syntax on
+    /// the other — a different control could match, and a careless value would
+    /// reach <c>new RegExp</c> in the page, where there is no match timeout to
+    /// stop it wedging the renderer.
     /// </summary>
-    internal static string? Fill(string? template, string? arg)
+    internal static string? Fill(string? template, string? arg, bool forRegex = false)
     {
         if (string.IsNullOrEmpty(template) || !template!.Contains("{arg}", StringComparison.Ordinal))
             return template;
-        return template.Replace("{arg}", arg ?? "", StringComparison.Ordinal);
+
+        var value = arg ?? "";
+        return template.Replace("{arg}", forRegex ? Regex.Escape(value) : value, StringComparison.Ordinal);
     }
 
     /// <summary>A JavaScript string literal, or null.</summary>

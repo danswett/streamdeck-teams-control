@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
 using System.Net.WebSockets;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 
@@ -74,6 +76,201 @@ public sealed record DirectModeStatus(bool Usable, string Reason, bool DeckShare
 }
 
 /// <summary>
+/// Works out which process is listening on a loopback TCP port.
+///
+/// This exists because "is this port Teams?" cannot be answered by asking the
+/// port. The DevTools endpoint reports its own targets, so a check against the
+/// URL it returns is self-assertion: any local process can claim to be Teams,
+/// and a browser with one tab open on teams.microsoft.com claims it honestly
+/// while still being the wrong thing to drive.
+///
+/// The operating system knows who holds the socket, and will not lie about it.
+/// </summary>
+internal static class PortOwner
+{
+    private const int AfInet = 2;
+    private const int AfInet6 = 23;
+
+    /// <summary>TCP_TABLE_OWNER_PID_LISTENER</summary>
+    private const int TcpTableOwnerPidListener = 3;
+
+    [DllImport("iphlpapi.dll", SetLastError = true)]
+    private static extern uint GetExtendedTcpTable(
+        IntPtr pTcpTable, ref int dwOutBufLen, bool sort, int ipVersion, int tblClass, int reserved);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct TcpRowOwnerPid
+    {
+        public uint State;
+        public uint LocalAddr;
+        public uint LocalPort;      // network byte order in the low two bytes
+        public uint RemoteAddr;
+        public uint RemotePort;
+        public uint OwningPid;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Tcp6RowOwnerPid
+    {
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)] public byte[] LocalAddr;
+        public uint LocalScopeId;
+        public uint LocalPort;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)] public byte[] RemoteAddr;
+        public uint RemoteScopeId;
+        public uint RemotePort;
+        public uint State;
+        public uint OwningPid;
+    }
+
+    /// <summary>
+    /// The image name of the process listening on <paramref name="port"/>, or
+    /// null when that cannot be established. Null is deliberately not treated
+    /// as permission by callers.
+    /// </summary>
+    public static string? ProcessNameFor(int port)
+    {
+        var pid = OwningPidFor(port);
+        if (pid is null) return null;
+        // Disposed rather than left to a finalizer: this runs on a probe
+        // interval, and an undisposed Process holds an OS handle.
+        try { using var p = Process.GetProcessById(pid.Value); return p.ProcessName; }
+        catch { return null; }
+    }
+
+    public static int? OwningPidFor(int port)
+    {
+        foreach (var family in new[] { AfInet, AfInet6 })
+        {
+            var pid = OwningPid(port, family);
+            if (pid is not null) return pid;
+        }
+        return null;
+    }
+
+    private const int Th32CsSnapProcess = 0x00000002;
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct ProcessEntry32
+    {
+        public uint dwSize;
+        public uint cntUsage;
+        public uint th32ProcessID;
+        public IntPtr th32DefaultHeapID;
+        public uint th32ModuleID;
+        public uint cntThreads;
+        public uint th32ParentProcessID;
+        public int pcPriClassBase;
+        public uint dwFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string szExeFile;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint processId);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool Process32FirstW(IntPtr snapshot, ref ProcessEntry32 entry);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool Process32NextW(IntPtr snapshot, ref ProcessEntry32 entry);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr handle);
+
+    /// <summary>
+    /// Whether the process holding <paramref name="port"/> is
+    /// <paramref name="image"/>, or was started by it.
+    ///
+    /// The second case is the one that matters. A WebView2 application does not
+    /// open the debugging port itself: the flag is passed through to the
+    /// browser process, so the socket belongs to msedgewebview2.exe, whose
+    /// parent is the host application. Checking only the direct owner rejects
+    /// the real thing, which is how this was found.
+    /// </summary>
+    public static (bool ok, string? owner) IsOwnedBy(int port, string image, int maxDepth = 4)
+    {
+        var pid = OwningPidFor(port);
+        if (pid is null) return (false, null);
+
+        var snapshot = CreateToolhelp32Snapshot(Th32CsSnapProcess, 0);
+        if (snapshot == IntPtr.Zero || snapshot == new IntPtr(-1)) return (false, null);
+
+        var names = new Dictionary<uint, string>();
+        var parents = new Dictionary<uint, uint>();
+        try
+        {
+            var entry = new ProcessEntry32 { dwSize = (uint)Marshal.SizeOf<ProcessEntry32>() };
+            if (!Process32FirstW(snapshot, ref entry)) return (false, null);
+            do
+            {
+                names[entry.th32ProcessID] = Path.GetFileNameWithoutExtension(entry.szExeFile ?? "");
+                parents[entry.th32ProcessID] = entry.th32ParentProcessID;
+            } while (Process32NextW(snapshot, ref entry));
+        }
+        catch { return (false, null); }
+        finally { CloseHandle(snapshot); }
+
+        var current = (uint)pid.Value;
+        names.TryGetValue(current, out var ownerName);
+
+        var seen = new HashSet<uint>();
+        for (var depth = 0; depth < maxDepth && current != 0 && seen.Add(current); depth++)
+        {
+            if (!names.TryGetValue(current, out var name)) break;
+            if (string.Equals(name, image, StringComparison.OrdinalIgnoreCase))
+                return (true, ownerName);
+            if (!parents.TryGetValue(current, out current)) break;
+        }
+
+        return (false, ownerName);
+    }
+
+    private static int? OwningPid(int port, int family)
+    {
+        var size = 0;
+        GetExtendedTcpTable(IntPtr.Zero, ref size, false, family, TcpTableOwnerPidListener, 0);
+        if (size <= 0) return null;
+
+        var buffer = Marshal.AllocHGlobal(size);
+        try
+        {
+            if (GetExtendedTcpTable(buffer, ref size, false, family, TcpTableOwnerPidListener, 0) != 0)
+                return null;
+
+            var count = Marshal.ReadInt32(buffer);
+            var rowSize = family == AfInet
+                ? Marshal.SizeOf<TcpRowOwnerPid>()
+                : Marshal.SizeOf<Tcp6RowOwnerPid>();
+            var cursor = buffer + sizeof(int);
+
+            for (var i = 0; i < count; i++)
+            {
+                uint localPort, owningPid;
+                if (family == AfInet)
+                {
+                    var row = Marshal.PtrToStructure<TcpRowOwnerPid>(cursor);
+                    localPort = row.LocalPort; owningPid = row.OwningPid;
+                }
+                else
+                {
+                    var row = Marshal.PtrToStructure<Tcp6RowOwnerPid>(cursor);
+                    localPort = row.LocalPort; owningPid = row.OwningPid;
+                }
+
+                // The port sits in the low two bytes, network byte order.
+                var actual = ((localPort & 0xFF) << 8) | ((localPort >> 8) & 0xFF);
+                if (actual == port) return (int)owningPid;
+
+                cursor += rowSize;
+            }
+        }
+        catch { }
+        finally { Marshal.FreeHGlobal(buffer); }
+
+        return null;
+    }
+}
+
+/// <summary>
 /// Minimal Chrome DevTools Protocol client: list targets, evaluate an
 /// expression in one of them.
 ///
@@ -99,7 +296,43 @@ internal static class Cdp
         UseProxy = false,
         AllowAutoRedirect = false,
         ConnectTimeout = TimeSpan.FromMilliseconds(750)
-    });
+    })
+    {
+        // Whatever is on that port is not necessarily Teams, and a discovery
+        // document is a few kilobytes. Refuse to buffer a reply that is trying
+        // to be something else.
+        MaxResponseContentBufferSize = MaxResponseBytes
+    };
+
+    /// <summary>Largest discovery document worth reading.</summary>
+    private const int MaxResponseBytes = 1 * 1024 * 1024;
+
+    /// <summary>
+    /// Largest reply accepted from a debugger target.
+    ///
+    /// A scripted press returns a small JSON object. Without a ceiling a peer
+    /// that streams indefinitely takes the sidecar down with it: a 40 MB reply
+    /// was measured driving the process from 58 MB to 402 MB of working set,
+    /// because the bytes are decoded to UTF-16 and then parsed.
+    /// </summary>
+    private const int MaxEvaluateBytes = 8 * 1024 * 1024;
+
+    /// <summary>
+    /// Filters the advertised targets down to the ones it is safe to connect to.
+    ///
+    /// The debugging endpoint chooses the WebSocket URL, so without this the
+    /// party being vetted decides where the next connection goes — verified by
+    /// standing up a fake endpoint whose target pointed at a different port,
+    /// which the sidecar duly connected to. Only loopback, only ws, and only
+    /// the port already configured.
+    /// </summary>
+    internal static bool IsConnectable(string url, int expectedPort)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return false;
+        if (!string.Equals(uri.Scheme, "ws", StringComparison.OrdinalIgnoreCase)) return false;
+        if (uri.Port != expectedPort) return false;
+        return IPAddress.TryParse(uri.Host, out var ip) && IPAddress.IsLoopback(ip);
+    }
 
     public static IReadOnlyList<CdpTarget>? ListTargets(int port, int timeoutMs)
     {
@@ -118,7 +351,7 @@ internal static class Cdp
             foreach (var t in doc.RootElement.EnumerateArray())
             {
                 var ws = Str(t, "webSocketDebuggerUrl");
-                if (ws is null) continue;
+                if (ws is null || !IsConnectable(ws, port)) continue;
                 targets.Add(new CdpTarget(
                     Str(t, "type") ?? "", Str(t, "title") ?? "", Str(t, "url") ?? "", ws));
             }
@@ -168,10 +401,14 @@ internal static class Cdp
                 .GetAwaiter().GetResult();
 
             var buffer = new byte[32 * 1024];
-            var sb = new StringBuilder();
+            // Accumulated as BYTES, not decoded per chunk. A receive boundary
+            // can fall in the middle of a multi-byte character, and decoding
+            // each chunk separately turns that character into replacement
+            // characters on both sides - silently corrupting the reply.
+            using var message = new MemoryStream();
             while (!cts.IsCancellationRequested)
             {
-                sb.Clear();
+                message.SetLength(0);
                 WebSocketReceiveResult chunk;
                 do
                 {
@@ -179,10 +416,14 @@ internal static class Cdp
                         .GetAwaiter().GetResult();
                     if (chunk.MessageType == WebSocketMessageType.Close)
                         return CdpResult.Fail("debugger closed the connection");
-                    sb.Append(Encoding.UTF8.GetString(buffer, 0, chunk.Count));
+
+                    if (message.Length + chunk.Count > MaxEvaluateBytes)
+                        return CdpResult.Fail("reply exceeded the size limit");
+
+                    message.Write(buffer, 0, chunk.Count);
                 } while (!chunk.EndOfMessage);
 
-                using var doc = JsonDocument.Parse(sb.ToString());
+                using var doc = JsonDocument.Parse(message.ToArray());
                 var root = doc.RootElement;
 
                 // Targets emit unsolicited events on the same socket; only the
@@ -191,7 +432,7 @@ internal static class Cdp
                     !idEl.TryGetInt32(out var id) || id != callId) continue;
 
                 if (root.TryGetProperty("error", out var err))
-                    return CdpResult.Fail($"devtools error: {err}");
+                    return CdpResult.Fail($"devtools error: {Trim(err.ToString())}");
 
                 if (!root.TryGetProperty("result", out var outer))
                     return CdpResult.Fail("malformed devtools reply");

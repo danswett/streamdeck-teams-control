@@ -491,6 +491,12 @@ public sealed class TeamsClient : IDisposable
     private readonly HashSet<IntPtr> _nudged = new();
 
     /// <summary>
+    /// How many window handles to remember before forgetting them all. Teams
+    /// has tens of windows at most, so this is only ever reached by churn.
+    /// </summary>
+    private const int MaxNudgedHandles = 512;
+
+    /// <summary>
     /// Any one of these proves a meeting window. While a flyout is open Teams
     /// drops the whole toolbar from the accessibility tree and exposes only the
     /// popup, so probing for the mic button alone would look like "meeting
@@ -659,6 +665,13 @@ public sealed class TeamsClient : IDisposable
 
             foreach (var h in handles)
             {
+                // Window handles are recycled by Windows. Remembering them
+                // forever means a new window that inherits a closed one's
+                // handle never gets nudged, and its accessibility tree stays
+                // asleep - which looks exactly like not being in a meeting.
+                // Forgetting the lot occasionally costs one extra nudge and
+                // bounds the set.
+                if (_nudged.Count > MaxNudgedHandles) _nudged.Clear();
                 if (!_nudged.Add(h)) continue;
                 SendMessageTimeout(h, WM_GETOBJECT, IntPtr.Zero, OBJID_CLIENT,
                     0x0002 /* SMTO_ABORTIFHUNG */, 250, out _);
@@ -2257,11 +2270,26 @@ public sealed class TeamsClient : IDisposable
         return el;
     }
 
+    /// <summary>
+    /// Whether Teams is running at all.
+    ///
+    /// The Process objects are disposed rather than left to finalization.
+    /// This runs on every poll - every three seconds during a meeting - and
+    /// each one holds an operating system handle until the finalizer gets to
+    /// it, which showed up as handle count climbing across a soak.
+    /// </summary>
+    private static bool AnyTeamsProcess()
+    {
+        var procs = Process.GetProcessesByName("ms-teams");
+        try { return procs.Length > 0; }
+        finally { foreach (var p in procs) p.Dispose(); }
+    }
+
     public MeetingSnapshot GetSnapshot()
     {
         var snap = new MeetingSnapshot
         {
-            TeamsRunning = Process.GetProcessesByName("ms-teams").Length > 0
+            TeamsRunning = AnyTeamsProcess()
         };
 
         var win = ResolveMeetingWindow();
@@ -3338,7 +3366,12 @@ public sealed class TeamsClient : IDisposable
     {
         try
         {
-            var m = Regex.Match(text, pattern, RegexOptions.IgnoreCase);
+            // Timed, like every other pattern compiled from config. These read
+            // TimerSpec, which selectors.json does not parse yet but which the
+            // README documents as overridable - so the guard goes in before the
+            // parsing does, not after.
+            var m = Regex.Match(text, pattern,
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, ControlSpec.MatchTimeout);
             return m.Success && int.TryParse(m.Groups[1].Value, out var n) ? n : null;
         }
         catch { return null; }
@@ -3348,7 +3381,11 @@ public sealed class TeamsClient : IDisposable
     private static AutomationElement? FindByNamePattern(AutomationElement scope, string pattern)
     {
         Regex re;
-        try { re = new Regex(pattern, RegexOptions.IgnoreCase); }
+        try
+        {
+            re = new Regex(pattern,
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, ControlSpec.MatchTimeout);
+        }
         catch { return null; }
 
         try
@@ -3358,7 +3395,7 @@ public sealed class TeamsClient : IDisposable
                 string name;
                 try { name = el.Name ?? ""; }
                 catch { continue; }
-                if (name.Length > 0 && re.IsMatch(name)) return el;
+                if (name.Length > 0 && SafeMatch(re, name)) return el;
             }
         }
         catch { }
