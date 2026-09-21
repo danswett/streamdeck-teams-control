@@ -13,6 +13,21 @@
 			This key mirrors the matching Microsoft Teams meeting control. It works
 			while Teams is in the background and never sends keystrokes.
 		</p>
+
+		<sdpi-item label="Profile">
+			<sdpi-checkbox
+				global
+				setting="pptAutoProfile"
+				label="Follow the meeting between profiles"
+			></sdpi-checkbox>
+		</sdpi-item>
+		<p class="hint">
+			Moves the deck between the three bundled profiles as a meeting goes:
+			Teams Meeting when you join, PowerPoint Live (Attendee) or (Presenter)
+			while a deck is up, and back to your own profile when you leave. Needs
+			the bundled profiles, which Stream Deck offers to install with the
+			plugin. Shared setting — every key in this plugin uses it.
+		</p>
 		<script src="action-descriptions.js"></script>
 		<script>
 			// Several actions share each inspector - most PowerPoint Live keys share
