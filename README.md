@@ -359,8 +359,8 @@ It identifies an installed profile by the plugin that installed it and the
 **path** it came from, which it writes into the installed copy's
 `PreconfiguredName`. A path it has not seen is the only thing it treats as new.
 
-So a profile carries a `revision`, which `tools/build-profile.ts` appends to the
-file name once it is above 1:
+So a profile carries a `revision`, which `tools/build-profile.ts` appends to both
+the file name and the profile's own name once it is above 1:
 
 ```ts
 {
@@ -371,20 +371,34 @@ file name once it is above 1:
 }
 ```
 
-**Bump it whenever keys or dials move.** The profile's own name is unchanged, so
-the revision never reaches the user. Their previous copy stays behind as an
-ordinary profile they can delete, because a plugin cannot remove one.
+**A revision does not replace anything.** It ships a second profile, and the
+first one stays on the deck forever, because a plugin cannot remove a profile and
+Stream Deck never retires one it no longer sees in the manifest. The revision is
+in the displayed name for that reason: left to itself Stream Deck files the new
+arrival under the old name as "copy", "copy 1", "copy 2", and nothing on the deck
+says which is current.
 
-Forgetting to bump it fails silently — the update reaches nobody. So each profile
-records a `layoutHash` covering the deck it targets and every key and dial on it,
-and **the build fails** when that moves and the revision does not:
+So bump a revision only for a layout users already have and that is worth a
+permanent extra entry in their list. A layout that has never shipped can be
+edited freely.
+
+Either way the change has to be deliberate, because doing nothing also fails
+silently — the update simply reaches nobody. Each profile records a `layoutHash`
+covering the deck it targets and every key and dial on it, and **the build fails**
+when that moves, asking which of the two situations this is:
 
 ```
-1 profile(s) changed without a revision bump.
+1 profile(s) no longer match their recorded layout.
 
   PowerPoint Live (Presenter) (+ XL)
-      layout changed but revision is still 1
-      bump revision to 2, and set layoutHash: "211ff6d3"
+      layout no longer matches layoutHash: "211ff6d3"
+
+      If this layout has NOT shipped yet, just record the new one:
+          layoutHash: "21fe4871"
+
+      If users already have it, they can only be moved by shipping a
+      new path, which leaves their old copy behind for good:
+          revision: 2, layoutHash: "21fe4871"
 ```
 
 The fingerprint ignores the plugin version deliberately. Tying the path to the
@@ -394,8 +408,7 @@ stranding whatever they had customized on the old one.
 A few operational notes:
 
 - **A revision bump is user-visible.** Installing a profile puts a dialog in
-  front of the user, and they can decline. Bump only when a layout genuinely
-  moved, never on a schedule.
+  front of the user, and they can decline.
 - **That dialog holds Stream Deck's profile lock until it is answered**, which
   may be hours. A second switch request meanwhile is refused with `Another
   operation is already in progress`. Repeat asks for the same path are therefore

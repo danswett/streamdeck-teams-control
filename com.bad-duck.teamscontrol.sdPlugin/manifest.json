@@ -62,7 +62,7 @@
 			"DontAutoSwitchWhenInstalled": true
 		},
 		{
-			"Name": "profiles/PowerPoint Live (Presenter) (+ XL) r5",
+			"Name": "profiles/PowerPoint Live (Presenter) (+ XL)",
 			"DeviceType": 13,
 			"Readonly": false,
 			"DontAutoSwitchWhenInstalled": true

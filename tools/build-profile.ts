@@ -331,7 +331,6 @@ const PROFILES: Profile[] = [
 		device: PLUS_XL,
 		uuid: "6C9E1A3F-4D05-4B8C-8F67-8A3B2E5D9C74",
 		layoutHash: "21fe4871",
-		revision: 5,
 		page: "a1b2c3d4-0013-4e85-a0b7-2f6c1e5d8a34",
 		dials: {
 			// Positions 1 and 2: the slide being presented and the one after it.
@@ -479,7 +478,14 @@ for (const profile of PROFILES) {
 	// The 15-key files shipped before there was a second deck, so its suffix is
 	// empty and its ids keep hashing to exactly what is already installed.
 	const title = `${profile.name}${device.suffix}`;
-	// What the user sees stays clean; only the file carries the revision.
+	/*
+		A revision has to change the path, because that is the only thing Stream
+		Deck treats as new. It changes the displayed name too: without that the
+		new profile lands beside the old one under the same name, and Stream
+		Deck disambiguates them itself as "copy", "copy 1", "copy 2" - which
+		tells the user nothing about which is current or which is safe to
+		delete.
+	*/
 	const file = (profile.revision ?? 1) > 1 ? `${title} r${profile.revision}` : title;
 	const defaultPage = `${profile.page.slice(0, -1)}f`;
 
@@ -499,9 +505,9 @@ for (const profile of PROFILES) {
 			UUID: ""
 		},
 		InstalledByPluginUUID: PLUGIN_UUID,
-		Name: title,
+		Name: file,
 		Pages: { Current: profile.page, Default: defaultPage, Pages: [profile.page] },
-		PreconfiguredName: title,
+		PreconfiguredName: file,
 		Version: "3.0"
 	};
 
@@ -555,10 +561,25 @@ for (const profile of PROFILES) {
 	const fingerprint = layoutFingerprint(profile);
 	if (profile.layoutHash === undefined) unrecorded.push(`  ${title}: layoutHash: "${fingerprint}"`);
 	else if (profile.layoutHash !== fingerprint) {
+		/*
+			Two different situations, and only one of them wants a revision.
+
+			A layout that has never shipped can be edited freely - record the
+			new fingerprint and move on. A layout that users already have can
+			only be replaced by changing its path, and that costs them a second
+			profile in their list forever, because a plugin cannot remove one.
+
+			Saying only "bump the revision" is what turned four edits in one
+			session into four profiles on a deck.
+		*/
 		drifted.push(
 			`  ${title}\n` +
-				`      layout changed but revision is still ${profile.revision ?? 1}\n` +
-				`      bump revision to ${(profile.revision ?? 1) + 1}, and set layoutHash: "${fingerprint}"`
+				`      layout no longer matches layoutHash: "${profile.layoutHash}"\n\n` +
+				`      If this layout has NOT shipped yet, just record the new one:\n` +
+				`          layoutHash: "${fingerprint}"\n\n` +
+				`      If users already have it, they can only be moved by shipping a\n` +
+				`      new path, which leaves their old copy behind for good:\n` +
+				`          revision: ${(profile.revision ?? 1) + 1}, layoutHash: "${fingerprint}"`
 		);
 	}
 }
@@ -591,9 +612,11 @@ if (unrecorded.length) {
 
 if (drifted.length) {
 	console.error(
-		`\n${drifted.length} profile(s) changed without a revision bump.\n\n` +
+		`\n${drifted.length} profile(s) no longer match their recorded layout.\n\n` +
 			`Stream Deck installs a bundled profile once and identifies it by its path,\n` +
-			`so a changed layout under the same path reaches nobody who already has it.\n\n` +
+			`so a changed layout under the same path reaches nobody who already has it -\n` +
+			`and a changed path arrives as an extra profile rather than replacing the old\n` +
+			`one. Which of those you want depends on whether the layout has shipped.\n\n` +
 			drifted.join("\n\n")
 	);
 	process.exit(1);

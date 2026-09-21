@@ -134,6 +134,14 @@ describe("the bundled profiles", () => {
 		// XL and + XL model names differ by one letter.
 		expect(profile.Device.Model).toBe(b.deck.deviceType === 13 ? "20GBX9901" : "20GBA9901");
 
+		// A revision ships a second profile rather than replacing the first, so
+		// the name has to say which revision it is. Left identical, Stream Deck
+		// files the new one under the old name as "copy", "copy 1", "copy 2",
+		// and the deck gives no clue which one is current.
+		const shown = path.basename(b.name);
+		expect(profile.Name, `${b.name} is named something else`).toBe(shown);
+		expect(profile.PreconfiguredName, `${b.name} would install as a duplicate`).toBe(shown);
+
 		const actions = keypad(b.name);
 		const positions = Object.keys(actions);
 		expect(positions.length).toBeGreaterThan(0);
