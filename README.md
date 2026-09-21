@@ -415,16 +415,60 @@ costs a single property read per control.
 
 ### Cost
 
-Measured in a live meeting:
+Measured in a live meeting over a 15-minute soak, 147 presses, sampled from the
+OS once a second:
 
-| | CPU | working set | private |
-|---|---|---|---|
-| sidecar | 1.0% | 22.5 MB | 10.5 MB |
-| plugin (node) | 0.0% | 59.6 MB | 28.9 MB |
+| | CPU (avg) | CPU (p95) | working set | private |
+|---|---|---|---|---|
+| sidecar, in a meeting | 0.27% | 0.77% | 33–96 MB | ~40 MB |
+| sidecar, idle | 0.06% | — | ~49 MB | ~14 MB |
 
-Idle, outside a meeting, the sidecar settles at ~0.6% CPU and ~12 MB. Discovery
-is the expensive operation — a *failed* UIA search walks an entire window
-subtree — so windows that turn out not to be meetings are cached as such.
+Working set is quoted as a range because it is one: the sidecar returns memory
+to the operating system on a timer — every 60 s idle, every 5 minutes during a
+meeting, since the collection competes with key presses — so it sawtooths rather
+than settling on a number. Private bytes reach a steady state of about 40 MB
+after roughly six minutes and stay there; handle count likewise plateaus.
+
+Direct mode costs no more CPU than the accessibility path: the same soak run
+with it enabled measured 0.27% average and 0.77% at p95, identical to the figures
+above.
+
+What a press costs, timed at the sidecar's own process boundary:
+
+| Operation | Time |
+|---|---|
+| Reaction, accessibility path | ~1.4–1.9 s (flyout visible) |
+| Reaction, Direct mode | ~0.3 s (nothing visible) |
+| Slide thumbnail, 200×100 | 254–381 ms |
+| Slide thumbnail, 1024×1024 | ~414 ms |
+| Full state snapshot | 571–950 ms |
+| First state after launch | 1.4–3.7 s |
+
+Discovery is the expensive operation — a *failed* UIA search walks an entire
+window subtree — so windows that turn out not to be meetings are cached as such,
+and the first snapshot after launch is the slowest one the sidecar ever does.
+
+### Direct mode (optional, off by default)
+
+One cost is visible: a control that lives inside a flyout needs that flyout
+**open on screen**, because Chromium only builds menu items into the
+accessibility tree once the popup is genuinely showing. Reactions, background
+blur, the PowerPoint Live menus and the ink palette all work this way.
+
+**Direct mode** drives those same controls by running JavaScript inside Teams'
+own page, where the menu can be opened, used and closed while styled invisible —
+nothing appears on screen, and a reaction completes in ~240 ms rather than
+seconds. It also works with Teams minimized, and can jump straight to a slide
+without opening grid view.
+
+It needs a local debugging port on Teams, which is **unauthenticated**, so the
+plugin never opens one: it only uses a port the user opened deliberately, and
+verifies the port belongs to Teams before touching it. Anything Direct mode
+cannot improve falls back to the normal path, so the worst case is the behaviour
+above.
+
+See **[docs/direct-mode.md](docs/direct-mode.md)** for the tradeoff and the
+steps.
 
 ### Direct mode (optional, off by default)
 
