@@ -146,6 +146,23 @@ The first-release notes are kept further down for reference only — they descri
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
 
+### Version 1.9.5 — tagged and built, deliberately not submitted
+
+Nothing in it is user-visible. The action list is identical to 1.9.4 (38 before,
+38 after, same UUIDs), no profile changed, and the one new capability —
+[Direct mode](../docs/direct-mode.md) — is off by default and cannot be turned on
+from the plugin at all: it requires the user to open a local debugging port on
+Teams themselves, which the plugin never does.
+
+So there is nothing here for a listing to advertise, and two reasons not to:
+submitting asks a reviewer to re-review a build with no change they can see, and
+the only way to describe the feature honestly involves the words "local
+debugging port", which do not belong in consumer listing copy for something
+almost no one should switch on.
+
+Fold it into the next submission that does carry user-visible change. The
+internal audience for Direct mode is served by the repo doc instead.
+
 ### Version 1.9.4 — the notes for this submission
 
 Submitted after 1.8.3 is live, so these describe only what changed on top of it.
