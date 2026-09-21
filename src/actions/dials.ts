@@ -30,6 +30,7 @@ import streamDeck from "@elgato/streamdeck";
 import type { JsonObject } from "@elgato/utils";
 
 import { bridge, type TeamsState } from "../bridge";
+import { TimerClock } from "../timer-clock";
 import { renderInkColor, renderInkThickness, renderSlideJump, renderStripIdle, renderStripNext, renderTimer, toPixmap, toolColor } from "../icons";
 import { pptLive } from "./powerpoint";
 
@@ -1345,17 +1346,8 @@ export class TimerDialAction extends TeamsDialAction {
 	 */
 	#total: number | undefined;
 
-	/**
-	 * The last reading from Teams, and when it arrived.
-	 *
-	 * Teams reports whole seconds, and the sidecar only publishes a change, so
-	 * a dial drawing straight from that steps once a second. The reading is an
-	 * anchor instead: time is carried forward from it between updates, and each
-	 * new reading snaps back to the truth.
-	 */
-	#anchorRemaining: number | undefined;
-	#anchorAt = 0;
-	#lastReading: number | undefined;
+	/** Smooths Teams' once-a-second readings into a per-frame value. */
+	readonly #clock = new TimerClock();
 
 	/**
 	 * When the timer was first seen expired, so the overtime can be counted.
@@ -1393,13 +1385,6 @@ export class TimerDialAction extends TeamsDialAction {
 		const running = state.context["timer.running"] === "1";
 		const now = Date.now();
 
-		// A new reading re-anchors; the same one is carried forward.
-		if (reading !== this.#lastReading) {
-			this.#lastReading = reading;
-			this.#anchorRemaining = reading;
-			this.#anchorAt = now;
-		}
-
 		if (expired) {
 			if (this.#expiredAt === undefined && this.#sawRunning) this.#expiredAt = now;
 		} else {
@@ -1408,15 +1393,9 @@ export class TimerDialAction extends TeamsDialAction {
 			if (this.#total === undefined || reading > this.#total) this.#total = reading;
 		}
 
-		/*
-			Only a running timer moves on its own. A paused one is drawn from
-			the reading, so it does not creep while nobody is counting.
-		*/
-		const elapsed = (now - this.#anchorAt) / 1000;
-		const live =
-			running && !expired
-				? Math.max(0, (this.#anchorRemaining ?? reading) - elapsed)
-				: reading;
+		// A paused timer is drawn from the reading, so it does not creep while
+		// nobody is counting.
+		const live = this.#clock.update(reading, running && !expired, now);
 
 		this.#animate(running || expired);
 
@@ -1465,8 +1444,7 @@ export class TimerDialAction extends TeamsDialAction {
 
 	#forget(): void {
 		this.#total = undefined;
-		this.#anchorRemaining = undefined;
-		this.#lastReading = undefined;
+		this.#clock.forget();
 		this.#expiredAt = undefined;
 		this.#sawRunning = false;
 		this.#stopTicking();

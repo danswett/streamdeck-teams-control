@@ -776,6 +776,20 @@ describe("the timer bar's paint", () => {
 		expect(svg).toMatch(/fill-opacity="0\.500"/);
 	});
 
+	it("floors the clock, so it never reads ahead of Teams", () => {
+		// Teams floors its own label: "4 min, 57 sec remaining" covers 4:57.0
+		// to just under 4:58. Rounding would put the dial a second ahead.
+		expect(renderTimer(30.9, 300, true)).toContain(">0:30<");
+		expect(renderTimer(30.1, 300, true)).toContain(">0:30<");
+		expect(renderTimer(59.99, 300, true)).toContain(">0:59<");
+	});
+
+	it("writes TIME'S UP in white, against the red bar", () => {
+		const svg = renderTimer(0, 300, true, true, 4);
+		expect(svg).toMatch(/fill="#FFFFFF">TIME'S UP/);
+		expect(renderTimer(0, 300, true, true, undefined)).toMatch(/fill="#FFFFFF">TIME'S UP/);
+	});
+
 	it("pulses when time is up, then settles solid", () => {
 		const opacity = (t: number): number =>
 			Number(/fill-opacity="([\d.]+)"/.exec(renderTimer(0, 300, true, true, t))![1]);

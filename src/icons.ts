@@ -634,8 +634,8 @@ export function renderTimer(
 	const clock = expired
 		? overtime === undefined
 			? ""
-			: `-${hhmmss(Math.floor(overtime))}`
-		: hhmmss(Math.round(left));
+			: `-${hhmmss(overtime)}`
+		: hhmmss(left);
 
 	// Fitted from the capture: each end ramps from its own threshold to zero.
 	const uLeft = expired ? 1 : clamp01(1 - fraction / 0.25);
@@ -668,7 +668,7 @@ export function renderTimer(
 					`fill="${ink}">${escapeText(clock)}</text>`
 				: `<text x="100" y="54" text-anchor="middle" ` +
 					`font-family="Segoe UI, system-ui, sans-serif" font-size="30" font-weight="700" ` +
-					`fill="${TIMER_RED}">TIME'S UP</text>`) +
+					`fill="#FFFFFF">TIME'S UP</text>`) +
 			// The trough stays visible at zero so the bar reads as empty rather
 			// than as a control that has gone away.
 			`<rect x="${x}" y="64" width="${width}" height="10" rx="5" fill="#2A2A31" />` +
@@ -680,7 +680,7 @@ export function renderTimer(
 				? expired
 					? `<text x="100" y="92" text-anchor="middle" ` +
 						`font-family="Segoe UI, system-ui, sans-serif" font-size="13" font-weight="700" ` +
-						`letter-spacing="1.4" fill="${TIMER_RED}">TIME'S UP</text>`
+						`letter-spacing="1.4" fill="#FFFFFF">TIME'S UP</text>`
 					: running
 						? ""
 						: `<text x="100" y="92" text-anchor="middle" ` +
@@ -729,7 +729,10 @@ function mixHex(a: string, b: string, t: number): string {
 
 /** m:ss, or h:mm:ss once there is an hour to show. */
 function hhmmss(seconds: number): string {
-	const s = Math.max(0, Math.round(seconds));
+	// Floored, not rounded, because that is what Teams shows: its own label
+	// reads "4 min, 57 sec remaining" for anything from 4:57 to just under
+	// 4:58. Rounding would put this dial a second ahead of the meeting.
+	const s = Math.max(0, Math.floor(seconds));
 	const mins = Math.floor(s / 60);
 	const secs = s % 60;
 	// Teams' timer counts in minutes, but allows an hour or more, and "62:05"
