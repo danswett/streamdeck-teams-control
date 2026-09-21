@@ -2652,42 +2652,68 @@ public sealed class TeamsClient : IDisposable
         AutomationElement win,
         AutomationElement? anchor,
         AutomationElement? host,
-        (int x, int y)? hostPoint = null)
+        (int x, int y)? hostPoint = null,
+        string? hostAutomationId = null)
     {
+        // Choosing an item re-renders the surface the menu hangs off - most
+        // visibly during PowerPoint Live, where the slide-show subtree is
+        // replaced - which leaves the host element captured before opening
+        // stale. Collapse on a stale element throws, TryCollapse swallows it,
+        // and the whole ladder below then runs for nothing: measured at 3.6 s
+        // of dismissal on "Change view", where a collapse on a freshly found
+        // host closes it immediately. Same reasoning as CloseInkFlyout.
+        AutomationElement? FreshHost()
+        {
+            if (string.IsNullOrEmpty(hostAutomationId)) return host;
+            return FindAnywhere(win, hostAutomationId!) ?? host;
+        }
+
+        var rungs = new StageLog();
+
         // A posted click behaves like a real one, so selecting an item usually
         // closes the flyout by itself. Give it time to settle before doing
         // anything: clicking the menu button again while it is already closing
         // would re-open it, and the next key press would then just close it
         // instead of acting.
-        if (WaitForDismissed(win, host, 1500)) return;
+        if (WaitForDismissed(win, host, 1500)) { rungs.ReportIfSlow("dismiss:natural", SlowFlyoutMs); return; }
+        rungs.Mark("natural");
 
         // Ask the menu to close itself before clicking anything. This is the
         // only dismissal that cannot have a side effect, and it matters most
         // during PowerPoint Live: a stray click on the slide surface advances
         // the deck for everyone watching.
-        if (host is not null)
+        var fresh = FreshHost();
+        rungs.Mark("refind");
+        if (fresh is not null)
         {
-            TryCollapse(host);
-            if (WaitForDismissed(win, host, 700)) return;
+            TryCollapse(fresh);
+            rungs.Mark("collapseCall");
+            if (WaitForDismissed(win, fresh, 700)) { rungs.ReportIfSlow("dismiss:collapse", SlowFlyoutMs); return; }
         }
-
+        rungs.Mark("collapse");
         // Clicking the menu button again toggles the flyout shut. Its screen
         // position was captured before opening, because the toolbar leaves the
         // accessibility tree while a popup is up.
         if (hostPoint is { } p && InputPoster.TryClickPoint(_renderWidget, p.x, p.y))
         {
-            if (WaitForDismissed(win, host, 900)) return;
+            if (WaitForDismissed(win, fresh, 900)) { rungs.ReportIfSlow("dismiss:hostPoint", SlowFlyoutMs); return; }
         }
+        rungs.Mark("hostPoint");
 
         // Otherwise click an inert spot inside the meeting window, which is what
         // dismisses a popup normally.
         if (TryClickAway(win))
         {
-            if (WaitForDismissed(win, host, 900)) return;
+            if (WaitForDismissed(win, fresh, 900)) { rungs.ReportIfSlow("dismiss:clickAway", SlowFlyoutMs); return; }
         }
+        rungs.Mark("clickAway");
 
-        if (host is not null) TryCollapse(host);
-        if (WaitForDismissed(win, host, 300)) return;
+        // Re-found again: the clicks above are another chance for the surface
+        // to have been replaced under us.
+        fresh = FreshHost();
+        if (fresh is not null) TryCollapse(fresh);
+        if (WaitForDismissed(win, fresh, 300)) { rungs.ReportIfSlow("dismiss:collapse2", SlowFlyoutMs); return; }
+        rungs.Mark("collapse2");
 
         if (anchor is not null)
         {
@@ -2724,14 +2750,18 @@ public sealed class TeamsClient : IDisposable
                     var invoke = chain[i].Patterns.Invoke.PatternOrDefault;
                     if (invoke is null) continue;
                     invoke.Invoke();
-                    if (WaitForDismissed(win, host, 600)) return;
+                    if (WaitForDismissed(win, fresh, 600)) { rungs.ReportIfSlow("dismiss:ancestor", SlowFlyoutMs); return; }
                 }
                 catch { }
             }
         }
 
-        if (!WaitForDismissed(win, host, 600))
+        rungs.Mark("ancestors");
+
+        if (!WaitForDismissed(win, fresh, 600))
             Console.Error.WriteLine("warning: could not dismiss Teams flyout");
+
+        rungs.ReportIfSlow("dismiss:exhausted", SlowFlyoutMs);
     }
 
     /// <summary>
@@ -2775,75 +2805,28 @@ public sealed class TeamsClient : IDisposable
             // so a dismissal that landed there was silently driving the
             // presentation. It carries no clickable children of its own, so
             // nothing else would have excluded it.
+            var occupied = ClickableBounds(win);
             var slides = PowerPointSurfaceBounds(win);
+            if (slides is { } s) occupied.Add(s);
 
-            // Asking what is at five points is far cheaper than enumerating
-            // everything that could be at any of them. Walking the window's
-            // descendants for their bounds measured as the single largest cost
-            // of a flyout press — 969 ms of a 1390 ms reaction, against an open
-            // that took 0 ms — because a meeting window with a popup up is a
-            // very large tree, and every element costs a cross-process property
-            // read. A hit test is one read per candidate.
-            List<System.Drawing.Rectangle>? occupied = null;
-
+            // Deliberately NOT a hit test. UIA's FromPoint asks the screen, not
+            // this window, and the entire design of this plugin is that Teams
+            // is behind whatever the user is actually working in. Measured with
+            // Teams unfocused, three of these five candidates resolved to the
+            // terminal window on top of it and the other two to the WebView2
+            // render process - none to the meeting window - so every point
+            // looked unoccupied and the exclusions below were bypassed. It also
+            // bought no measurable time. Enumerating this window's own tree is
+            // slower per call and correct regardless of what is in front.
             foreach (var (x, y) in candidates)
             {
-                if (slides is { } s && s.Contains(x, y)) continue;
-
-                var hit = OccupiedAt(x, y);
-                if (hit is null)
-                {
-                    // Hit testing is unavailable, so fall back to the exhaustive
-                    // walk — once, and only if it is actually needed.
-                    occupied ??= ClickableBounds(win);
-                    if (occupied.Any(b => b.Contains(x, y))) continue;
-                }
-                else if (hit.Value)
-                {
-                    continue;
-                }
-
+                if (occupied.Any(b => b.Contains(x, y))) continue;
                 if (InputPoster.TryClickPoint(_renderWidget, x, y)) return true;
             }
 
             return false;
         }
         catch { return false; }
-    }
-
-    /// <summary>
-    /// Whether a clickable control sits at a screen point, or null when the
-    /// question could not be answered and the caller should fall back.
-    ///
-    /// The element under a point is usually a leaf — the text inside a button
-    /// rather than the button — so a few ancestors are checked too. Kept short
-    /// because everything in a meeting window is inside *some* container, and
-    /// walking to the top would call everything occupied.
-    /// </summary>
-    private bool? OccupiedAt(int x, int y)
-    {
-        try
-        {
-            var el = _automation.FromPoint(new System.Drawing.Point(x, y));
-            if (el is null) return false;
-
-            var node = el;
-            for (var i = 0; i < 4 && node is not null; i++)
-            {
-                ControlType type;
-                try { type = node.Properties.ControlType.ValueOrDefault; }
-                catch { return null; }
-
-                if (type is ControlType.Button or ControlType.MenuItem or ControlType.ListItem
-                    or ControlType.CheckBox or ControlType.RadioButton or ControlType.Hyperlink)
-                    return true;
-
-                node = SafeParent(node);
-            }
-
-            return false;
-        }
-        catch { return null; }
     }
 
     /// <summary>
@@ -3754,8 +3737,10 @@ public sealed class TeamsClient : IDisposable
         finally
         {
             // Always required: the flyout does not reliably close by itself, and
-            // leaving it open hides the toolbar.
-            DismissFlyout(win, item, host, hostPoint);
+            // leaving it open hides the toolbar. The menu's id goes with it so
+            // the host can be re-found once choosing an item has re-rendered
+            // the surface it hangs off.
+            DismissFlyout(win, item, host, hostPoint, spec.Menu);
             stages.Mark("dismiss");
             stages.ReportIfSlow(target, SlowFlyoutMs);
         }

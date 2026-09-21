@@ -259,6 +259,23 @@ internal sealed class DomActuator
         // that button deterministically; there is nothing to gain here.
         if (spec.IsPressOnly) return DomOutcome.Declined;
 
+        // Some controls close from a different element than the one that opened
+        // them. Grid view opens from the slide toolbar and closes from a button
+        // inside the overlay it opened, matched by name - and opening it
+        // unmounts the whole slide-show subtree, so getting this wrong does not
+        // fail one press, it strands the deck: measured, a grid view left open
+        // took slide position, the ink tools, presenter view, high contrast,
+        // copy link and thumbnails down with it.
+        //
+        // InvokeCore has that logic and this does not, so hand it over.
+        if (!string.IsNullOrEmpty(spec.OffAutomationId) || !string.IsNullOrEmpty(spec.OffName))
+            return DomOutcome.Declined;
+
+        // A nested menu has to be opened before its items exist. The UIA path
+        // knows how; this one would look straight past the submenu and report
+        // the item missing.
+        if (!string.IsNullOrEmpty(spec.Submenu)) return DomOutcome.Declined;
+
         var page = TargetFor(slideShowSurface);
         // No target: for a slide-show control that simply means no deck is
         // shared. Either way UI Automation is the answer, not an error.
@@ -415,6 +432,22 @@ internal sealed class DomActuator
         // Nothing to look for: the UIA path can still find it by other means.
         if (ids.Length == 0 && string.IsNullOrEmpty(namePattern)) return null;
 
+        // Name patterns are deliberately not driven from here.
+        //
+        // A pattern out of selectors.json would have to be compiled and run by
+        // the page's own regex engine, and JavaScript has no equivalent of the
+        // match timeout this sidecar applies everywhere else. The CDP timeout
+        // does not help: it abandons the socket, it cannot interrupt a regex
+        // that is already running, so a backtracking pattern matched against a
+        // long accessible name freezes the user's Teams window rather than
+        // failing one key press.
+        //
+        // Declining sends those controls to UI Automation, which matches under
+        // ControlSpec.MatchTimeout and is bounded. Only the background-effect
+        // entries are matched by name, so the cost is one flyout staying
+        // visible, and a config typo can no longer wedge Teams.
+        if (!string.IsNullOrEmpty(namePattern) || !string.IsNullOrEmpty(offPattern)) return null;
+
         return $$"""
         (async function () {
             var sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
@@ -422,23 +455,11 @@ internal sealed class DomActuator
             var out = {};
             var style = null;
 
-            var accessibleName = function (el) {
-                return el.getAttribute('aria-label') || el.getAttribute('title') || (el.textContent || '').trim();
-            };
-
             var findItem = function () {
                 var ids = {{JsArray(ids)}};
                 for (var i = 0; i < ids.length; i++) {
                     var byId = document.getElementById(ids[i]);
                     if (byId) return byId;
-                }
-                var pattern = {{Js(namePattern)}};
-                if (!pattern) return null;
-                var rx = new RegExp(pattern, 'i');
-                var all = document.querySelectorAll(
-                    'button,[role="menuitem"],[role="menuitemcheckbox"],[role="menuitemradio"],[role="option"],[role="checkbox"],[role="radio"]');
-                for (var j = 0; j < all.length; j++) {
-                    if (rx.test(accessibleName(all[j]))) return all[j];
                 }
                 return null;
             };
@@ -473,19 +494,6 @@ internal sealed class DomActuator
 
                 var checkedAttr = item.getAttribute('aria-checked');
                 if (checkedAttr === 'true' || checkedAttr === 'false') out.checkedBefore = checkedAttr === 'true';
-
-                // Background effects are a radio group rather than a toggle:
-                // choosing the same entry again leaves it on, so turning it off
-                // means choosing the "none" entry instead.
-                var offPattern = {{Js(offPattern)}};
-                if (offPattern && out.checkedBefore === true) {
-                    var offRx = new RegExp(offPattern, 'i');
-                    var all = document.querySelectorAll(
-                        'button,[role="menuitem"],[role="menuitemcheckbox"],[role="menuitemradio"],[role="option"],[role="checkbox"],[role="radio"]');
-                    for (var k = 0; k < all.length; k++) {
-                        if (offRx.test(accessibleName(all[k]))) { item = all[k]; out.usedOff = true; break; }
-                    }
-                }
 
                 item.click();
                 out.ok = true;
