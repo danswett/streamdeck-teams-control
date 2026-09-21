@@ -879,7 +879,36 @@ when audio is unavailable, such as in a remote session.
 Teams tree currently looks like. They are how every selector in this repo was
 derived, and how to re-derive one when Teams changes.
 
-Logs: `com.bad-duck.teamscontrol.sdPlugin/logs/com.bad-duck.teamscontrol.0.log`
+### Logs
+
+Everything the sidecar writes to stderr ends up in the plugin log, prefixed
+`Bridge: sidecar:`. Its location moves with the mode - a junction writes inside
+this repo, an installed copy writes under `%APPDATA%` - and a machine that has
+been in both modes has both, with nothing to say which is live. `tail-log.ps1`
+resolves it:
+
+```powershell
+.\sidecar\tail-log.ps1                      # last 40 lines
+.\sidecar\tail-log.ps1 -Follow              # live
+.\sidecar\tail-log.ps1 -Interesting         # only the lines below
+.\sidecar\tail-log.ps1 -Match 'react-like'  # anything else
+```
+
+Lines worth watching for:
+
+| line | means |
+|---|---|
+| `not clicking to dismiss` | a deck is up, so no dismissal click was posted |
+| `not in the tree` | a control vanished from the tree; woken and retried |
+| `slow snapshot` | a poll long enough to have delayed a press |
+| `slow flyout` | a menu press, with its stage-by-stage breakdown |
+
+A `slow flyout` line is the most useful thing in here, because it says where a
+press went:
+
+```
+slow flyout 'react-like': 3278ms [open=1ms find=1113ms click=2ms settle=216ms away=1ms dismiss=1945ms]
+```
 
 ### The sidecar protocol
 
