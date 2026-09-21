@@ -139,14 +139,15 @@ The first-release notes are kept further down for reference only — they descri
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
 
-### Version 1.9.1 — the notes for this submission
+### Version 1.9.2 — the notes for this submission
 
 Submitted after 1.8.3 is live, so these describe only what changed on top of it.
 Everything about PowerPoint Live and the profiles is in the notes below, which
 is what people will already have.
 
-1.9.0 was tagged and built on GitHub but never submitted here, so its changes
-are folded into these notes rather than split across two entries.
+1.9.0 and 1.9.1 were tagged and built on GitHub but never submitted here, so
+their changes are folded into these notes rather than split across three
+entries.
 
 ```
 Stream Deck + XL support.
@@ -161,10 +162,14 @@ The touch strip can show the slide you are presenting and the one coming next, a
 
 Slide pictures are off until you switch them on, per control. They are copied from the Teams window straight to your Stream Deck and go nowhere else: nothing is uploaded, saved to disk, or written to any log.
 
-The 15-key layouts are unchanged. Stream Deck will ask whether to install the updated + XL profile; decline it and everything else still works.
+The 15-key layouts are unchanged. Stream Deck will ask whether to install the new + XL profiles; decline them and everything else still works.
 ```
 
-1,157 characters.
+1,161 characters.
+
+### Version 1.9.1 — tagged and built, never submitted
+
+Folded into the 1.9.2 notes above.
 
 ### Version 1.8.3 — submitted, in review
 
