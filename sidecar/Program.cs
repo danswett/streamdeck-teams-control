@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
@@ -157,7 +158,16 @@ public static class Program
         var restoreFocus = !HasFlag(args, "--no-focus-guard");
         var debugEvents = HasFlag(args, "--debug-events");
         var useEvents = !HasFlag(args, "--no-events");
-        var worker = new Thread(() => WorkerLoop(config, pollMs, restoreFocus, debugEvents, useEvents)) { IsBackground = true, Name = "uia" };
+
+        // Profiling runs inside the normal worker loop rather than in a mode of
+        // its own. A standalone harness taking snapshots back to back measured a
+        // Teams that never finished building its accessibility tree, and charged
+        // the cost to whichever stage happened to be running - reporting
+        // problems that do not exist at the sidecar's real pacing.
+        var profile = HasFlag(args, "--profile");
+
+        var worker = new Thread(() => WorkerLoop(config, pollMs, restoreFocus, debugEvents, useEvents, profile))
+            { IsBackground = true, Name = "uia" };
         // UIA requires MTA; console Main is already MTA but the worker must be explicit.
         worker.SetApartmentState(ApartmentState.MTA);
         worker.Start();
@@ -212,9 +222,10 @@ public static class Program
         return 0;
     }
 
-    private static void WorkerLoop(SelectorConfig config, int pollMs, bool restoreFocus, bool debugEvents, bool useEvents)
+    private static void WorkerLoop(SelectorConfig config, int pollMs, bool restoreFocus, bool debugEvents, bool useEvents, bool profile = false)
     {
-        using var client = new TeamsClient(config, restoreFocus) { DebugEvents = debugEvents, UseEvents = useEvents };
+        using var client = new TeamsClient(config, restoreFocus)
+            { DebugEvents = debugEvents, UseEvents = useEvents, ProfileSnapshots = profile };
         var lastFingerprint = "";
         var nextPoll = 0L;
 
@@ -299,6 +310,11 @@ public static class Program
                         w.WriteString("error", ex.Message);
                     });
                 }
+
+                // Backstop. Handle runs owed cleanup itself on the path that
+                // schedules it, but a throw can leave it owing, and nothing
+                // else may read the tree with a flyout still up.
+                client.RunDeferredCleanup();
                 // Something just happened; report it promptly.
                 nextPoll = Environment.TickCount64 + 120;
 
@@ -430,6 +446,14 @@ public static class Program
                     w.WriteBoolean("ok", ok);
                     if (err is not null) w.WriteString("error", err);
                 });
+
+                // The key has its answer; now shut the flyout. Ordered this way
+                // on purpose: the result is what the Stream Deck key waits on,
+                // and closing a menu can take seconds. It still has to happen
+                // before the snapshot below, because an open flyout hides the
+                // meeting toolbar and the snapshot would read nothing.
+                client.RunDeferredCleanup();
+
                 EmitState(client.GetSnapshot());
                 break;
             }

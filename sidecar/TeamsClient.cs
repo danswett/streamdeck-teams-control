@@ -452,6 +452,12 @@ public sealed class TeamsClient : IDisposable
     [DllImport("user32.dll")]
     private static extern bool EnumChildWindows(IntPtr parent, EnumWindowProc cb, IntPtr lParam);
 
+    [DllImport("user32.dll")]
+    private static extern bool EnumWindows(EnumWindowProc cb, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
     private readonly SelectorConfig _config;
     private readonly bool _restoreFocus;
     private readonly UIA3Automation _automation = new();
@@ -488,7 +494,24 @@ public sealed class TeamsClient : IDisposable
     private readonly List<(AutomationElement Element, FlaUI.Core.EventHandlers.PropertyChangedEventHandlerBase Handler)> _propertyHandlers = new();
     private bool _windowWatchRegistered;
     private readonly Dictionary<string, AutomationElement> _cache = new();
-    private readonly HashSet<IntPtr> _nudged = new();
+    private readonly Dictionary<IntPtr, long> _nudged = new();
+
+    /// <summary>
+    /// How long a nudge is assumed to hold before a window is nudged again.
+    ///
+    /// Nudging once per handle was a deadlock. Chromium builds its
+    /// accessibility tree when a client asks for it and takes it down again
+    /// when nothing is using it, so the tree can go back to sleep while the
+    /// sidecar is still running. Every meeting control then disappears, the
+    /// meeting window stops being recognized, polling drops to the idle
+    /// interval — which is even less accessibility traffic — and the one thing
+    /// that would wake it was suppressed because the handle had been nudged
+    /// once already. The keys stayed grey for a meeting that was still running.
+    ///
+    /// Shorter than the idle poll, so every rediscovery attempt gets to nudge.
+    /// The nudge itself is a WM_GETOBJECT that aborts on a hung window.
+    /// </summary>
+    private const int RenudgeIntervalMs = 3_000;
 
     /// <summary>
     /// How many window handles to remember before forgetting them all. Teams
@@ -640,6 +663,9 @@ public sealed class TeamsClient : IDisposable
 
     public void Dispose()
     {
+        // A flyout left open would survive this process and hide the meeting
+        // toolbar from whatever starts next, so owed cleanup runs first.
+        RunDeferredCleanup();
         ClearControlWatches();
         try { _automation.UnregisterAllEvents(); } catch { }
         _automation.Dispose();
@@ -649,19 +675,46 @@ public sealed class TeamsClient : IDisposable
     /// Chromium (and therefore the Teams WebView) only builds its accessibility
     /// tree once a client asks for it. Without this nudge a UIA walk of the Teams
     /// window returns zero elements. Screen readers trigger the same code path.
+    ///
+    /// Repeated rather than done once: the tree is taken down again when
+    /// nothing is using it, so waking it is an ongoing job, not a one-off at
+    /// start-up. See <see cref="RenudgeIntervalMs"/>.
     /// </summary>
-    private void EnableAccessibility()
+    private void EnableAccessibility(bool force = false)
     {
+        var pids = new HashSet<uint>();
         foreach (var proc in Process.GetProcessesByName("ms-teams"))
         {
-            IntPtr main;
-            try { main = proc.MainWindowHandle; }
-            catch { continue; }
+            try { pids.Add((uint)proc.Id); }
+            catch { }
             finally { proc.Dispose(); }
-            if (main == IntPtr.Zero) continue;
+        }
 
-            var handles = new List<IntPtr> { main };
-            EnumChildWindows(main, (h, _) => { handles.Add(h); return true; }, IntPtr.Zero);
+        if (pids.Count == 0) return;
+
+        // Every top-level window, not just MainWindowHandle. A process with
+        // several windows reports only one as "main", and which one is not
+        // ours to choose: with a chat window as main, the meeting window
+        // beside it was never nudged and its controls never appeared.
+        var tops = new List<IntPtr>();
+        try
+        {
+            EnumWindows((h, _) =>
+            {
+                GetWindowThreadProcessId(h, out var owner);
+                if (pids.Contains(owner)) tops.Add(h);
+                return true;
+            }, IntPtr.Zero);
+        }
+        catch { return; }
+
+        var now = Environment.TickCount64;
+
+        foreach (var top in tops)
+        {
+            var handles = new List<IntPtr> { top };
+            try { EnumChildWindows(top, (h, _) => { handles.Add(h); return true; }, IntPtr.Zero); }
+            catch { }
 
             foreach (var h in handles)
             {
@@ -672,7 +725,9 @@ public sealed class TeamsClient : IDisposable
                 // Forgetting the lot occasionally costs one extra nudge and
                 // bounds the set.
                 if (_nudged.Count > MaxNudgedHandles) _nudged.Clear();
-                if (!_nudged.Add(h)) continue;
+                if (!force && _nudged.TryGetValue(h, out var last) && now - last < RenudgeIntervalMs) continue;
+                _nudged[h] = now;
+
                 SendMessageTimeout(h, WM_GETOBJECT, IntPtr.Zero, OBJID_CLIENT,
                     0x0002 /* SMTO_ABORTIFHUNG */, 250, out _);
             }
@@ -857,12 +912,16 @@ public sealed class TeamsClient : IDisposable
     /// <summary>Locates the Teams window that currently hosts meeting controls.</summary>
     private AutomationElement? ResolveMeetingWindow()
     {
-        if (IsAlive(_meetingWindow))
+        var alive = IsAlive(_meetingWindow);
+        if (alive)
         {
             // The cheap cached-probe check covers the common case; the fuller
             // marker scan only runs when a flyout has hidden the toolbar.
-            if (IsToolbarVisible(_meetingWindow!) || HasAnyMarker(_meetingWindow!))
+            var toolbar = IsToolbarVisible(_meetingWindow!);
+            var markers = !toolbar && HasAnyMarker(_meetingWindow!);
+            if (toolbar || markers)
             {
+                _profile?.Mark(toolbar ? "win:toolbar" : "win:markers");
                 _markersSeenAt = Environment.TickCount64;
                 // The render widget can be recreated while the window lives on.
                 if (_renderWidget == IntPtr.Zero) _renderWidget = FindRenderWidget(_meetingWindow!);
@@ -881,7 +940,17 @@ public sealed class TeamsClient : IDisposable
 
             // An open flyout can hide every marker; hold the meeting briefly
             // rather than reporting that it ended.
-            if (Environment.TickCount64 - _markersSeenAt < MarkerGraceMs) return _meetingWindow;
+            if (Environment.TickCount64 - _markersSeenAt < MarkerGraceMs)
+            {
+                _profile?.Mark("win:grace");
+                return _meetingWindow;
+            }
+        }
+
+        if (ProfileSnapshots)
+        {
+            Console.Error.WriteLine(
+                $"rediscovery: alive={alive} graceAge={Environment.TickCount64 - _markersSeenAt}ms");
         }
 
         _meetingWindow = null;
@@ -1232,6 +1301,28 @@ public sealed class TeamsClient : IDisposable
     private Dictionary<string, AutomationElement>? _index;
 
     /// <summary>
+    /// Whether the grid overlay is up, as decided while reading PowerPoint
+    /// Live. Null outside a snapshot, and reset with the index.
+    /// </summary>
+    private bool? _gridPresent;
+
+    /// <summary>
+    /// Looks an element up on the meeting toolbar only.
+    ///
+    /// Inside a snapshot the index already covers that window, so this answers
+    /// from it and never widens the search. For a control that only ever
+    /// appears on the toolbar that is both the cheap answer and the correct
+    /// one, and it avoids <see cref="FindAnywhere"/>'s fallback of walking
+    /// every other Teams window - the chat window holds thousands of nodes.
+    /// </summary>
+    private AutomationElement? FindOnToolbar(AutomationElement win, string automationId)
+    {
+        if (string.IsNullOrEmpty(automationId)) return null;
+        if (_index is not null) return _index.GetValueOrDefault(automationId);
+        return FindAnywhere(win, automationId);
+    }
+
+    /// <summary>
     /// Reads the PowerPoint Live surface, if one is being presented.
     ///
     /// Returns the role ("presenter" or "attendee") or null when no
@@ -1245,48 +1336,86 @@ public sealed class TeamsClient : IDisposable
     {
         var ppt = _config.PowerPointLive;
 
-        var root = ResolveCached($"ppt:{ppt.RootAutomationId}", () =>
-        {
-            foreach (var scope in SearchScopes(win))
-            {
-                var found = FindById(scope, ppt.RootAutomationId);
-                if (found is not null) return found;
-            }
-            return null;
-        });
-
-        string className = "";
-        if (root is not null)
-        {
-            try { className = root.Properties.ClassName.ValueOrDefault ?? ""; }
-            catch { className = ""; }
-        }
-
-        var grid = FindAnywhere(win, ppt.GridViewAutomationId);
-
-        // The meeting toolbar decides the role, because only one of these two
-        // buttons can exist: you can stop a share you are giving, or ask for
-        // control of one you are not.
+        // Role first, and from the index rather than a search.
         //
-        // The root's CSS class looks like it should answer this and does not.
-        // It tracks the VIEW MODE, not the role: hiding presenter view rewrites
-        // it from "presenter-role" to "attendee-role" while you are still very
-        // much presenting. Trusting it retired every presenter key the moment
-        // someone collapsed their notes. The class is kept only as a fallback
-        // for the case where neither button is offered.
-        var role = FindAnywhere(win, ppt.PresenterMarkerAutomationId) is not null ? "presenter"
-            : FindAnywhere(win, ppt.AttendeeMarkerAutomationId) is not null ? "attendee"
-            : SafeMatch(ppt.PresenterRegex, className) ? "presenter"
-            : SafeMatch(ppt.AttendeeRegex, className) ? "attendee"
+        // Both markers sit on the meeting toolbar - only one can exist at a
+        // time, since you can stop a share you are giving or ask for control of
+        // one you are not - so the index is authoritative for them. Answering
+        // the role before anything else means the searches below only run when
+        // a deck actually exists. They widen to every Teams window when they
+        // miss, and with no deck shared that cost 1.0-2.3 s of every snapshot:
+        // the single largest cost in the sidecar, paid in the state a meeting
+        // spends most of its time in.
+        var role = FindOnToolbar(win, ppt.PresenterMarkerAutomationId) is not null ? "presenter"
+            : FindOnToolbar(win, ppt.AttendeeMarkerAutomationId) is not null ? "attendee"
             : null;
 
-        if (role is null) return null;
+        AutomationElement? root;
+
+        if (role is null)
+        {
+            // Neither marker, which almost always means no deck at all.
+            //
+            // The class name is kept as a fallback for a deck whose markers are
+            // missing, but it is read from wherever the index already has the
+            // root rather than by going looking: a wide search here would be
+            // the every-poll cost this ordering exists to avoid.
+            root = FindOnToolbar(win, ppt.RootAutomationId);
+            if (root is null) return null;
+
+            var className = "";
+            try { className = root.Properties.ClassName.ValueOrDefault ?? ""; }
+            catch { }
+
+            // The root's CSS class looks like it should answer the role and
+            // does not. It tracks the VIEW MODE: hiding presenter view rewrites
+            // it from "presenter-role" to "attendee-role" while you are still
+            // very much presenting. Trusting it retired every presenter key the
+            // moment someone collapsed their notes, which is why it is only
+            // consulted when neither button is offered.
+            role = SafeMatch(ppt.PresenterRegex, className) ? "presenter"
+                : SafeMatch(ppt.AttendeeRegex, className) ? "attendee"
+                : null;
+
+            if (role is null) return null;
+        }
+        else
+        {
+            // A marker says a deck is up, so the surface is worth finding even
+            // when "Pop out" has moved it into a window of its own.
+            root = FindAnywhere(win, ppt.RootAutomationId);
+        }
+
+        // The grid overlay and the slide-show surface cannot both be in the
+        // tree: opening the grid unmounts the whole slide-show subtree, which
+        // is why the grid's own key is judged by presence rather than state. A
+        // root that is present is therefore proof the grid is not, and proving
+        // it again by search is expensive - a miss widens to every other Teams
+        // window, and the chat window alone cost 885-1575 ms of every snapshot
+        // while a deck was up, the largest single cost left in the sidecar.
+        //
+        // The answer is kept for the control loop, which asks the same question
+        // again a moment later for the grid key's own state.
+        AutomationElement? grid;
+        if (root is not null)
+        {
+            grid = null;
+            _gridPresent = false;
+        }
+        else
+        {
+            grid = FindAnywhere(win, ppt.GridViewAutomationId);
+            _gridPresent = grid is not null;
+        }
 
         // Those two buttons are PowerPoint-specific, so the role also proves a
         // deck is up. That matters because the slide-show subtree itself is not
         // dependable: Teams unmounts it while the presentation sits idle, and
         // requiring it here reported the deck as gone several times a minute.
-        if (root is not null) _pptSurfaceSeenAt = Environment.TickCount64;
+        if (root is not null)
+        {
+            _pptSurfaceSeenAt = Environment.TickCount64;
+        }
 
         context["ppt.role"] = role;
 
@@ -1446,11 +1575,20 @@ public sealed class TeamsClient : IDisposable
     }
 
     /// <summary>
-    /// How long a failed lookup is trusted before searching again. Short enough
-    /// that appearing controls light up promptly, long enough that an absent
-    /// one is not re-searched on every poll.
+    /// How long a failed lookup is trusted before searching again.
+    ///
+    /// Longer than the meeting poll interval on purpose. At 1500 ms it was
+    /// shorter, so every poll arrived with the miss already expired and
+    /// re-ran the search it was meant to prevent - the PowerPoint Live root,
+    /// absent whenever no deck is shared, cost 0.8-2.3 s of every snapshot
+    /// that way, against 3 ms when the miss was still remembered.
+    ///
+    /// The delay this adds is small and bounded: every configured control is
+    /// in the snapshot index, so one appearing in the meeting window is seen
+    /// at once regardless of this. Only a control that appears in a *different*
+    /// Teams window - a deck moved out by "Pop out" - waits for the recheck.
     /// </summary>
-    private const int MissingRecheckMs = 1500;
+    private const int MissingRecheckMs = 5_000;
 
     /// <summary>When each absent element may be looked for again.</summary>
     private readonly Dictionary<string, long> _missingUntil = new();
@@ -2287,14 +2425,26 @@ public sealed class TeamsClient : IDisposable
 
     public MeetingSnapshot GetSnapshot()
     {
-        var snap = new MeetingSnapshot
-        {
-            TeamsRunning = AnyTeamsProcess()
-        };
+        var stages = ProfileSnapshots ? new StageLog() : null;
+
+        var snap = new MeetingSnapshot();
 
         var win = ResolveMeetingWindow();
+        stages?.Mark("window");
+
+        // Resolved first so this can usually be answered for free. A live
+        // meeting window is proof Teams is running, and the enumeration it
+        // stands in for walks every process on the machine - measured at 12 ms
+        // of every snapshot, to answer a question the window already settles.
+        snap.TeamsRunning = win is not null || AnyTeamsProcess();
+        stages?.Mark("processes");
+
         snap.InMeeting = win is not null;
-        if (win is null) return snap;
+        if (win is null)
+        {
+            stages?.Report("snapshot(no meeting)");
+            return snap;
+        }
 
         snap.WindowTitle = NameOf(win);
 
@@ -2302,6 +2452,8 @@ public sealed class TeamsClient : IDisposable
         // snapshot sees a consistent view, and cleared in the finally so
         // presses outside a snapshot still resolve elements live.
         _index = BuildIndex(win);
+        stages?.Mark("index");
+        _profile = stages;
         try
         {
             return Populate(snap, win);
@@ -2309,20 +2461,31 @@ public sealed class TeamsClient : IDisposable
         finally
         {
             _index = null;
+            _gridPresent = null;
+            _profile = null;
+            stages?.Report("snapshot");
         }
     }
+
+    /// <summary>When set, every snapshot reports where its time went.</summary>
+    public bool ProfileSnapshots { get; set; }
+
+    /// <summary>Stage log for the snapshot in progress; null outside one.</summary>
+    private StageLog? _profile;
 
     private MeetingSnapshot Populate(MeetingSnapshot snap, AutomationElement win)
     {
         // Read before the toolbar check: PowerPoint Live lives outside the
         // meeting toolbar, so it stays readable while a flyout covers it.
         var role = ReadPowerPointLive(win, snap.Context);
+        _profile?.Mark("pptLive");
         snap.States["ppt-live"] = role is not null;
         snap.States["ppt-presenting"] = role == "presenter";
 
         // Read outside the toolbar check too: the timer sits in its own strip
         // above the toolbar and stays readable while a flyout covers it.
         ReadTimer(win, snap.Context);
+        _profile?.Mark("timer");
 
         if (!IsToolbarVisible(win))
         {
@@ -2411,7 +2574,15 @@ public sealed class TeamsClient : IDisposable
             var presenceState = !string.IsNullOrEmpty(spec.ActiveWhenPresentAutomationId);
             if (presenceState)
             {
-                var on = FindAnywhere(win, spec.ActiveWhenPresentAutomationId!) is not null;
+                // Reading PowerPoint Live already settled the grid, so this
+                // reuses that answer rather than repeating a search whose miss
+                // walks every other Teams window.
+                var isGrid = string.Equals(spec.ActiveWhenPresentAutomationId,
+                    _config.PowerPointLive.GridViewAutomationId, StringComparison.Ordinal);
+
+                var on = isGrid && _gridPresent.HasValue
+                    ? _gridPresent.Value
+                    : FindAnywhere(win, spec.ActiveWhenPresentAutomationId!) is not null;
 
                 // The grid overlay unmounts the slide-show surface, and with it
                 // the notes pane that presenter view is judged by. Reading it
@@ -2500,6 +2671,7 @@ public sealed class TeamsClient : IDisposable
             PublishToolColor(snap, key, spec, el);
         }
 
+        _profile?.Mark("controls");
         return snap;
     }
 
@@ -2780,6 +2952,27 @@ public sealed class TeamsClient : IDisposable
     /// </summary>
     private bool TryClickAway(AutomationElement win)
     {
+        // Never while a deck is up.
+        //
+        // This posts a click at a spot guessed to be inert, and during
+        // PowerPoint Live a wrong guess advances the presentation for everyone
+        // watching. The guess was being made from bounds that cannot be read
+        // at the one moment they are needed - an open flyout unmounts the
+        // slide-show subtree - and reconstructing them from a remembered
+        // rectangle still leaves a click landing on evidence that is a moment
+        // stale. Measured: reactions moved the deck 5 -> 6 while presenting.
+        //
+        // Nothing is lost by refusing. Dismissal has a side-effect-free rung -
+        // asking the menu to collapse itself - which measurement shows does
+        // close the flyout, and since a press no longer waits for its own
+        // cleanup the extra second that takes is not time the user spends
+        // looking at a pressed key.
+        if (IsPresentingDeck())
+        {
+            Console.Error.WriteLine("not clicking to dismiss: a deck is being presented");
+            return false;
+        }
+
         try
         {
             var r = win.BoundingRectangle;
@@ -2800,11 +2993,9 @@ public sealed class TeamsClient : IDisposable
                 (AtX(0.88), AtY(0.28)),
                 (AtX(0.50), AtY(0.93))
             };
-            // The slide surface is not inert. Clicking it during PowerPoint Live
-            // advances the deck — for everyone, if you are the one presenting —
-            // so a dismissal that landed there was silently driving the
-            // presentation. It carries no clickable children of its own, so
-            // nothing else would have excluded it.
+
+            // Belt and braces. A deck should already have been caught above, but
+            // if one is somehow in the tree its bounds are honoured here too.
             var occupied = ClickableBounds(win);
             var slides = PowerPointSurfaceBounds(win);
             if (slides is { } s) occupied.Add(s);
@@ -2830,8 +3021,31 @@ public sealed class TeamsClient : IDisposable
     }
 
     /// <summary>
+    /// Whether a deck is on screen, so that clicking into the meeting window
+    /// could drive someone else's presentation.
+    ///
+    /// Deliberately generous about "still": the surface leaves the
+    /// accessibility tree whenever a flyout opens, which is exactly when a
+    /// dismissal is being attempted, so a strict reading would answer "no
+    /// deck" at the only moment the answer matters. Erring long only costs a
+    /// dismissal strategy that has side-effect-free alternatives; erring short
+    /// drives a presentation.
+    /// </summary>
+    private bool IsPresentingDeck() =>
+        Environment.TickCount64 - _pptSurfaceSeenAt < PresentingGraceMs;
+
+    private const int PresentingGraceMs = 60_000;
+
+    /// <summary>
     /// Screen bounds of the PowerPoint Live slide surface, when one is up.
     /// Treated as occupied so no dismissal click ever lands on a slide.
+    ///
+    /// A second line of defence only. Callers refuse to click at all while a
+    /// deck is being presented, because these bounds cannot be read at the one
+    /// moment they matter - an open flyout unmounts the slide-show subtree, so
+    /// the lookup returns nothing exactly when a deck is up. This still runs
+    /// for the case where a surface is somehow in the tree without that guard
+    /// having fired.
     /// </summary>
     private System.Drawing.Rectangle? PowerPointSurfaceBounds(AutomationElement win)
     {
@@ -2850,6 +3064,7 @@ public sealed class TeamsClient : IDisposable
             }
             catch { }
         }
+
         return null;
     }
 
@@ -3305,7 +3520,18 @@ public sealed class TeamsClient : IDisposable
     {
         var timer = _config.Timer;
 
-        var controls = FindByNamePattern(win, timer.ControlsPattern);
+        // One walk, not three. Each pattern used to get its own full button
+        // search of the window: cheap while no timer was running, because the
+        // first search failed and the rest never ran, but a running timer
+        // needed all three and measured 204-382 ms against 54-68 ms without
+        // one. Matching every pattern in a single pass makes a running timer
+        // cost about what an absent one does.
+        var found = MatchButtons(win, new[]
+        {
+            timer.ControlsPattern, timer.CancelPattern, timer.PausePattern
+        });
+
+        var controls = found[0];
         if (controls is null) return;
 
         var seconds = ParseRemaining(NameOf(controls));
@@ -3319,7 +3545,7 @@ public sealed class TeamsClient : IDisposable
             though the bar itself turns red and counts upwards. So the overtime
             is not readable here at all - only the fact of it.
         */
-        if (FindByNamePattern(win, timer.CancelPattern) is not null)
+        if (found[1] is not null)
         {
             context["timer.expired"] = "1";
             context["timer.running"] = "1";
@@ -3327,8 +3553,57 @@ public sealed class TeamsClient : IDisposable
         }
 
         // Which way the toggle points is the only statement of running or not.
-        var running = FindByNamePattern(win, timer.PausePattern) is not null;
-        context["timer.running"] = running ? "1" : "0";
+        context["timer.running"] = found[2] is not null ? "1" : "0";
+    }
+
+    /// <summary>
+    /// Finds the first button matching each pattern, in a single walk.
+    ///
+    /// Returns one slot per pattern, in the order given, null where nothing
+    /// matched. Stops early once every pattern has an answer.
+    /// </summary>
+    private AutomationElement?[] MatchButtons(AutomationElement scope, string[] patterns)
+    {
+        var result = new AutomationElement?[patterns.Length];
+        var compiled = new Regex?[patterns.Length];
+        var outstanding = 0;
+
+        for (var i = 0; i < patterns.Length; i++)
+        {
+            try
+            {
+                compiled[i] = new Regex(patterns[i],
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, ControlSpec.MatchTimeout);
+                outstanding++;
+            }
+            catch { compiled[i] = null; }
+        }
+
+        if (outstanding == 0) return result;
+
+        try
+        {
+            foreach (var el in scope.FindAllDescendants(cf => cf.ByControlType(ControlType.Button)))
+            {
+                string name;
+                try { name = el.Name ?? ""; }
+                catch { continue; }
+                if (name.Length == 0) continue;
+
+                for (var i = 0; i < compiled.Length; i++)
+                {
+                    if (result[i] is not null || compiled[i] is null) continue;
+                    if (!SafeMatch(compiled[i]!, name)) continue;
+                    result[i] = el;
+                    outstanding--;
+                }
+
+                if (outstanding == 0) break;
+            }
+        }
+        catch { }
+
+        return result;
     }
 
     /// <summary>Total seconds in "4 min, 57 sec remaining", or null.</summary>
@@ -3360,8 +3635,24 @@ public sealed class TeamsClient : IDisposable
         catch { return null; }
     }
 
-    /// <summary>First element whose accessible name matches, anywhere in the window.</summary>
-    private static AutomationElement? FindByNamePattern(AutomationElement scope, string pattern)
+    /// <summary>
+    /// First button whose accessible name matches, anywhere in the window.
+    ///
+    /// Buttons only, and every caller is timer code: the strip is a button
+    /// whose name carries the remaining time, with Pause/Resume/Reset and the
+    /// expired-state Cancel beside it. That matters because the timer carries
+    /// no AutomationId, so there is nothing else to filter on, and an
+    /// unfiltered descendant search makes Teams marshal every node in the
+    /// window - a Chromium tree being mostly text, group and image nodes.
+    ///
+    /// Measured at 79-123 ms per snapshot, the largest single stage, and paid
+    /// on every poll even in the usual case where no timer is running and the
+    /// search finds nothing. Filtering in the search itself is what makes the
+    /// common case cheap; caching the names instead was tried and was worse,
+    /// because the cost is the walk rather than the reads, and building a
+    /// cache only adds to it.
+    /// </summary>
+    private AutomationElement? FindByNamePattern(AutomationElement scope, string pattern)
     {
         Regex re;
         try
@@ -3373,7 +3664,7 @@ public sealed class TeamsClient : IDisposable
 
         try
         {
-            foreach (var el in scope.FindAllDescendants())
+            foreach (var el in scope.FindAllDescendants(cf => cf.ByControlType(ControlType.Button)))
             {
                 string name;
                 try { name = el.Name ?? ""; }
@@ -3542,22 +3833,29 @@ public sealed class TeamsClient : IDisposable
     /// </summary>
     private sealed class StageLog
     {
-        private readonly long _start = Environment.TickCount64;
-        private long _last = Environment.TickCount64;
-        private readonly List<string> _stages = new(5);
+        // Stopwatch rather than TickCount64, whose ~15 ms resolution is coarser
+        // than several of the stages being measured.
+        private readonly Stopwatch _sw = Stopwatch.StartNew();
+        private long _last;
+        private readonly List<string> _stages = new(8);
 
         public void Mark(string stage)
         {
-            var now = Environment.TickCount64;
+            var now = _sw.ElapsedMilliseconds;
             _stages.Add($"{stage}={now - _last}ms");
             _last = now;
         }
 
         public void ReportIfSlow(string target, int thresholdMs)
         {
-            var total = Environment.TickCount64 - _start;
+            var total = _sw.ElapsedMilliseconds;
             if (total < thresholdMs) return;
             Console.Error.WriteLine($"slow flyout '{target}': {total}ms [{string.Join(' ', _stages)}]");
+        }
+
+        public void Report(string label)
+        {
+            Console.Error.WriteLine($"{label}: {_sw.ElapsedMilliseconds}ms [{string.Join(' ', _stages)}]");
         }
     }
 
@@ -3613,6 +3911,23 @@ public sealed class TeamsClient : IDisposable
         if (string.IsNullOrEmpty(spec.Menu))
         {
             var el = ResolveControl(target, spec);
+            if (el is null)
+            {
+                // Teams unmounts the slide-show subtree whenever a flyout opens,
+                // and remounts it a moment after the flyout goes. A press that
+                // lands in that window cannot find a control that is plainly on
+                // screen: measured on ppt-grid, pressed a few seconds after a
+                // run of reactions, with gridViewToolbarButton confirmed present
+                // in the tree immediately afterwards.
+                //
+                // Same remedy as a missing menu host, for the same reason - the
+                // tree, not the control, is what is missing - and it only runs
+                // on a path that has already failed.
+                Console.Error.WriteLine($"control '{target}' not in the tree; waking accessibility and retrying");
+                EnableAccessibility(force: true);
+                Thread.Sleep(RetrySettleMs);
+                el = ResolveControl(target, spec);
+            }
             if (el is null) return (false, $"control '{target}' not found");
             if (!SafeEnabled(el)) return (false, $"control '{target}' is disabled");
 
@@ -3636,6 +3951,23 @@ public sealed class TeamsClient : IDisposable
 
         // Flyout-nested control: open the menu, click the item, make sure it closed.
         var host = FindById(win, spec.Menu!);
+        if (host is null)
+        {
+            // Teams rebuilds the toolbar after a flyout closes, and Chromium
+            // only keeps an accessibility tree alive while something is using
+            // it - so the button that was there a moment ago can be missing
+            // from the tree while still on screen. Measured: a reaction worked
+            // once and then failed with "menu not found" on every press after,
+            // on unmodified code, until the tree was woken again.
+            //
+            // Waking it costs about 60 ms and only happens on a path that has
+            // already failed, so it is cheap next to telling the user the press
+            // did not work.
+            Console.Error.WriteLine($"menu '{spec.Menu}' not in the tree; waking accessibility and retrying");
+            EnableAccessibility(force: true);
+            Thread.Sleep(RetrySettleMs);
+            host = FindById(win, spec.Menu!);
+        }
         if (host is null) return (false, $"menu '{spec.Menu}' not found");
 
         // Captured before opening: once the flyout is up, Teams removes the
@@ -3648,6 +3980,7 @@ public sealed class TeamsClient : IDisposable
         stages.Mark("open");
 
         AutomationElement? item = null;
+        var pressed = false;
         try
         {
             // A nested menu has to be opened before its items exist. Opened the
@@ -3718,20 +4051,7 @@ public sealed class TeamsClient : IDisposable
 
             if (wasChecked.HasValue) _lastStates[target] = !wasChecked.Value;
 
-            // Two problems, one fix. The flyout does not reliably close on its
-            // own, and after a selection Teams swallows the next click on that
-            // menu button. A click on inert space dismisses the popup and clears
-            // the suppression, so the following press works first time instead
-            // of needing the retry below.
-            //
-            // A plain sleep rather than a wait for the popup to go: measurement
-            // shows it never goes on its own here - the wait reached its
-            // ceiling on every press - so polling for it only adds failed tree
-            // searches to a delay that is going to run in full anyway.
-            Thread.Sleep(PostSelectSettleMs);
-            stages.Mark("settle");
-            TryClickAway(win);
-            stages.Mark("away");
+            pressed = true;
             return (true, null);
         }
         finally
@@ -3740,9 +4060,85 @@ public sealed class TeamsClient : IDisposable
             // leaving it open hides the toolbar. The menu's id goes with it so
             // the host can be re-found once choosing an item has re-rendered
             // the surface it hangs off.
-            DismissFlyout(win, item, host, hostPoint, spec.Menu);
-            stages.Mark("dismiss");
-            stages.ReportIfSlow(target, SlowFlyoutMs);
+            //
+            // Deferred rather than run here. The click has already landed by
+            // this point — the reaction is on screen — and everything left is
+            // cleanup the user is not waiting for, measured at 3.5 s of it
+            // (natural=1531ms refind=31ms collapseCall=2032ms) on a press that
+            // was visibly done. Running it before returning made the key sit
+            // pressed for that whole time and spent most of the plugin's 10 s
+            // patience on housekeeping. The worker runs it immediately after
+            // the result goes out, so the flyout is still shut before anything
+            // else touches the tree.
+            var justPressed = item;
+            var didPress = pressed;
+            DeferCleanup(() =>
+            {
+                // Two problems, one fix. The flyout does not reliably close on
+                // its own, and after a selection Teams swallows the next click
+                // on that menu button. A click on inert space dismisses the
+                // popup and clears the suppression, so the following press
+                // works first time instead of needing a retry.
+                //
+                // A plain sleep rather than a wait for the popup to go:
+                // measurement shows it never goes on its own here - the wait
+                // reached its ceiling on every press - so polling for it only
+                // adds failed tree searches to a delay that is going to run in
+                // full anyway.
+                //
+                // Only after a press actually landed. On the failure paths the
+                // menu may never have opened, and clicking inert space then is
+                // a click into a meeting for no reason.
+                if (didPress)
+                {
+                    Thread.Sleep(PostSelectSettleMs);
+                    stages.Mark("settle");
+                    TryClickAway(win);
+                    stages.Mark("away");
+                }
+
+                DismissFlyout(win, justPressed, host, hostPoint, spec.Menu);
+                stages.Mark("dismiss");
+                stages.ReportIfSlow(target, SlowFlyoutMs);
+            });
+        }
+    }
+
+    /// <summary>
+    /// Work that must finish before anything else reads the tree, but that the
+    /// caller of a press is not waiting on.
+    ///
+    /// Only one can be outstanding. Registering a second would mean a flyout
+    /// was left open across a press, which is the exact state this avoids, so
+    /// any pending one is flushed first rather than dropped.
+    /// </summary>
+    private void DeferCleanup(Action work)
+    {
+        RunDeferredCleanup();
+        _deferred = work;
+    }
+
+    private Action? _deferred;
+
+    /// <summary>True when a press left cleanup owing.</summary>
+    public bool HasDeferredCleanup => _deferred is not null;
+
+    /// <summary>
+    /// Runs any owed cleanup. Safe to call when none is owed, and re-entrant
+    /// callers see an empty slot because it is cleared before the work runs.
+    /// </summary>
+    public void RunDeferredCleanup()
+    {
+        var work = _deferred;
+        _deferred = null;
+        if (work is null) return;
+
+        try { work(); }
+        catch (Exception ex)
+        {
+            // Never let cleanup take down the press that scheduled it — that
+            // press has already been reported as succeeding.
+            Console.Error.WriteLine($"deferred cleanup failed: {ex.Message}");
         }
     }
 

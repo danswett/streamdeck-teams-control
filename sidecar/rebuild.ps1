@@ -6,6 +6,15 @@
     staging folder and renaming the running executable side-steps that: Windows
     allows a running image to be renamed, and the next spawn picks up the new
     file.
+
+    IMPORTANT - this only reaches Stream Deck if the installed plugin folder is
+    a junction back to this repo. Installing a .streamDeckPlugin package
+    replaces that junction with a real copy, and from then on this script
+    updates the repo while Stream Deck goes on running the copy: the rebuild
+    looks like it worked, the plugin restarts, and the behaviour never changes.
+    Diagnosed after a fixed bug kept reproducing against a sidecar built the
+    previous day. The check below refuses to pretend, and sidecar/
+    install-local.ps1 is the route that updates a real installation.
 #>
 param(
     [string]$Root = "C:\Users\dswett\repos\streamdeck-teams-control",
@@ -16,6 +25,18 @@ param(
 $ErrorActionPreference = 'Stop'
 $stage = Join-Path $env:TEMP "tb-stage"
 $dest = Join-Path $Root "com.bad-duck.teamscontrol.sdPlugin\bin\sidecar"
+
+$installed = Join-Path $env:APPDATA "Elgato\StreamDeck\Plugins\com.bad-duck.teamscontrol.sdPlugin"
+if (Test-Path $installed) {
+    $link = (Get-Item $installed -Force).LinkType
+    if (-not $link) {
+        Write-Host "Stream Deck is running a real copy, not a junction to this repo:" -ForegroundColor Yellow
+        Write-Host "  $installed" -ForegroundColor Yellow
+        Write-Host "This script would update the repo only. Use instead:" -ForegroundColor Yellow
+        Write-Host "  npm run pack; .\sidecar\install-local.ps1" -ForegroundColor Cyan
+        throw "refusing to rebuild into a folder Stream Deck does not use"
+    }
+}
 
 Push-Location $Root
 try {
