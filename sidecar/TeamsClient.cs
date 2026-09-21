@@ -2931,31 +2931,23 @@ public sealed class TeamsClient : IDisposable
     /// <summary>
     /// How often a wait re-checks the tree.
     ///
-    /// Every timeout in the flyout path is a ceiling that exits as soon as the
-    /// condition holds, so what a user actually sees is dominated by this
-    /// interval rather than by the ceilings. Teams was measured answering a
-    /// menu open in roughly 25 ms - a reaction flyout driven end to end took
-    /// 238 ms including the item click and the dismissal - so polling at 60-80
-    /// ms spent most of a press waiting for an answer that had already arrived.
-    ///
-    /// A UIA property read is cheap next to the popup it is inspecting, and the
-    /// wait is bounded, so the extra reads cost far less than the latency they
-    /// remove.
+    /// Deliberately not tightened. It is tempting to poll faster so a wait
+    /// exits sooner, and measurement shows that is a pessimization here: while
+    /// a flyout is open Teams removes the toolbar from the accessibility tree,
+    /// so the "has it closed yet" check falls through to a *failed* element
+    /// search, which walks an entire window subtree. Asking more often just
+    /// buys more full walks. Polling at 25 ms instead of this measured 13%
+    /// slower on a reaction press than the value below.
     /// </summary>
-    private const int PollIntervalMs = 25;
+    private const int PollIntervalMs = 60;
 
     /// <summary>
-    /// How often to re-scan for an item that has not appeared yet.
-    ///
-    /// Deliberately slower than <see cref="PollIntervalMs"/>. A dismissal check
-    /// is one property read, but a search for an element that is not there yet
-    /// walks an entire window subtree — the expensive case the README calls out
-    /// — so scanning three times as often would triple that cost to learn the
-    /// same thing. The item appears when Teams populates the menu, which was
-    /// measured at roughly 450 ms for a reaction flyout and is not influenced
-    /// by how often it is asked for.
+    /// How often to re-scan for an item that has not appeared yet. Slower
+    /// again, and for the same reason: this is the most expensive predicate on
+    /// the path, and the item appears when Teams populates the menu rather
+    /// than when it is asked for.
     /// </summary>
-    private const int PopupScanIntervalMs = 60;
+    private const int PopupScanIntervalMs = 80;
 
     private bool WaitForDismissed(AutomationElement win, AutomationElement? host, int timeoutMs)
     {
@@ -3712,12 +3704,11 @@ public sealed class TeamsClient : IDisposable
             // the suppression, so the following press works first time instead
             // of needing the retry below.
             //
-            // The wait is for the popup to settle before clicking away, not a
-            // fixed cost: it returns the moment the flyout has gone, which is
-            // the common case. The click still happens either way, because
-            // clearing the swallowed-click state is the half of this that has
-            // nothing to do with whether the popup is still up.
-            WaitForDismissed(win, host, PostSelectSettleMs);
+            // A plain sleep rather than a wait for the popup to go: measurement
+            // shows it never goes on its own here - the wait reached its
+            // ceiling on every press - so polling for it only adds failed tree
+            // searches to a delay that is going to run in full anyway.
+            Thread.Sleep(PostSelectSettleMs);
             stages.Mark("settle");
             TryClickAway(win);
             stages.Mark("away");
