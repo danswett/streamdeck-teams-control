@@ -40,9 +40,20 @@ export const PRESENTER = "PowerPoint Live (Presenter)";
  * unsuffixed and must stay that way; anything added since names itself. A
  * device that is not listed here is left alone entirely, because switching it
  * to a layout built for a different grid would push keys off the edge of it.
+ *
+ * Every Stream Deck with a fixed grid is here. The ones left out have no grid
+ * to build against: the Pedal is three keys with no published layout, and
+ * Stream Deck Mobile and the Virtual deck are whatever size the user makes
+ * them. Corsair and SCUF keyboards are reported as Stream Decks too, and are
+ * left alone for the same reason.
  */
 const SUPPORTED = new Map<DeviceType, string>([
 	[DeviceType.StreamDeck, ""],
+	[DeviceType.StreamDeckMini, " (Mini)"],
+	[DeviceType.StreamDeckXL, " (XL)"],
+	[DeviceType.StreamDeckPlus, " (+)"],
+	[DeviceType.StreamDeckNeo, " (Neo)"],
+	[DeviceType.StreamDeckStudio, " (Studio)"],
 	[DeviceType.StreamDeckPlusXL, " (+ XL)"]
 ]);
 

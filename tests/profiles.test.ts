@@ -75,6 +75,11 @@ describe("the bundled profiles", () => {
 	 */
 	const DECKS = [
 		{ label: "15-key", suffix: "", deviceType: 0, columns: 5, rows: 3, dials: 0 },
+		{ label: "Mini", suffix: " (Mini)", deviceType: 1, columns: 3, rows: 2, dials: 0 },
+		{ label: "XL", suffix: " (XL)", deviceType: 2, columns: 8, rows: 4, dials: 0 },
+		{ label: "+", suffix: " (+)", deviceType: 7, columns: 4, rows: 2, dials: 4 },
+		{ label: "Neo", suffix: " (Neo)", deviceType: 9, columns: 4, rows: 2, dials: 0 },
+		{ label: "Studio", suffix: " (Studio)", deviceType: 10, columns: 16, rows: 2, dials: 2 },
 		{ label: "+ XL", suffix: " (+ XL)", deviceType: 13, columns: 9, rows: 4, dials: 6 }
 	];
 
@@ -130,9 +135,14 @@ describe("the bundled profiles", () => {
 		expect(profile.Version).toBe("3.0");
 		expect(profile.Pages.Default, "needs a default page to fall back to").toBeTruthy();
 
-		// The model is what Stream Deck matches against the hardware, and the
-		// XL and + XL model names differ by one letter.
-		expect(profile.Device.Model).toBe(b.deck.deviceType === 13 ? "20GBX9901" : "20GBA9901");
+		// Device.Model is not what binds a profile to a deck, despite looking
+		// like it. A profile shipped with a deliberately wrong model installed
+		// onto a 15-key anyway, and Stream Deck replaced the value with that
+		// deck's own - the manifest's DeviceType is what selects the hardware.
+		// So the only thing worth insisting on is that the block is there and
+		// carries no device identity of its own to install against.
+		expect(profile.Device, `${b.name} has no device block`).toBeDefined();
+		expect(profile.Device.UUID, `${b.name} is bound to one specific deck`).toBe("");
 
 		// A revision ships a second profile rather than replacing the first, so
 		// the name has to say which revision it is. Left identical, Stream Deck
@@ -247,28 +257,56 @@ describe("the bundled profiles", () => {
 		}
 	});
 
-	it("keeps the meeting keys in the same place across the shared + XL layouts", () => {
-		// Nine columns exist so a profile switch does not move mute out from
-		// under the finger reaching for it, and XL_MEETING is the block that
-		// guarantees it.
-		//
-		// The presenter profile is deliberately not in this list. It was laid
-		// out by hand in the Stream Deck app and read back, so it places the
+	it.each([
+		["XL", DeviceType.StreamDeckXL, [ATTENDEE, PRESENTER]],
+		["Studio", DeviceType.StreamDeckStudio, [ATTENDEE, PRESENTER]],
+		// The + XL presenter is deliberately not in this list. It was laid out
+		// by hand in the Stream Deck app and read back, so it places the
 		// meeting keys where they were dragged rather than where the shared
 		// block puts them. Asserting it here would only force the two to be
 		// edited together, which is the opposite of the point.
-		const meetingHalf = (name: string) =>
-			Object.entries(keypad(name))
-				.filter(([pos]) => Number(pos.split(",")[0]) < 4)
+		["+ XL", DeviceType.StreamDeckPlusXL, [ATTENDEE]]
+	] as const)(
+		"keeps the meeting keys in the same place across the %s layouts",
+		(label, device, others) => {
+			// These decks are wide enough to hold the meeting still underneath
+			// a changing presentation, which is the whole reason they are laid
+			// out from a shared block: a profile switch must not move mute out
+			// from under the finger already reaching for it.
+			const at = (base: string) => keypad(profilePath(base, device)!);
+
+			const reference = at(MEETING);
+			expect(Object.keys(reference).length, `no meeting keys on a ${label}`).toBeGreaterThan(0);
+
+			for (const base of others) {
+				const other = at(base);
+				for (const [pos, a] of Object.entries(reference)) {
+					expect(other[pos]?.UUID, `${base} on a ${label} moved the key at ${pos}`).toBe(
+						a.UUID
+					);
+				}
+			}
+		}
+	);
+
+	it("gives the + and the Neo identical keys, because they have identical grids", () => {
+		// Four by two either way, and neither has room for a key the other
+		// lacks, so the two decks share their layouts exactly. Letting them
+		// drift apart would mean maintaining the same eight keys twice.
+		const flat = (m: Record<string, { UUID: string }>) =>
+			Object.entries(m)
 				.map(([pos, a]) => `${pos}=${a.UUID}`)
 				.sort()
 				.join(" ");
 
-		const xl = (base: string) => profilePath(base, DeviceType.StreamDeckPlusXL)!;
-
-		const reference = meetingHalf(xl(MEETING));
-		expect(reference).not.toBe("");
-		expect(meetingHalf(xl(ATTENDEE)), `${ATTENDEE} moved the meeting keys`).toBe(reference);
+		for (const base of [MEETING, ATTENDEE, PRESENTER]) {
+			const plus = flat(keypad(profilePath(base, DeviceType.StreamDeckPlus)!));
+			expect(plus).not.toBe("");
+			expect(
+				flat(keypad(profilePath(base, DeviceType.StreamDeckNeo)!)),
+				`${base} has drifted apart between the + and the Neo`
+			).toBe(plus);
+		}
 	});
 });
 
@@ -294,7 +332,15 @@ describe("picking the file for a deck", () => {
 		) as { Profiles: { Name: string; DeviceType: number }[] };
 
 		for (const base of [MEETING, ATTENDEE, PRESENTER]) {
-			for (const device of [DeviceType.StreamDeck, DeviceType.StreamDeckPlusXL]) {
+			for (const device of [
+				DeviceType.StreamDeck,
+				DeviceType.StreamDeckMini,
+				DeviceType.StreamDeckXL,
+				DeviceType.StreamDeckPlus,
+				DeviceType.StreamDeckNeo,
+				DeviceType.StreamDeckStudio,
+				DeviceType.StreamDeckPlusXL
+			]) {
 				const resolved = profilePath(base, device);
 				expect(resolved, `${base} on ${device} resolved to nothing`).not.toBeNull();
 				expect(
@@ -306,10 +352,13 @@ describe("picking the file for a deck", () => {
 	});
 
 	it("leaves a deck with no bundled layout alone", () => {
-		// Switching a Mini or a Pedal to a layout built for a bigger grid would
-		// push most of the keys off the edge of it.
-		expect(profilePath(MEETING, DeviceType.StreamDeckMini)).toBeNull();
-		expect(profilePath(MEETING, DeviceType.StreamDeckXL)).toBeNull();
+		// A deck is only given a layout when its grid is known and fixed. The
+		// Pedal publishes no key layout, and Mobile and the Virtual deck are
+		// whatever size the user makes them, so a layout built for any of them
+		// would be a guess about where the keys are.
 		expect(profilePath(MEETING, DeviceType.StreamDeckPedal)).toBeNull();
+		expect(profilePath(MEETING, DeviceType.StreamDeckMobile)).toBeNull();
+		expect(profilePath(MEETING, DeviceType.VirtualStreamDeck)).toBeNull();
+		expect(profilePath(MEETING, DeviceType.CorsairGKeys)).toBeNull();
 	});
 });

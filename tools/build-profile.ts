@@ -29,6 +29,8 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { type Deck as Device, MINI, NEO, PLUS, PLUS_XL, STREAM_DECK, STUDIO, XL } from "./decks.ts";
+
 import AdmZip from "adm-zip";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -56,48 +58,6 @@ type Key = {
 };
 type Layout = Record<string, Key>;
 
-type Device = {
-	/** Value for the manifest's `Profiles[].DeviceType`. */
-	deviceType: number;
-	/**
-	 * `Device.Model` in the profile, which is how Stream Deck decides the
-	 * profile belongs to the deck in front of it. Read off the profiles Stream
-	 * Deck and Elgato's own plugins write, not guessed: the names are close
-	 * enough to swap by accident - 20GAT9901 is the XL, 20GBX9901 the + XL.
-	 */
-	model: string;
-	columns: number;
-	rows: number;
-	/** Dials, which need a second controller in every page. Zero if it has none. */
-	encoders: number;
-	/**
-	 * Appended to the profile and file name so one plugin can ship a layout per
-	 * deck. Empty for the 15-key, whose files shipped before there was a second
-	 * device and must keep the names Stream Deck already installed.
-	 */
-	suffix: string;
-};
-
-/** Stream Deck MK.2 / standard 15-key. Matches manifest DeviceType 0. */
-const STREAM_DECK: Device = {
-	deviceType: 0,
-	model: "20GBA9901",
-	columns: 5,
-	rows: 3,
-	encoders: 0,
-	suffix: ""
-};
-
-/** Stream Deck + XL: 36 keys in a 9x4 grid, plus six dials. Manifest DeviceType 13. */
-const PLUS_XL: Device = {
-	deviceType: 13,
-	model: "20GBX9901",
-	columns: 9,
-	rows: 4,
-	encoders: 6,
-	suffix: " (+ XL)"
-};
-
 type Profile = {
 	name: string;
 	device: Device;
@@ -114,10 +74,15 @@ type Profile = {
 	 * into the installed copy's PreconfiguredName, which is how this was
 	 * established - so a changed path is the only thing it treats as new.
 	 *
-	 * Bump this whenever keys or dials move. The profile's own name is left
-	 * alone, so the revision is invisible to the user; only the file changes.
-	 * The previous copy stays on their machine as an ordinary profile they can
-	 * delete, because a plugin cannot remove one.
+	 * Bumping this is expensive and is not routine. It ships a second profile
+	 * rather than replacing the first: the old one stays on the user's machine
+	 * for good, because a plugin cannot remove a profile and Stream Deck never
+	 * retires one it stops seeing. The revision therefore also goes into the
+	 * profile's displayed name, or the two arrive under the same name and
+	 * Stream Deck disambiguates them itself as "copy", "copy 1", "copy 2".
+	 *
+	 * So bump it only for a layout users already have. A layout that has never
+	 * shipped can be edited freely; just record the new {@link layoutHash}.
 	 */
 	revision?: number;
 	/**
@@ -188,6 +153,93 @@ const XL_MEETING: Layout = {
 
 	"0,3": { action: "react-wow", name: "React: Wow" },
 	"3,3": { action: "leave", name: "Leave" }
+};
+
+/**
+ * The meeting keys on the Studio, which is sixteen wide and two deep.
+ *
+ * Nothing can be stacked into a column on two rows, so the grouping runs
+ * along each row instead: controls on the top, reactions underneath. Leave
+ * takes the far end of the bottom row, as far from mute as the deck allows.
+ */
+const STUDIO_MEETING: Layout = {
+	"0,0": { action: "mute", name: "Mute" },
+	"1,0": { action: "camera", name: "Camera" },
+	"2,0": { action: "blur", name: "Background Blur" },
+	"3,0": { action: "share", name: "Share Screen" },
+	"4,0": { action: "hand", name: "Raise Hand" },
+	"5,0": { action: "chat", name: "Chat" },
+	"6,0": { action: "people", name: "People" },
+
+	"0,1": { action: "react-like", name: "React: Like" },
+	"1,1": { action: "react-love", name: "React: Love" },
+	"2,1": { action: "react-applause", name: "React: Applause" },
+	"3,1": { action: "react-laugh", name: "React: Laugh" },
+	"4,1": { action: "react-wow", name: "React: Wow" },
+
+	"15,1": { action: "leave", name: "Leave" }
+};
+
+/* ------------------------------------------------------------------------- *
+ * The eight-key decks: Stream Deck + and Neo, both 4x2.
+ *
+ * Eight keys is too few to hold a meeting block still underneath a changing
+ * presentation the way the + XL does, so each profile uses all eight for
+ * whatever is happening now. Mute survives into every one of them - being
+ * moved onto a presentation layout must never be what costs you the mute key.
+ *
+ * The + has four dials and the Neo has none, and neither has room for a key
+ * the other lacks, so the two share these three blocks exactly.
+ * ------------------------------------------------------------------------- */
+
+const EIGHT_MEETING: Layout = {
+	"0,0": { action: "mute", name: "Mute" },
+	"1,0": { action: "camera", name: "Camera" },
+	"2,0": { action: "blur", name: "Background Blur" },
+	"3,0": { action: "share", name: "Share Screen" },
+
+	"0,1": { action: "hand", name: "Raise Hand" },
+	"1,1": { action: "chat", name: "Chat" },
+	"2,1": { action: "people", name: "People" },
+	"3,1": { action: "leave", name: "Leave" }
+};
+
+const EIGHT_ATTENDEE: Layout = {
+	"0,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
+	"1,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
+	"2,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
+	"3,0": { action: "ppt-grid", name: "PPT Live: Grid View" },
+
+	// Navigation moves your own view only, so Sync sits directly under it.
+	"0,1": { action: "ppt-sync", name: "PPT Attendee: Sync" },
+	"1,1": { action: "ppt-take-control", name: "PPT Attendee: Take Control" },
+	"2,1": { action: "mute", name: "Mute" },
+	"3,1": { action: "camera", name: "Camera" }
+};
+
+/**
+ * The drawing tools take the whole bottom row, as they do on the 15-key: they
+ * are a single-select group and read as one control.
+ *
+ * Cursor is in it rather than the eraser. Cursor is how drawing is switched
+ * off again, so a deck that offers a pen without it can put the presentation
+ * into a state it cannot get out of.
+ */
+const EIGHT_PRESENTER: Layout = {
+	"0,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
+	"1,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
+	"2,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
+	"3,0": { action: "mute", name: "Mute" },
+
+	"0,1": { action: "ppt-cursor", name: "PPT Presenter: Cursor" },
+	"1,1": { action: "ppt-laser", name: "PPT Presenter: Laser Pointer" },
+	"2,1": { action: "ppt-pen", name: "PPT Presenter: Pen" },
+	"3,1": { action: "ppt-highlighter", name: "PPT Presenter: Highlighter" }
+};
+
+/** The timer, which is a meeting control rather than a PowerPoint one. */
+const TIMER_DIAL: Layout = {
+	"0,0": { action: "timer-dial", name: "Meeting Timer" }
 };
 
 /**
@@ -298,16 +350,18 @@ const PROFILES: Profile[] = [
 		name: "Teams Meeting",
 		device: PLUS_XL,
 		uuid: "4A7C9E1D-2B83-4F6A-8D45-6E1F0C3B9A72",
-		layoutHash: "32fda4bc",
+		layoutHash: "dbef26ef",
 		page: "a1b2c3d4-0011-4e85-a0b7-2f6c1e5d8a34",
+		dials: { ...TIMER_DIAL },
 		layout: { ...XL_MEETING }
 	},
 	{
 		name: "PowerPoint Live (Attendee)",
 		device: PLUS_XL,
 		uuid: "5B8D0F2E-3C94-4A7B-9E56-7F2A1D4C8B63",
-		layoutHash: "d2f421a7",
+		layoutHash: "3a4dd498",
 		page: "a1b2c3d4-0012-4e85-a0b7-2f6c1e5d8a34",
+		dials: { ...TIMER_DIAL },
 		layout: {
 			...XL_MEETING,
 
@@ -382,6 +436,285 @@ const PROFILES: Profile[] = [
 			"6,3": { action: "ppt-pen", name: "PPT Presenter: Pen" },
 			"7,3": { action: "ppt-highlighter", name: "PPT Presenter: Highlighter" },
 			"8,3": { action: "ppt-eraser", name: "PPT Presenter: Eraser" }
+		}
+	},
+
+	/* --------------------------------------------------------------------- *
+	 * Stream Deck Mini - 3x2
+	 *
+	 * Six keys, so each profile carries only what that moment needs. Mute is
+	 * in all three: being moved onto a presentation layout must never be what
+	 * costs you the mute key.
+	 * --------------------------------------------------------------------- */
+	{
+		name: "Teams Meeting",
+		device: MINI,
+		uuid: "7D0F2B4A-5E16-4C9D-8A78-9B4C3F6E1D85",
+		layoutHash: "68a31f33",
+		page: "a1b2c3d4-0021-4e85-a0b7-2f6c1e5d8a34",
+		layout: {
+			"0,0": { action: "mute", name: "Mute" },
+			"1,0": { action: "camera", name: "Camera" },
+			"2,0": { action: "hand", name: "Raise Hand" },
+
+			"0,1": { action: "chat", name: "Chat" },
+			"1,1": { action: "blur", name: "Background Blur" },
+			"2,1": { action: "leave", name: "Leave" }
+		}
+	},
+	{
+		name: "PowerPoint Live (Attendee)",
+		device: MINI,
+		uuid: "8E1A3C5B-6F27-4D0E-9B89-0C5D4A7F2E96",
+		layoutHash: "6a7ad660",
+		page: "a1b2c3d4-0022-4e85-a0b7-2f6c1e5d8a34",
+		layout: {
+			"0,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
+			"1,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
+			"2,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
+
+			"0,1": { action: "ppt-sync", name: "PPT Attendee: Sync" },
+			"1,1": { action: "mute", name: "Mute" },
+			"2,1": { action: "camera", name: "Camera" }
+		}
+	},
+	{
+		name: "PowerPoint Live (Presenter)",
+		device: MINI,
+		uuid: "9F2B4D6C-7038-4E1F-8C90-1D6E5B8A3F07",
+		layoutHash: "63e1a3e2",
+		page: "a1b2c3d4-0023-4e85-a0b7-2f6c1e5d8a34",
+		/*
+			Cursor rather than the pen, on a deck with room for one of them.
+			Cursor is how drawing is switched off again, and a pen with no way
+			back strands the presentation in a state the deck cannot undo.
+		*/
+		layout: {
+			"0,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
+			"1,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
+			"2,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
+
+			"0,1": { action: "ppt-cursor", name: "PPT Presenter: Cursor" },
+			"1,1": { action: "ppt-laser", name: "PPT Presenter: Laser Pointer" },
+			"2,1": { action: "mute", name: "Mute" }
+		}
+	},
+
+	/* --------------------------------------------------------------------- *
+	 * Stream Deck XL - 8x4
+	 *
+	 * The + XL without the dials, and one column narrower. It is wide enough
+	 * for the same bargain: XL_MEETING owns the left four columns in all three
+	 * profiles and never moves, and the right four carry the presentation.
+	 * --------------------------------------------------------------------- */
+	{
+		name: "Teams Meeting",
+		device: XL,
+		uuid: "0A3C5E7D-8149-4F20-9DA1-2E7F6C9B4018",
+		layoutHash: "7aa184d7",
+		page: "a1b2c3d4-0031-4e85-a0b7-2f6c1e5d8a34",
+		layout: { ...XL_MEETING }
+	},
+	{
+		name: "PowerPoint Live (Attendee)",
+		device: XL,
+		uuid: "1B4D6F8E-925A-4031-8EB2-3F807DAC5129",
+		layoutHash: "8700754f",
+		page: "a1b2c3d4-0032-4e85-a0b7-2f6c1e5d8a34",
+		layout: {
+			...XL_MEETING,
+
+			"4,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
+			"5,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
+			"6,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
+			"7,0": { action: "ppt-grid", name: "PPT Live: Grid View" },
+
+			"4,1": { action: "ppt-sync", name: "PPT Attendee: Sync" },
+			"5,1": { action: "ppt-popout", name: "PPT Live: Pop Out" },
+			"6,1": { action: "ppt-take-control", name: "PPT Attendee: Take Control" },
+			"7,1": { action: "ppt-high-contrast", name: "PPT Live: High Contrast" }
+		}
+	},
+	{
+		name: "PowerPoint Live (Presenter)",
+		device: XL,
+		uuid: "2C5E708F-A36B-4142-9FC3-40918EBD623A",
+		layoutHash: "fafb431a",
+		page: "a1b2c3d4-0033-4e85-a0b7-2f6c1e5d8a34",
+		/*
+			Four full columns, so the presentation gets a row per job:
+			navigation, the drawing tools, what to show, and how to show it.
+			It is the only deck with no dials and room for every key, which is
+			why the layout keys appear here and nowhere else.
+		*/
+		layout: {
+			...XL_MEETING,
+
+			"4,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
+			"5,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
+			"6,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
+			"7,0": { action: "ppt-grid", name: "PPT Live: Grid View" },
+
+			"4,1": { action: "ppt-cursor", name: "PPT Presenter: Cursor" },
+			"5,1": { action: "ppt-laser", name: "PPT Presenter: Laser Pointer" },
+			"6,1": { action: "ppt-pen", name: "PPT Presenter: Pen" },
+			"7,1": { action: "ppt-highlighter", name: "PPT Presenter: Highlighter" },
+
+			"4,2": { action: "ppt-eraser", name: "PPT Presenter: Eraser" },
+			"5,2": { action: "ppt-refresh", name: "PPT Presenter: Present Latest" },
+			"6,2": { action: "ppt-private-view", name: "PPT Presenter: Private Viewing" },
+			"7,2": { action: "ppt-copy-link", name: "PPT Presenter: Copy Link" },
+
+			"4,3": { action: "ppt-hide-presenter-view", name: "PPT Presenter: Presenter View" },
+			"5,3": { action: "ppt-layout-content", name: "PPT Presenter: Content Only" },
+			"6,3": { action: "ppt-layout-cameo", name: "PPT Presenter: Layout Cameo" },
+			"7,3": { action: "ppt-stop-presenting", name: "PPT Presenter: Stop Presenting" }
+		}
+	},
+
+	/* --------------------------------------------------------------------- *
+	 * Stream Deck + - 4x2 and four dials
+	 * --------------------------------------------------------------------- */
+	{
+		name: "Teams Meeting",
+		device: PLUS,
+		uuid: "3D6F819A-B47C-4253-80D4-51A29FCE734B",
+		layoutHash: "dbb127c0",
+		page: "a1b2c3d4-0041-4e85-a0b7-2f6c1e5d8a34",
+		dials: { ...TIMER_DIAL },
+		layout: { ...EIGHT_MEETING }
+	},
+	{
+		name: "PowerPoint Live (Attendee)",
+		device: PLUS,
+		uuid: "4E7092AB-C58D-4364-91E5-62B3A0DF845C",
+		layoutHash: "702d8595",
+		page: "a1b2c3d4-0042-4e85-a0b7-2f6c1e5d8a34",
+		dials: { ...TIMER_DIAL },
+		layout: { ...EIGHT_ATTENDEE }
+	},
+	{
+		name: "PowerPoint Live (Presenter)",
+		device: PLUS,
+		uuid: "5F81A3BC-D69E-4475-82F6-73C4B1E0956D",
+		layoutHash: "676ecda6",
+		page: "a1b2c3d4-0043-4e85-a0b7-2f6c1e5d8a34",
+		/*
+			Four dials and five things that want one, so the timer is the one
+			left out here - it keeps its dial on this deck's other two
+			profiles. Cutting a thumbnail or an ink control instead would have
+			left a pair half-present: the two slides read as one picture of
+			where you are, and thickness without color is an odd thing to own.
+		*/
+		dials: {
+			"0,0": { action: "ppt-slide-current", name: "PPT Live: Current Slide" },
+			"1,0": { action: "ppt-slide-next", name: "PPT Live: Next Slide" },
+			"2,0": { action: "ppt-ink-thickness-dial", name: "PPT Presenter: Ink Thickness" },
+			"3,0": { action: "ppt-ink-color-dial", name: "PPT Presenter: Ink Color" }
+		},
+		layout: { ...EIGHT_PRESENTER }
+	},
+
+	/* --------------------------------------------------------------------- *
+	 * Stream Deck Neo - 4x2
+	 *
+	 * The same three layouts as the +, which has the same grid. Its window is
+	 * informational and its two sensors are page navigation, so neither is a
+	 * slot a profile can fill.
+	 * --------------------------------------------------------------------- */
+	{
+		name: "Teams Meeting",
+		device: NEO,
+		uuid: "6092B4CD-E7AF-4586-93A7-84D5C2F1A67E",
+		layoutHash: "83711e6c",
+		page: "a1b2c3d4-0051-4e85-a0b7-2f6c1e5d8a34",
+		layout: { ...EIGHT_MEETING }
+	},
+	{
+		name: "PowerPoint Live (Attendee)",
+		device: NEO,
+		uuid: "71A3C5DE-F8B0-4697-84B8-95E6D302B78F",
+		layoutHash: "0335b850",
+		page: "a1b2c3d4-0052-4e85-a0b7-2f6c1e5d8a34",
+		layout: { ...EIGHT_ATTENDEE }
+	},
+	{
+		name: "PowerPoint Live (Presenter)",
+		device: NEO,
+		uuid: "82B4D6EF-09C1-47A8-95C9-A6F7E413C890",
+		layoutHash: "4c0a30aa",
+		page: "a1b2c3d4-0053-4e85-a0b7-2f6c1e5d8a34",
+		layout: { ...EIGHT_PRESENTER }
+	},
+
+	/* --------------------------------------------------------------------- *
+	 * Stream Deck Studio - 16x2 and a dial at each end
+	 * --------------------------------------------------------------------- */
+	{
+		name: "Teams Meeting",
+		device: STUDIO,
+		uuid: "93C5E700-1AD2-48B9-86DA-B708F524D9A1",
+		layoutHash: "f21f2bfa",
+		page: "a1b2c3d4-0061-4e85-a0b7-2f6c1e5d8a34",
+		layout: { ...STUDIO_MEETING }
+	},
+	{
+		name: "PowerPoint Live (Attendee)",
+		device: STUDIO,
+		uuid: "A4D6F811-2BE3-49CA-97EB-C819064E5AB2",
+		layoutHash: "36e59fb8",
+		page: "a1b2c3d4-0062-4e85-a0b7-2f6c1e5d8a34",
+		// Column seven is left empty on purpose: on a deck this wide it is the
+		// only thing separating the meeting from the presentation.
+		layout: {
+			...STUDIO_MEETING,
+
+			"8,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
+			"9,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
+			"10,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
+			"11,0": { action: "ppt-grid", name: "PPT Live: Grid View" },
+			"12,0": { action: "ppt-high-contrast", name: "PPT Live: High Contrast" },
+			"13,0": { action: "ppt-popout", name: "PPT Live: Pop Out" },
+
+			"8,1": { action: "ppt-sync", name: "PPT Attendee: Sync" },
+			"9,1": { action: "ppt-take-control", name: "PPT Attendee: Take Control" }
+		}
+	},
+	{
+		name: "PowerPoint Live (Presenter)",
+		device: STUDIO,
+		uuid: "B5E70922-3CF4-4ADB-88FC-D92A17506BC3",
+		layoutHash: "6d9af02a",
+		page: "a1b2c3d4-0063-4e85-a0b7-2f6c1e5d8a34",
+		/*
+			Two dials and no screen to draw on, so they carry the two controls
+			whose result you read in Teams rather than on the deck. A slide
+			thumbnail or the timer would have had nowhere to appear.
+		*/
+		dials: {
+			"0,0": { action: "ppt-ink-thickness-dial", name: "PPT Presenter: Ink Thickness" },
+			"1,0": { action: "ppt-ink-color-dial", name: "PPT Presenter: Ink Color" }
+		},
+		layout: {
+			...STUDIO_MEETING,
+
+			"8,0": { action: "ppt-prev", name: "PPT Live: Previous Slide" },
+			"9,0": { action: "ppt-next", name: "PPT Live: Next Slide" },
+			"10,0": { action: "ppt-status", name: "PPT Live: Slide Counter" },
+			"11,0": { action: "ppt-grid", name: "PPT Live: Grid View" },
+			"12,0": { action: "ppt-refresh", name: "PPT Presenter: Present Latest" },
+			"13,0": { action: "ppt-private-view", name: "PPT Presenter: Private Viewing" },
+			// Kept off the bottom row, which ends at Leave: two keys that end
+			// something should not sit next to each other.
+			"14,0": { action: "ppt-stop-presenting", name: "PPT Presenter: Stop Presenting" },
+
+			"8,1": { action: "ppt-cursor", name: "PPT Presenter: Cursor" },
+			"9,1": { action: "ppt-laser", name: "PPT Presenter: Laser Pointer" },
+			"10,1": { action: "ppt-pen", name: "PPT Presenter: Pen" },
+			"11,1": { action: "ppt-highlighter", name: "PPT Presenter: Highlighter" },
+			"12,1": { action: "ppt-eraser", name: "PPT Presenter: Eraser" },
+			"13,1": { action: "ppt-hide-presenter-view", name: "PPT Presenter: Presenter View" },
+			"14,1": { action: "ppt-copy-link", name: "PPT Presenter: Copy Link" }
 		}
 	}
 ];

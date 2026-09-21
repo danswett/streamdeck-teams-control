@@ -1,7 +1,7 @@
 {
 	"$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
 	"Name": "Teams Meeting Controls",
-	"Version": "1.9.2.0",
+	"Version": "1.9.3.0",
 	"Author": "Bad Duck Software",
 	"Description": "Control Microsoft Teams meetings and PowerPoint Live from your Stream Deck: mute, camera, raise hand, reactions, blur, slide navigation and drawing tools. Every key shows the real state. Teams never needs focus, and no keystrokes are sent.",
 	"Category": "Teams Meeting Controls",
@@ -64,6 +64,96 @@
 		{
 			"Name": "profiles/PowerPoint Live (Presenter) (+ XL)",
 			"DeviceType": 13,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/Teams Meeting (Mini)",
+			"DeviceType": 1,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Attendee) (Mini)",
+			"DeviceType": 1,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Presenter) (Mini)",
+			"DeviceType": 1,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/Teams Meeting (XL)",
+			"DeviceType": 2,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Attendee) (XL)",
+			"DeviceType": 2,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Presenter) (XL)",
+			"DeviceType": 2,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/Teams Meeting (+)",
+			"DeviceType": 7,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Attendee) (+)",
+			"DeviceType": 7,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Presenter) (+)",
+			"DeviceType": 7,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/Teams Meeting (Neo)",
+			"DeviceType": 9,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Attendee) (Neo)",
+			"DeviceType": 9,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Presenter) (Neo)",
+			"DeviceType": 9,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/Teams Meeting (Studio)",
+			"DeviceType": 10,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Attendee) (Studio)",
+			"DeviceType": 10,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Presenter) (Studio)",
+			"DeviceType": 10,
 			"Readonly": false,
 			"DontAutoSwitchWhenInstalled": true
 		}

@@ -56,20 +56,20 @@ carry the requirements and the differentiator rather than a preamble.
 ```
 Control Microsoft Teams meetings from your Stream Deck: mute, camera, raise hand, the five reactions, background blur, screen share, chat, people and leave. Every key shows the real state of the meeting, so a muted mic looks muted before you press it.
 
-Full PowerPoint Live control too. Watching a deck? Move through slides at your own pace, jump back in sync, open grid view, or pop the deck into its own window, without touching anyone else's view. Presenting? Slide navigation, laser pointer, pen, highlighter and eraser, presenter view, private view and stop sharing, with a live slide counter on the key. Keys follow your role, so taking control re-lights the deck for presenting.
+Full PowerPoint Live control too. Watching a deck? Move through slides at your own pace, jump back in sync, open grid view, or pop the deck into its own window, without touching anyone else's view. Presenting? Slide navigation, laser pointer, pen, highlighter and eraser, presenter view, private view and stop sharing, with a live slide counter. Keys follow your role, so taking control re-lights the deck.
 
-On a Stream Deck + XL the dials set ink color and thickness, move through the deck and run the meeting timer, and the touch strip shows the current and next slide.
+On a Stream Deck + or + XL the dials set ink color and thickness, move through the deck and run the meeting timer, and the touch strip shows the current and next slide.
 
-Three bundled profiles can follow the meeting: meeting controls when you join, attendee or presenter tools when a deck goes up, and back again when it ends.
+Three bundled profiles can follow the meeting: meeting controls when you join, attendee or presenter tools when a deck goes up, and back again when it ends. Every Stream Deck gets its own set, laid out for its grid.
 
-Teams does not need to be in focus and is never pulled to the front, so you can keep working while you mute, react or raise your hand. No keystrokes are sent, so nothing leaks into the window you are typing in, and no global hotkeys are taken.
+Teams never needs focus and is never pulled to the front, so you can keep working while you mute, react or raise your hand. No keystrokes are sent, so nothing leaks into whatever you are typing in, and no global hotkeys are taken.
 
 Keys dim when no meeting is running, so there is nothing to press by mistake.
 
-Requires Windows 10 or later, Stream Deck 7.1 or later, and the Microsoft Teams desktop app. Windows only. Not affiliated with or endorsed by Microsoft.
+Requires Windows 10 or later, Stream Deck 7.1 or later, and the Microsoft Teams desktop app. Not affiliated with or endorsed by Microsoft.
 ```
 
-1,486 characters, within the 1,500 limit and above the 250 minimum. The opening
+1,497 characters, within the 1,500 limit and above the 250 minimum. The opening
 two sentences run to 251 characters, so the search-engine snippet reads as
 complete sentences rather than breaking mid-clause.
 
@@ -139,37 +139,41 @@ The first-release notes are kept further down for reference only — they descri
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
 
-### Version 1.9.2 — the notes for this submission
+### Version 1.9.3 — the notes for this submission
 
 Submitted after 1.8.3 is live, so these describe only what changed on top of it.
-Everything about PowerPoint Live and the profiles is in the notes below, which
-is what people will already have.
+Everything about PowerPoint Live and the meeting keys is in the notes below,
+which is what people will already have.
 
-1.9.0 and 1.9.1 were tagged and built on GitHub but never submitted here, so
-their changes are folded into these notes rather than split across three
+1.9.0, 1.9.1 and 1.9.2 were tagged and built on GitHub but never submitted here,
+so their changes are folded into these notes rather than split across four
 entries.
 
 ```
-Stream Deck + XL support.
+Every Stream Deck now has its own layouts.
 
-The + XL gets its own layouts, laid out for nine columns. The four leftmost columns are the meeting and stay put whether or not anyone is presenting, so mute never moves out from under your finger.
+Mini, Stream Deck, +, Neo, XL, Studio and + XL each get three profiles built for their own grid: meeting controls when you join, attendee or presenter tools when a deck goes up, and back again when it ends. Mute is on every one of them, so being moved onto a presentation layout never costs you it.
 
-The dials and touch strip cover the parts of a presentation a key cannot show. One dial sets ink thickness and another runs through the pen or highlighter's colors, both acting on whichever tool you have selected in Teams. Turn the slide dial to move through the deck, and press it for grid view.
+On the decks wide enough to hold it, the meeting keys stay in the same place in all three layouts, so a profile switch does not move mute out from under the finger already reaching for it.
 
-The meeting timer gets a dial too: press to start or pause it, hold to reset it, with the time left and a bar that drains as it runs.
+The dials on a + and a + XL set ink thickness and color for whichever drawing tool you have picked, move through the deck, and run the meeting timer. The touch strip shows the slide you are presenting and the one coming next. The Studio's two dials set ink thickness and color.
 
-The touch strip can show the slide you are presenting and the one coming next, and the slide counter key can show the current slide above its count.
+The slide counter key can show the current slide above its count.
 
 Slide pictures are off until you switch them on, per control. They are copied from the Teams window straight to your Stream Deck and go nowhere else: nothing is uploaded, saved to disk, or written to any log.
 
-The 15-key layouts are unchanged. Stream Deck will ask whether to install the new + XL profiles; decline them and everything else still works.
+Stream Deck will ask before installing a profile, and declining leaves everything else working.
 ```
 
-1,161 characters.
+1,185 characters.
+
+### Version 1.9.2 — tagged and built, never submitted
+
+Folded into the 1.9.3 notes above.
 
 ### Version 1.9.1 — tagged and built, never submitted
 
-Folded into the 1.9.2 notes above.
+Folded into the 1.9.3 notes above.
 
 ### Version 1.8.3 — submitted, in review
 
