@@ -34,14 +34,33 @@
 # meeting content: no slide images, no chat, no participant list.
 set -euo pipefail
 
-APP="com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge.app/Contents/MacOS/TeamsBridge"
-OUT="macos-probe.json"
+APP=""
+CANDIDATES=(
+	# A local build, if this is a checkout that has run build:sidecar:macos.
+	"com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge.app/Contents/MacOS/TeamsBridge"
+	# An installed plugin, which is the common case: download the test build,
+	# install it, run this. No toolchain, no checkout of the Swift package.
+	"$HOME/Library/Application Support/com.elgato.StreamDeck/Plugins/com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge.app/Contents/MacOS/TeamsBridge"
+)
 
-if [ ! -x "$APP" ]; then
-	echo "No sidecar at $APP"
-	echo "Build it first:  npm run build:sidecar:macos"
+for candidate in "${CANDIDATES[@]}"; do
+	if [ -x "$candidate" ]; then
+		APP="$candidate"
+		break
+	fi
+done
+
+if [ -z "$APP" ]; then
+	echo "Could not find the sidecar. Looked in:"
+	for candidate in "${CANDIDATES[@]}"; do echo "  $candidate"; done
+	echo
+	echo "Either install the macOS test build, or build it here with:"
+	echo "  npm run build:sidecar:macos"
 	exit 1
 fi
+
+echo "Using: $APP"
+OUT="macos-probe.json"
 
 FIFO="$(mktemp -u)"
 mkfifo "$FIFO"

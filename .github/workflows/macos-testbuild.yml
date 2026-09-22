@@ -1,0 +1,158 @@
+name: macos-testbuild
+
+# Produces an installable macOS build, so testing it needs no toolchain and no
+# checkout - download a .streamDeckPlugin, double-click, done.
+#
+# main's manifest declares Windows only, because the macOS sidecar is not fit to
+# publish yet. A build from main therefore will not install on a Mac at all,
+# which makes the one question that matters impossible to ask: does Stream Deck
+# quarantine what it extracts from a downloaded package?
+#
+# So this patches the manifest to declare macOS *instead of* Windows. Mac-only
+# keeps the whole thing buildable and packable on one runner - the .NET sidecar
+# is win-x64 and cannot be built here - and a Mac tester has no use for the
+# Windows half anyway.
+#
+# Published as a prerelease, clearly marked, never as a Marketplace submission.
+
+on:
+  workflow_dispatch:
+    inputs:
+      notarize:
+        description: Notarize as well (adds an unbounded wait on Apple's queue)
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  testbuild:
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Write the notary key, if configured
+        id: notary
+        env:
+          NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+        run: |
+          if [ -n "$NOTARY_KEY" ]; then
+            printf '%s' "$NOTARY_KEY" > "$RUNNER_TEMP/notary.p8"
+            echo "path=$RUNNER_TEMP/notary.p8" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Import the signing certificate
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          if [ -z "$CERT_P12" ]; then
+            echo "No MACOS_CERT_P12 - the build would be ad-hoc signed, which"
+            echo "answers none of the questions this build exists to answer."
+            exit 1
+          fi
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          PASSPHRASE="$(uuidgen)"
+          security create-keychain -p "$PASSPHRASE" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$PASSPHRASE" "$KEYCHAIN"
+          printf '%s' "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+            -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$PASSPHRASE" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+      - name: Declare macOS, and give the build its own version
+        id: manifest
+        run: |
+          MANIFEST=com.bad-duck.teamscontrol.sdPlugin/manifest.json
+          # Stream Deck refuses to install a version it already has - it stops
+          # at checkAlreadyInstalled and shows no dialog at all - so every test
+          # build gets a distinct fourth component and installs over the last.
+          VERSION="$(node -p "require('./$MANIFEST').Version.split('.').slice(0,3).join('.')").${{ github.run_number }}"
+          node -e "
+            const fs = require('fs');
+            const m = JSON.parse(fs.readFileSync('$MANIFEST', 'utf8'));
+            m.Version = '$VERSION';
+            m.OS = [{ Platform: 'mac', MinimumVersion: '13' }];
+            fs.writeFileSync('$MANIFEST', JSON.stringify(m, null, '\t') + '\n');
+          "
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Built as $VERSION, macOS only."
+
+      - name: Build
+        env:
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          MACOS_NOTARIZE: ${{ inputs.notarize && '1' || '' }}
+          MACOS_NOTARY_KEY_PATH: ${{ steps.notary.outputs.path }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: |
+          npm run build:sidecar:macos
+          # Not build:sidecar - that is the win-x64 .NET host and cannot be
+          # built here. Icons are committed rather than generated at build time.
+          npm run build:profiles
+          npm run build:plugin
+
+      - name: Validate and package
+        run: |
+          # check-sidecars reads the manifest's OS list, so with Windows no
+          # longer declared it asks only for the Mach-O - which is present.
+          node tools/check-sidecars.ts
+          npx streamdeck validate com.bad-duck.teamscontrol.sdPlugin --no-update-check
+          npx streamdeck pack com.bad-duck.teamscontrol.sdPlugin --output dist --force --no-update-check
+
+      - name: What the tester is getting
+        run: |
+          APP=com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge.app
+          lipo -info "$APP/Contents/MacOS/TeamsBridge"
+          codesign --display --verbose=2 "$APP" 2>&1 | grep -E 'Authority|Signature' || true
+          xcrun stapler validate "$APP" 2>&1 || true
+          spctl --assess --type execute --verbose=2 "$APP" 2>&1 || true
+
+      - name: Publish as a prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.manifest.outputs.version }}
+        run: |
+          NOTARIZED="signed, not notarized"
+          if [ "${{ inputs.notarize }}" = "true" ]; then NOTARIZED="signed and notarized"; fi
+
+          cat > notes.md <<NOTES
+          **macOS test build — not for publication, not a Marketplace submission.**
+
+          Built from \`main\` at \`${GITHUB_SHA:0:7}\`, $NOTARIZED.
+
+          The manifest is patched to declare **macOS only** so it installs on a Mac;
+          \`main\` itself declares Windows only, because the macOS sidecar is not fit
+          to publish yet. The Windows sidecar is absent by design — this build is for
+          answering the questions in #7 and nothing else.
+
+          Sidecar: universal \`arm64\` + \`x86_64\`, Developer ID signature, wrapped in
+          \`TeamsBridge.app\` so a notarization ticket has somewhere to live.
+
+          ### Install
+          Download the \`.streamDeckPlugin\` below and double-click it. Please do not
+          sideload or \`streamdeck link\` — a downloaded install is the whole point, and
+          the quarantine question cannot be answered any other way.
+
+          Then follow #7.
+          NOTES
+
+          gh release create "macos-test-$VERSION" \
+            dist/*.streamDeckPlugin \
+            --title "macOS test build $VERSION" \
+            --notes-file notes.md \
+            --prerelease
