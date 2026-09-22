@@ -773,8 +773,12 @@ individually for about 620 ms, and only while a key is being pressed.
 **The action list and the keys use different artwork.** Elgato's guidelines
 require action-list icons to be a monochrome white stroke on transparent and call
 out color as incorrect, so reactions and raise hand appear there as Fluent
-*system* glyphs while the keys show the full-color emoji.
-`tests/marketplace.test.ts` enforces that.
+*system* glyphs while the keys show the full-color emoji. The five PowerPoint
+Live drawing tools work the same way: their keys carry Teams' own captured
+artwork, their list icons are plain white Fluent glyphs. They used to carry the
+artwork in both places, and that is what Marketplace review sent v1.8.2 back
+over. `tests/marketplace.test.ts` enforces the rule — as markup *and* as
+rendered pixels, since a PNG has no markup to read.
 
 ```bash
 node tools/build-glyphs.ts     # extract from node_modules -> src/glyphs.generated.json

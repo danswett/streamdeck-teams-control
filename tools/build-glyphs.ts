@@ -73,15 +73,19 @@ const CONTROLS: Record<string, string> = {
 	pptPopout: "window_new_28_filled",
 	pptSlide: "slide_text_28_filled",
 
-	// Presenter tools, drawn in PowerPoint Live's own colors (see TOOL_COLORS).
-	// Fluent has no laser-pointer glyph at any size, so the small filled circle
-	// stands in: in red it reads as the dot a laser actually puts on the slide,
-	// which is closer to what Teams shows than a reticle or a torch would be.
+	// Presenter tools. The keys draw Teams' own colored artwork; these are the
+	// monochrome stand-ins for the action list, which Elgato require to be a
+	// white stroke on transparent.
 	pptCursor: "cursor_28_filled",
-	pptLaser: "circle_small_24_filled",
+	pptLaser: "laser_tool_20_filled",
 	pptPen: "pen_28_filled",
 	pptHighlighter: "highlight_24_filled",
 	pptEraser: "eraser_24_filled",
+	// The ink dials act on whichever tool is selected, so they need marks of
+	// their own rather than borrowing the pen and the highlighter - sharing
+	// those made four actions read as two pairs of duplicates in the list.
+	pptInkColor: "color_20_filled",
+	pptInkThickness: "line_thickness_20_filled",
 
 	// A screen with an X, not a podium. Teams draws "Stop sharing" this way -
 	// seen in the meeting toolbar - and the podium-off glyph that was here read

@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { Resvg } from "@resvg/resvg-js";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -38,68 +39,104 @@ function colorsIn(file: string): string[] {
 
 const WHITE = new Set(["#fff", "#ffffff"]);
 
+/** Rasterised at the size the action list draws, doubled for high DPI. */
+const LIST_RASTER = 40;
+/** Below this alpha the pixel is antialiasing fringe, not artwork. */
+const INK = 16;
+
+type Raster = { pixels: Buffer | Uint8Array; width: number; height: number };
+
+function rasterise(file: string): Raster {
+	const svg =
+		path.extname(file) === ".svg"
+			? readFileSync(file, "utf8")
+			: // resvg only reads SVG, so a PNG is wrapped in one to be measured.
+				`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" ` +
+				`width="${LIST_RASTER}" height="${LIST_RASTER}" ` +
+				`viewBox="0 0 ${LIST_RASTER} ${LIST_RASTER}">` +
+				`<image width="${LIST_RASTER}" height="${LIST_RASTER}" xlink:href="data:image/png;base64,` +
+				`${readFileSync(file).toString("base64")}"/></svg>`;
+
+	const img = new Resvg(svg, { fitTo: { mode: "width", value: LIST_RASTER } }).render();
+	return { pixels: img.pixels, width: img.width, height: img.height };
+}
+
+/**
+ * Every color the icon actually puts on screen, as `#rrggbb`.
+ *
+ * Reading the markup is not enough on its own: it cannot see a PNG at all, and
+ * an SVG can arrive at a color through a gradient or a blend rather than a
+ * literal. resvg hands back premultiplied alpha, so white at 12% opacity comes
+ * out as rgb(31,31,31); dividing the alpha back out is the difference between
+ * reading a glyph's antialiasing as a gray ramp and reading it as the one
+ * color it was drawn in.
+ */
+function renderedColors(file: string): string[] {
+	const img = rasterise(file);
+	const seen = new Set<string>();
+
+	for (let i = 0; i < img.width * img.height; i++) {
+		const a = img.pixels[i * 4 + 3];
+		if (a < INK) continue;
+
+		const hex = [0, 1, 2]
+			.map((c) => Math.min(255, Math.round((img.pixels[i * 4 + c] * 255) / a)))
+			.map((c) => c.toString(16).padStart(2, "0"))
+			.join("");
+		seen.add(`#${hex}`);
+	}
+	return [...seen];
+}
+
+/** Share of the canvas carrying ink. A solid background reads as ~1. */
+function coverage(file: string): number {
+	const img = rasterise(file);
+	let inked = 0;
+	for (let i = 0; i < img.width * img.height; i++) {
+		if (img.pixels[i * 4 + 3] >= INK) inked++;
+	}
+	return inked / (img.width * img.height);
+}
+
 describe("action list icons", () => {
 	/**
-	 * The five PowerPoint Live drawing tools are a deliberate exception to the
-	 * monochrome-SVG rule.
+	 * Every action, with no exceptions.
 	 *
-	 * Their keys show Teams' own artwork - full-color illustrations with
-	 * gradients and blur filters, captured from the Teams DOM - and a generic
-	 * monochrome pen beside the real one in the action list reads as a different
-	 * control. They ship as PNG because that artwork cannot be reduced to a
-	 * white stroke without becoming a different drawing.
-	 *
-	 * Listed explicitly so the rule still binds for every other action: without
-	 * this the color check would pass vacuously on a PNG, since it scans SVG
-	 * markup for fills.
+	 * The five PowerPoint Live drawing tools used to be one: their keys show
+	 * Teams' own full-color artwork, and a generic monochrome pen beside the
+	 * real one reads as a different control, so the artwork went in the list
+	 * too. Marketplace review sent v1.8.2 back over exactly that, so the list
+	 * now uses the same Fluent glyphs as everything else and the artwork stays
+	 * where the guidelines allow it - on the keys.
 	 */
-	const ARTWORK_ACTIONS = new Set([
-		"com.bad-duck.teamscontrol.ppt-cursor",
-		"com.bad-duck.teamscontrol.ppt-laser",
-		"com.bad-duck.teamscontrol.ppt-pen",
-		"com.bad-duck.teamscontrol.ppt-highlighter",
-		"com.bad-duck.teamscontrol.ppt-eraser"
-	]);
+	const listIcons = manifest.Actions.map((a) => [a.Name, a.Icon] as const);
 
-	const glyphActions = manifest.Actions.filter((a) => !ARTWORK_ACTIONS.has(a.UUID));
+	it.each(listIcons)("%s is monochrome white", (_name, icon) => {
+		const file = resolveImage(icon);
+		expect(file, `missing icon file for ${icon}`).toBeDefined();
 
-	it.each(glyphActions.map((a) => [a.Name, a.Icon] as const))(
-		"%s is monochrome white",
-		(_name, icon) => {
-			const file = resolveImage(icon);
-			expect(file, `missing icon file for ${icon}`).toBeDefined();
-			expect(file!.endsWith(".svg"), `${icon} should be SVG`).toBe(true);
-
-			// The guidelines require a white stroke on transparent; color is
-			// explicitly called out as incorrect for the action list. The keys
-			// themselves may be full color, which is why this checks Icon only.
-			const offending = colorsIn(file!).filter((c) => !WHITE.has(c));
-			expect(offending).toEqual([]);
-		}
-	);
-
-	it("uses SVG so it scales to the high-DPI variant", () => {
-		for (const action of glyphActions) {
-			expect(resolveImage(action.Icon)!.endsWith(".svg"), action.Name).toBe(true);
-		}
+		// The guidelines require a white stroke on transparent; color is
+		// explicitly called out as incorrect for the action list. The keys
+		// themselves may be full color, which is why this checks Icon only.
+		expect(colorsIn(file!).filter((c) => !WHITE.has(c))).toEqual([]);
+		expect(renderedColors(file!)).toEqual(["#ffffff"]);
 	});
 
-	it("ships the drawing tools as artwork, and only those", () => {
-		// Guards the exception in both directions: the tools must carry the real
-		// artwork, and nothing else may quietly join them.
-		for (const action of manifest.Actions) {
-			const file = resolveImage(action.Icon);
-			expect(file, action.Name).toBeDefined();
-			expect(file!.endsWith(".png"), action.Name).toBe(ARTWORK_ACTIONS.has(action.UUID));
-		}
+	it.each(listIcons)("%s uses SVG so it scales to the high-DPI variant", (_name, icon) => {
+		expect(resolveImage(icon)!.endsWith(".svg")).toBe(true);
 	});
 
-	it("draws no opaque background rectangle", () => {
-		// A solid background is called out as incorrect.
-		for (const action of glyphActions) {
-			const svg = readFileSync(resolveImage(action.Icon)!, "utf8");
-			expect(svg).not.toMatch(/<rect[^>]*width="(100%|144)"/);
-		}
+	it.each(listIcons)("%s draws no opaque background", (_name, icon) => {
+		const file = resolveImage(icon)!;
+
+		// A solid background is called out as incorrect. Checked as markup and
+		// again as pixels, because a background need not be a <rect>.
+		expect(readFileSync(file, "utf8")).not.toMatch(/<rect[^>]*width="(100%|144)"/);
+		expect(coverage(file)).toBeLessThan(0.8);
+	});
+
+	it.each(listIcons)("%s actually draws something", (_name, icon) => {
+		expect(coverage(resolveImage(icon)!)).toBeGreaterThan(0.01);
 	});
 });
 
@@ -108,6 +145,8 @@ describe("category", () => {
 		const file = resolveImage(manifest.CategoryIcon);
 		expect(file).toBeDefined();
 		expect(colorsIn(file!).filter((c) => !WHITE.has(c))).toEqual([]);
+		expect(renderedColors(file!)).toEqual(["#ffffff"]);
+		expect(coverage(file!)).toBeLessThan(0.8);
 	});
 
 	it("does not include the author name", () => {

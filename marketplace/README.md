@@ -146,7 +146,40 @@ The first-release notes are kept further down for reference only — they descri
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
 
-### Version 1.9.8 — the notes for this submission
+### Version 1.9.9 — the notes for this submission
+
+Submitted to fix what review asked for on 1.8.2: the icons in the Stream Deck
+app's action list have to be white, and five of ours were not.
+
+The PowerPoint Live drawing tools — laser pointer, pen, highlighter, eraser,
+cursor — drew Teams' own artwork there, in Teams' own colors. That was a
+deliberate choice and the wrong one: a red pen and a yellow highlighter read
+well on a key, where the guidelines allow color, and read as a rule being
+broken in a list that is meant to be monochrome. They now use plain white
+Fluent glyphs in the list. The keys are untouched, so nothing on the deck
+looks any different.
+
+Two smaller things came out of the same pass. The ink colour and ink thickness
+dials had borrowed the pen and the highlighter for their list icons, which put
+four entries in the list as two pairs of identical marks; they now have a
+palette and a stack of lines. And the laser pointer's white stand-in was a
+small filled dot, chosen back when Fluent had no laser glyph — it has one, at
+the same 20px tier PowerPoint Live's own toolbar is drawn at, so it uses that.
+
+The rule is now checked rather than remembered: `tests/marketplace.test.ts`
+rasterises every category and action icon and fails on any colour other than
+white, on a solid background, or on a blank icon. It reads pixels, not markup,
+because the icons that broke the rule were PNGs with no markup to read.
+
+```
+Housekeeping, at Elgato's request.
+
+The five PowerPoint Live drawing tools showed Teams' coloured artwork in the Stream Deck app's action list, where the guidelines ask for plain white icons. They now match the rest of the list. The keys on your deck are unchanged, and so is everything the plugin does.
+```
+
+317 characters.
+
+### Version 1.9.8 — submitted
 
 One thing, and it is the thing people notice: the deck used to take about ten
 seconds to catch up when you joined a meeting.

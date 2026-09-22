@@ -40,19 +40,20 @@ const ACTIONS: Record<string, { glyph: string; danger?: boolean }> = {
 	"ppt-take-control": { glyph: "pptTakeControl" },
 	"ppt-popout": { glyph: "pptPopout" },
 
-	// PowerPoint Live, presenting. The five drawing tools are handled separately
-	// below: they ship Teams' own artwork rather than a Fluent stand-in.
+	// PowerPoint Live, presenting. The five drawing tools keep Teams' own
+	// artwork on their keys and are handled separately below; their action-list
+	// icons are monochrome like everything else here.
 	"ppt-private-view": { glyph: "pptPrivateView" },
 	"ppt-hide-presenter-view": { glyph: "pptHidePresenterView" },
 	"ppt-refresh": { glyph: "pptRefresh" },
 	"ppt-copy-link": { glyph: "pptCopyLink" },
 	"ppt-layout-content": { glyph: "pptLayoutContent" },
 	"ppt-layout-cameo": { glyph: "pptLayoutCameo" },
-	// The ink dials act on whichever tool is selected, so they borrow a tool
-	// glyph for the action list rather than shipping one of their own; at
+	// The ink dials act on whichever tool is selected, so the list shows what
+	// the dial changes - color, thickness - rather than any one tool; at
 	// runtime they draw the tool that is actually active.
-	"ppt-ink-color-dial": { glyph: "pptPen" },
-	"ppt-ink-thickness-dial": { glyph: "pptHighlighter" },
+	"ppt-ink-color-dial": { glyph: "pptInkColor" },
+	"ppt-ink-thickness-dial": { glyph: "pptInkThickness" },
 	"ppt-stop-presenting": { glyph: "pptStopPresenting", danger: true }
 };
 
@@ -79,39 +80,46 @@ for (const [name, { glyph, danger }] of Object.entries(ACTIONS)) {
 }
 
 /**
- * The drawing tools, which are the exception to the monochrome rule.
+ * The drawing tools, which split their artwork between the key and the list.
  *
- * Their keys show Teams' own artwork, captured from the DOM, and a generic
- * Fluent pen beside the real one in the action list reads as a different
- * control. The artwork is already rasterised into tool-images.generated.json,
- * so both files come straight from it and cannot drift from what the key draws.
+ * The key shows Teams' own art, captured from the DOM: a generic Fluent pen
+ * beside the real one reads as a different control. The action list cannot
+ * have it — Elgato require list icons to be a white monochrome stroke on a
+ * transparent background, and colored artwork there is what got v1.8.2 sent
+ * back — so the list uses the tool's Fluent glyph like every other action.
  */
-const TOOL_ACTIONS = ["ppt-cursor", "ppt-laser", "ppt-pen", "ppt-highlighter", "ppt-eraser"];
+const TOOL_ACTIONS: Record<string, string> = {
+	"ppt-cursor": "pptCursor",
+	"ppt-laser": "pptLaser",
+	"ppt-pen": "pptPen",
+	"ppt-highlighter": "pptHighlighter",
+	"ppt-eraser": "pptEraser"
+};
 
-for (const name of TOOL_ACTIONS) {
+for (const [name, glyph] of Object.entries(TOOL_ACTIONS)) {
 	const dir = path.join(IMGS, "actions", name);
 	const icon = TOOL_ICONS[name];
 	if (!icon) throw new Error(`no captured artwork for ${name}`);
 	const ink = TOOL_DEFAULT_COLOR[name] ?? "#FFFFFF";
 
+	mkdirSync(dir, { recursive: true });
+	write(path.join(dir, "icon.svg"), renderGlyph(glyph, "on"));
+
 	// Rasterised at each size rather than scaled from one, so the gradients and
 	// blur filters resolve at the size they are actually shown at. Stream Deck's
-	// own sizes: 20px in the action list, 72px on a key, doubled for @2x.
+	// key sizes: 72px, doubled for @2x.
 	const sizes: [string, number][] = [
-		["icon.png", 20],
-		["icon@2x.png", 40],
 		["key.png", 72],
 		["key@2x.png", 144]
 	];
-
-	mkdirSync(dir, { recursive: true });
 	for (const [file, size] of sizes) {
 		writePng(path.join(dir, file), composeToolSvg(icon, ink, false, size), size);
 	}
 
-	// The manifest references these without an extension, so a stale SVG left
-	// beside the PNG is ambiguous - and was what the action list kept showing.
-	for (const stale of ["icon.svg", "key.svg"]) {
+	// The manifest references these without an extension, so a stale file left
+	// beside the one meant to win is ambiguous - and was what the action list
+	// kept showing. The list icon is SVG now; the key stays PNG.
+	for (const stale of ["icon.png", "icon@2x.png", "key.svg"]) {
 		rmSync(path.join(dir, stale), { force: true });
 	}
 }
