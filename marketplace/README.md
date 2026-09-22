@@ -146,8 +146,39 @@ The first-release notes are kept further down for reference only — they descri
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
 
-### Version 1.9.7 — the notes for this submission
+### Version 1.9.8 — the notes for this submission
 
+One thing, and it is the thing people notice: the deck used to take about ten
+seconds to catch up when you joined a meeting.
+
+Two separate waits, both of them fixed sleeps standing in for a signal nobody
+had gone looking for. A meeting window opening raises an event, but Teams builds
+that window's accessibility tree only once something asks for it, so the single
+look that event triggered arrived before there was anything to find — and the
+next look was fifteen seconds away. And each deck's profile change was followed
+by a sleep long enough to cover the worst case, so a second deck sat three and a
+half seconds behind the first, or nine seconds on the first meeting after the
+plugin restarted.
+
+Both now wait for the thing itself rather than for a timer. Joining is measured
+at about 4.3 seconds end to end, most of which is Teams building its own tree,
+and both decks change together. Leaving a meeting hands the decks back almost
+at once, where it used to take three and a half seconds a deck.
+
+Nothing about this is configurable and nothing about it changed what the keys
+do, which is why the copy below says none of it.
+
+```
+Your deck keeps up with the meeting now.
+
+Joining a meeting used to take about ten seconds to reach the keys, and if you use two Stream Decks the second one lagged several seconds behind the first. Both now change as the meeting starts, and hand themselves back the moment you leave.
+
+Profile switching is still off until you turn it on, in any key's settings.
+```
+
+360 characters.
+
+### Version 1.9.7 — submitted
 No new actions and no profile changed, so by the 1.9.5 test this looks like a
 release with nothing to advertise. It is the opposite. Two of the things the
 listing already promises were not actually true, and now are.
