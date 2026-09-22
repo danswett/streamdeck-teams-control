@@ -228,6 +228,9 @@ public static class Program
             { DebugEvents = debugEvents, UseEvents = useEvents, ProfileSnapshots = profile };
         var lastFingerprint = "";
         var nextPoll = 0L;
+        var wasInMeeting = false;
+        var lastTeamsWindows = "";
+        var teamsChangedAt = 0L;
 
         // When to take the follow-up snapshot after a press, for effects that
         // land asynchronously - chiefly the attendee -> presenter role change
@@ -241,6 +244,26 @@ public static class Program
         // source of truth.
         var meetingPollMs = Math.Max(pollMs, 3000);
         var idlePollMs = Math.Max(pollMs, 15_000);
+
+        /*
+            How to look while something is known to have just happened.
+
+            A window opening raises an event, which is what is meant to make
+            joining a meeting feel immediate. It does not on its own: Chromium
+            builds a window's accessibility tree only once something asks for
+            it, so the single poll that event triggers routinely arrives before
+            there is anything to find. Discovery then reports no meeting and
+            the next look is a full idle interval away - which is why joining a
+            meeting took about ten seconds to reach the keys, against a poll
+            that had been the right length for years.
+
+            So a hint starts a short burst of looking rather than one look. An
+            idle snapshot costs 56-93ms now that discovery is not enumerating
+            the desktop through UI Automation, so a few seconds of this is
+            affordable in a way it would not have been before.
+        */
+        var chasePollMs = Math.Clamp(pollMs, 250, 600);
+        const int ChaseWindowMs = 8_000;
 
         // While a drawing-tool flyout is open the tool button is unmounted, so a
         // color change raises no event and polling is the only way to see it.
@@ -344,8 +367,42 @@ public static class Program
                 if (took > SlowSnapshotMs)
                     Console.Error.WriteLine($"slow snapshot: {took}ms (a press during this would have waited)");
 
+                // A hint means something changed a moment ago. If that has not
+                // resolved into a meeting yet it is usually because Teams is
+                // still building the tree, so keep looking for a short while
+                // rather than standing down for a full idle interval. Bounded
+                // by the last hint, so an idle desktop settles back by itself.
+                // Chasing is for one situation: Teams has opened a window and
+                // that has not resolved into a meeting yet. That is almost
+                // always Teams still building the window's accessibility tree,
+                // which the single poll the open event triggers arrives too
+                // early to see.
+                var signature = client.TeamsWindowSignature();
+                if (signature != lastTeamsWindows)
+                {
+                    lastTeamsWindows = signature;
+                    teamsChangedAt = Environment.TickCount64;
+                }
+
+                var chasing = !snap.InMeeting &&
+                              Environment.TickCount64 - teamsChangedAt < ChaseWindowMs;
+
+                if (snap.InMeeting != wasInMeeting)
+                {
+                    // The number that decides whether joining a meeting feels
+                    // instant. Reported because it was assumed to be small for
+                    // a long time and was not: the event that should have made
+                    // it small fires before Teams has built anything to find.
+                    var since = Environment.TickCount64 - teamsChangedAt;
+                    Console.Error.WriteLine(snap.InMeeting
+                        ? $"meeting detected {since}ms after Teams opened a window"
+                        : "meeting ended");
+                    wasInMeeting = snap.InMeeting;
+                }
+
                 currentPollMs = snap.InkFlyoutOpen ? inkFlyoutPollMs
                     : snap.InMeeting ? meetingPollMs
+                    : chasing ? chasePollMs
                     : idlePollMs;
                 nextPoll = Environment.TickCount64 + currentPollMs;
 

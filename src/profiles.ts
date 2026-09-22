@@ -122,6 +122,17 @@ export function profilePath(base: string, device: DeviceType): string | null {
 const SWITCH_GAP_MS = 3500;
 
 /**
+ * How long to leave Stream Deck alone after a deck has finished laying a
+ * profile out.
+ *
+ * The profile lock is not released the instant the last key appears, and the
+ * next deck's switch is refused silently if it arrives inside that. Small
+ * because it is now the only fixed wait on the path: the rest is spent
+ * watching for the deck to actually finish.
+ */
+const SETTLE_MS = 400;
+
+/**
  * How long to leave the first ask for a profile path, which is the one that
  * prompts the user to install it.
  *
@@ -302,14 +313,16 @@ class ProfileSwitcher {
 						continue;
 					}
 					this.#lastAsk.set(id, { target, at: Date.now(), tries: prev.tries + 1 });
-					this.#enqueue(() => this.#switch(id, target), SWITCH_GAP_MS);
+					this.#enqueue(() => this.#switch(id, target, SWITCH_GAP_MS));
 					continue;
 				}
 
 				const installing = !this.#everAsked.has(target);
 				this.#everAsked.add(target);
 				this.#lastAsk.set(id, { target, at: Date.now(), tries: 1 });
-				this.#enqueue(() => this.#switch(id, target), installing ? INSTALL_GAP_MS : SWITCH_GAP_MS);
+				this.#enqueue(() =>
+					this.#switch(id, target, installing ? INSTALL_GAP_MS : SWITCH_GAP_MS)
+				);
 			}
 		}
 	}
@@ -338,26 +351,93 @@ class ProfileSwitcher {
 	 *
 	 * Two decks is the normal case here, not an edge case: the whole point is
 	 * that each of them gets its own layout.
+	 *
+	 * The waiting itself belongs to the task now. It used to happen here, as a
+	 * fixed sleep after every change, which made the second deck 3.5s late on
+	 * every meeting and 9s late on the first one after a restart - measured
+	 * from the plugin log. A task that waits for the deck to actually finish
+	 * gives the same protection without spending the worst case every time.
 	 */
-	#enqueue(task: () => Promise<void>, gap: number = SWITCH_GAP_MS): void {
-		this.#queue = this.#queue
-			.then(task)
-			.then(() => new Promise<void>((resolve) => setTimeout(resolve, gap)))
-			.catch((err) => {
-				logger.warn(`Profile change failed: ${String(err)}`);
-			});
+	#enqueue(task: () => Promise<void>): void {
+		this.#queue = this.#queue.then(task).catch((err) => {
+			logger.warn(`Profile change failed: ${String(err)}`);
+		});
 	}
 
-	async #switch(id: string, profile: string): Promise<void> {
+	async #switch(id: string, profile: string, budgetMs: number = SWITCH_GAP_MS): Promise<void> {
+		// Armed before the request, because a deck that already has the profile
+		// installed can finish laying it out before the await below returns.
+		const landed = this.#waitForLayout(id, budgetMs);
+
 		try {
 			await streamDeck.profiles.switchToProfile(id, profile);
-			logger.info(`${id} -> "${profile}"`);
 		} catch (err) {
 			// A profile Stream Deck will not switch to must not take the plugin
 			// down with it; the keys still work wherever they are.
 			this.#current.delete(id);
 			logger.warn(`Could not switch ${id} to "${profile}": ${String(err)}`);
+			return;
 		}
+
+		const took = await landed;
+		if (took === null) {
+			logger.info(`${id} -> "${profile}" (no layout inside ${budgetMs}ms)`);
+			return;
+		}
+
+		logger.info(`${id} -> "${profile}" (${took}ms)`);
+
+		// Stream Deck holds its profile lock a little past the last key
+		// appearing, and the next deck's switch is refused silently if it
+		// arrives inside that. Far shorter than waiting out the whole budget,
+		// which is what this replaced.
+		await new Promise<void>((resolve) => setTimeout(resolve, SETTLE_MS));
+	}
+
+	/**
+	 * Waits for a deck to finish changing profile.
+	 *
+	 * There is no event for "the profile changed" and switchToProfile resolves
+	 * when the request is sent, not when Stream Deck has finished with it - so
+	 * every gap here used to be a fixed sleep sized for the worst case. The
+	 * plugin's own keys are the only visible thing that moves, so which way to
+	 * watch depends on where the deck is going:
+	 *
+	 *   arriving   the new profile is one of ours, so its keys appear
+	 *   leaving    the profile being left is ours, so its keys disappear
+	 *
+	 * Watching the wrong one costs the whole budget. On the way back out the
+	 * deck usually lands on a profile of the user's own, which carries none of
+	 * this plugin's actions and announces nothing at all - measured, as a
+	 * restore that always reported the 3.5s ceiling.
+	 *
+	 * Returns how long it took, or null if nothing was seen inside the budget.
+	 * A timeout is not failure: it is the same wait that used to be paid
+	 * unconditionally.
+	 */
+	#waitForLayout(deviceId: string, budgetMs: number, leaving = false): Promise<number | null> {
+		return new Promise((resolve) => {
+			const startedAt = Date.now();
+			let settled = false;
+
+			const finish = (value: number | null): void => {
+				if (settled) return;
+				settled = true;
+				clearTimeout(timer);
+				subscription.dispose();
+				resolve(value);
+			};
+
+			const onEvent = (ev: { action: { device: { id: string } } }): void => {
+				if (ev.action.device.id === deviceId) finish(Date.now() - startedAt);
+			};
+
+			const subscription = leaving
+				? streamDeck.actions.onWillDisappear(onEvent)
+				: streamDeck.actions.onWillAppear(onEvent);
+
+			const timer = setTimeout(() => finish(null), budgetMs);
+		});
 	}
 
 	async #restore(id: string): Promise<void> {
@@ -367,16 +447,25 @@ class ProfileSwitcher {
 		// the same profile again, and that must count as a fresh ask rather
 		// than as a retry of the one before it.
 		this.#lastAsk.delete(id);
+
+		const landed = this.#waitForLayout(id, SWITCH_GAP_MS, true);
 		try {
 			// No profile name means "whatever was showing before". Only ever
 			// called on leaving a meeting: moving between the bundled profiles
 			// switches directly by name, so the profile Stream Deck remembers
 			// stays the one the user was on before any of this started.
 			await streamDeck.profiles.switchToProfile(id);
-			logger.info(`${id} -> restored`);
 		} catch (err) {
 			logger.warn(`Could not restore the profile on ${id}: ${String(err)}`);
+			return;
 		}
+
+		// A profile of the user's own may carry none of this plugin's actions,
+		// in which case nothing announces itself and this waits out the budget
+		// - the same wait every restore used to pay regardless.
+		const took = await landed;
+		logger.info(took === null ? `${id} -> restored` : `${id} -> restored (${took}ms)`);
+		if (took !== null) await new Promise<void>((resolve) => setTimeout(resolve, SETTLE_MS));
 	}
 
 	/** Hands every deck back, one at a time, for the same reason switching is. */

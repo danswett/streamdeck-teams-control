@@ -869,6 +869,49 @@ public sealed class TeamsClient : IDisposable
         return windows.ToArray();
     }
 
+    /// <summary>
+    /// A cheap fingerprint of which windows Teams currently has open.
+    ///
+    /// Pure Win32 - no UI Automation - so it costs microseconds and can be
+    /// taken on every poll. It exists to answer one question: has Teams opened
+    /// or closed a window since last time?
+    ///
+    /// Handles only, deliberately. The window-opened subscription covers the
+    /// whole desktop, so every window opening anywhere raises a hint, and
+    /// treating all of them as worth chasing took idle CPU from 1.5% of a core
+    /// to 6.3%. Including window titles was no better: Teams rewrites a chat
+    /// window's title as messages arrive, which has nothing to do with a
+    /// meeting and kept the chase running at 2.8%. Joining a meeting opens a
+    /// window, and that is what this notices.
+    /// </summary>
+    public string TeamsWindowSignature()
+    {
+        var pids = new HashSet<uint>();
+        foreach (var proc in Process.GetProcessesByName("ms-teams"))
+        {
+            try { pids.Add((uint)proc.Id); }
+            catch { }
+            finally { proc.Dispose(); }
+        }
+
+        if (pids.Count == 0) return "";
+
+        var handles = new List<long>();
+        try
+        {
+            EnumWindows((h, _) =>
+            {
+                GetWindowThreadProcessId(h, out var owner);
+                if (pids.Contains(owner) && IsWindowVisible(h)) handles.Add(h.ToInt64());
+                return true;
+            }, IntPtr.Zero);
+        }
+        catch { return ""; }
+
+        handles.Sort();
+        return string.Join(',', handles);
+    }
+
     private static AutomationElement? FindById(AutomationElement scope, string automationId)
     {
         try { return scope.FindFirstDescendant(cf => cf.ByAutomationId(automationId)); }
