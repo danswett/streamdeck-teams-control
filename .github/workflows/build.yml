@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      notarize:
+        description: Also notarize the macOS sidecar (adds an unbounded wait on Apple)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -21,6 +26,11 @@ jobs:
   # first attempted on the day macOS is declared.
   sidecar-macos:
     runs-on: macos-latest
+    # Signing is ours and takes seconds. Notarization is a queue at Apple and
+    # took 44 minutes on this team's first submission, so it is opt-in rather
+    # than on every push - see the notarize input. The ceiling covers a slow
+    # notarizing run; a normal one is about two minutes.
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v7
@@ -54,8 +64,11 @@ jobs:
           printf '%s' "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
           security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
             -P "$CERT_PASSWORD" -T /usr/bin/codesign
-          # Without this codesign blocks on a UI prompt that no one can answer.
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$PASSPHRASE" "$KEYCHAIN" >/dev/null
+          # codesign: matters as much as the other two. Without it in the
+          # partition list codesign asks the keychain for authorisation through
+          # a UI prompt, and on a headless runner nobody answers - the job hangs
+          # until it is killed rather than failing. Cost us a 41-minute run.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$PASSPHRASE" "$KEYCHAIN" >/dev/null
           security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
           rm -f "$RUNNER_TEMP/cert.p12"
           security find-identity -v -p codesigning "$KEYCHAIN"
@@ -63,6 +76,9 @@ jobs:
       - name: Build Swift sidecar
         env:
           MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          # Off unless asked for. Signing runs every time; notarization waits on
+          # Apple and belongs where a shippable artifact is being produced.
+          MACOS_NOTARIZE: ${{ inputs.notarize && '1' || '' }}
           # API key, if App Store Connect API access has been granted.
           MACOS_NOTARY_KEY_PATH: ${{ steps.notary.outputs.path }}
           MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}

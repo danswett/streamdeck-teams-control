@@ -75,6 +75,17 @@ echo "Signing with: $MACOS_SIGN_IDENTITY"
 codesign --force --options runtime --timestamp --sign "$MACOS_SIGN_IDENTITY" "$OUT/$NAME"
 codesign --verify --strict --verbose=2 "$OUT/$NAME"
 
+if [ "${MACOS_NOTARIZE:-}" != "1" ]; then
+	echo
+	echo "Signed, not notarized - MACOS_NOTARIZE is not set."
+	echo
+	echo "Notarization is a queue at Apple, not work we do: the first submission"
+	echo "from this team sat 'In Progress' for 44 minutes while the build itself"
+	echo "took two. It proves nothing on a routine commit that signing has not"
+	echo "already proved, so it runs when a shippable artifact is being made."
+	exit 0
+fi
+
 if [ -n "${MACOS_NOTARY_KEY_PATH:-}" ]; then
 	NOTARY_AUTH=(--key "$MACOS_NOTARY_KEY_PATH" --key-id "$MACOS_NOTARY_KEY_ID" --issuer "$MACOS_NOTARY_ISSUER_ID")
 	NOTARY_KIND="App Store Connect API key"
@@ -96,7 +107,9 @@ echo "Notarizing via $NOTARY_KIND..."
 ZIP="$(mktemp -d)/$NAME.zip"
 ditto -c -k --keepParent "$OUT/$NAME" "$ZIP"
 
-xcrun notarytool submit "$ZIP" "${NOTARY_AUTH[@]}" --wait
+# --timeout so a submission that never resolves fails loudly rather than
+# holding the runner. Apple usually answers in single-digit minutes.
+xcrun notarytool submit "$ZIP" "${NOTARY_AUTH[@]}" --wait --timeout 15m
 
 # A ticket cannot be stapled to a bare Mach-O - only to bundles, disk images and
 # archives - so there is nothing to attach here and Gatekeeper checks Apple
