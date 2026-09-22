@@ -1,6 +1,7 @@
 import streamDeck from "@elgato/streamdeck";
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { EMPTY_STATE, splitLines, type TeamsState, toState } from "./protocol";
@@ -112,7 +113,27 @@ class Bridge {
 		logger.info(`Starting sidecar: ${SIDECAR}`);
 		let proc: ChildProcessWithoutNullStreams;
 		try {
-			proc = spawn(SIDECAR, args, { windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
+			proc = spawn(SIDECAR, args, {
+				windowsHide: true,
+				stdio: ["pipe", "pipe", "pipe"],
+				// Anywhere but the plugin folder.
+				//
+				// A process's working directory is held open against rename, and
+				// Stream Deck upgrades a plugin by renaming its folder to
+				// ".uninstall". The sidecar inherits this process's directory,
+				// which Stream Deck sets to the plugin folder, so it was holding
+				// the very folder the next version has to move - and the install
+				// failed with "the process cannot access the file because it is
+				// being used by another process".
+				//
+				// Timing cannot fix it: Stream Deck force-kills the plugin and
+				// renames in the same millisecond, while the sidecar needs ~73ms
+				// to notice its parent is gone. Not holding the directory at all
+				// is what fixes it. Nothing here reads the working directory -
+				// selectors.json arrives as an absolute path, and the sidecar
+				// falls back to AppContext.BaseDirectory, not the cwd.
+				cwd: tmpdir()
+			});
 		} catch (err) {
 			logger.error(`Failed to spawn sidecar: ${String(err)}`);
 			this.#scheduleRestart();
