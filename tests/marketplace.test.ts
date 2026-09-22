@@ -47,7 +47,7 @@ const INK = 16;
 type Raster = { pixels: Buffer | Uint8Array; width: number; height: number };
 
 /**
- * Cached, because each icon is measured for colour, coverage and corners, and
+ * Cached, because each icon is measured for color, coverage and corners, and
  * rasterising is native work that pays a one-off initialization on first use.
  * On a cold CI runner that start-up alone blew vitest's 5s default timeout and
  * failed whichever assertion happened to go first - the same trap
@@ -357,27 +357,34 @@ describe("the Marketplace listing", () => {
 	const MARKET_DIR = path.resolve(__dirname, "..", "marketplace");
 	const readme = readFileSync(path.join(MARKET_DIR, "README.md"), "utf8");
 
-	/** Every fenced block, so the copy can be asserted where it is authored. */
-	function fencedBlocks(): { lang: string; text: string }[] {
-		const out: { lang: string; text: string }[] = [];
+	/**
+	 * Every fenced block, so the copy can be asserted where it is authored.
+	 *
+	 * `after` is the first non-empty line following the block, which is where
+	 * each version's copy states its own character count.
+	 */
+	function fencedBlocks(): { lang: string; text: string; after: string }[] {
+		const out: { lang: string; text: string; after: string }[] = [];
+		const lines = readme.split(/\r?\n/);
 		let inFence = false;
 		let lang = "";
 		let buf: string[] = [];
 
-		for (const line of readme.split(/\r?\n/)) {
-			const fence = /^```(\w*)\s*$/.exec(line);
+		for (let i = 0; i < lines.length; i++) {
+			const fence = /^```(\w*)\s*$/.exec(lines[i]);
 			if (fence) {
 				if (!inFence) {
 					inFence = true;
 					lang = fence[1];
 					buf = [];
 				} else {
-					out.push({ lang, text: buf.join("\n") });
+					const after = lines.slice(i + 1).find((l) => l.trim() !== "") ?? "";
+					out.push({ lang, text: buf.join("\n"), after: after.trim() });
 					inFence = false;
 				}
 				continue;
 			}
-			if (inFence) buf.push(line);
+			if (inFence) buf.push(lines[i]);
 		}
 		return out;
 	}
@@ -417,6 +424,29 @@ describe("the Marketplace listing", () => {
 		expect(releaseNotes.length).toBeGreaterThan(0);
 		for (const block of releaseNotes) {
 			expect(block.text.length, block.text.slice(0, 40)).toBeLessThanOrEqual(1500);
+		}
+	});
+
+	it("states a character count that matches the copy it describes", () => {
+		// Each version's submitted copy is followed by its own length, because
+		// Maker Console enforces one and the number is what gets checked against
+		// it rather than the text. A stale count is worse than none: 1.9.9 went
+		// in claiming 317 for a 302-character block, and nothing noticed - the
+		// release-notes filter above only picks blocks over 400 characters, so
+		// short entries were asserted by nothing at all.
+		const counted = plain
+			.map((b) => ({ block: b, stated: /^([\d,]+) characters\.?$/.exec(b.after) }))
+			.filter((x) => x.stated !== null);
+
+		expect(counted.length, "no block states its own character count").toBeGreaterThan(0);
+
+		for (const { block, stated } of counted) {
+			const actual = block.text.replace(/\n+$/, "").length;
+			const claimed = Number(stated![1].replace(/,/g, ""));
+
+			expect(actual, `"${block.text.slice(0, 40)}..." is ${actual}, not ${claimed}`).toBe(
+				claimed
+			);
 		}
 	});
 

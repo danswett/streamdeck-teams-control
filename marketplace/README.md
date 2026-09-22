@@ -159,7 +159,7 @@ broken in a list that is meant to be monochrome. They now use plain white
 Fluent glyphs in the list. The keys are untouched, so nothing on the deck
 looks any different.
 
-Two smaller things came out of the same pass. The ink colour and ink thickness
+Two smaller things came out of the same pass. The ink color and ink thickness
 dials had borrowed the pen and the highlighter for their list icons, which put
 four entries in the list as two pairs of identical marks; they now have a
 palette and a stack of lines. And the laser pointer's white stand-in was a
@@ -167,17 +167,17 @@ small filled dot, chosen back when Fluent had no laser glyph — it has one, at
 the same 20px tier PowerPoint Live's own toolbar is drawn at, so it uses that.
 
 The rule is now checked rather than remembered: `tests/marketplace.test.ts`
-rasterises every category and action icon and fails on any colour other than
+rasterizes every category and action icon and fails on any color other than
 white, on a solid background, or on a blank icon. It reads pixels, not markup,
 because the icons that broke the rule were PNGs with no markup to read.
 
 ```
 Housekeeping, at Elgato's request.
 
-The five PowerPoint Live drawing tools showed Teams' coloured artwork in the Stream Deck app's action list, where the guidelines ask for plain white icons. They now match the rest of the list. The keys on your deck are unchanged, and so is everything the plugin does.
+The five PowerPoint Live drawing tools showed Teams' colored artwork in the Stream Deck app's action list, where the guidelines ask for plain white icons. They now match the rest of the list. The keys on your deck are unchanged, and so is everything the plugin does.
 ```
 
-317 characters.
+302 characters.
 
 ### Version 1.9.8 — submitted
 
