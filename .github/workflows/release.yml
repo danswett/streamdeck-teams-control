@@ -13,23 +13,7 @@ permissions:
   contents: write
 
 jobs:
-  sidecar-macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ inputs.tag || github.ref }}
-
-      - name: Build Swift sidecar
-        run: npm run build:sidecar:macos
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: sidecar-macos
-          path: com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge
-          if-no-files-found: error
-
-  build:
+  release:
     runs-on: windows-latest
 
     steps:
@@ -51,10 +35,11 @@ jobs:
       - name: Unit tests
         run: npm run test
 
-      - name: Build plugin
+      - name: Build and package
         run: |
           npm run build
           npx streamdeck validate com.bad-duck.teamscontrol.sdPlugin --no-update-check
+          npx streamdeck pack com.bad-duck.teamscontrol.sdPlugin --output dist --force --no-update-check
 
       - name: Check the tag matches the manifest version
         shell: pwsh
@@ -67,44 +52,6 @@ jobs:
           if (-not $manifest.StartsWith($tag)) {
             throw "tag $tag does not match manifest version $manifest"
           }
-
-      - name: Upload unpacked plugin
-        uses: actions/upload-artifact@v7
-        with:
-          name: plugin-unpacked
-          path: com.bad-duck.teamscontrol.sdPlugin
-          if-no-files-found: error
-
-  release:
-    needs: [build, sidecar-macos]
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ inputs.tag || github.ref }}
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-
-      - run: npm ci
-
-      - uses: actions/download-artifact@v7
-        with:
-          name: plugin-unpacked
-          path: com.bad-duck.teamscontrol.sdPlugin
-
-      - uses: actions/download-artifact@v7
-        with:
-          name: sidecar-macos
-          path: com.bad-duck.teamscontrol.sdPlugin/bin/sidecar
-
-      - name: Mark macOS sidecar executable
-        run: chmod +x com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge
-
-      - name: Package
-        run: npx streamdeck pack com.bad-duck.teamscontrol.sdPlugin --output dist --force --no-update-check
 
       - name: Attach the plugin to the release
         uses: softprops/action-gh-release@v3

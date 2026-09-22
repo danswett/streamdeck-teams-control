@@ -153,7 +153,40 @@ The first-release notes are kept further down for reference only — they descri
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
 
-### Version 1.10.1 — released, not yet submitted
+### Version 1.10.2 — released, and the first 1.10.x that could be submitted
+
+macOS is withdrawn from the manifest. The Swift sidecar stays in the tree and
+still builds in CI; the plugin simply stops claiming a platform it cannot serve
+yet.
+
+Two reasons, both measured against the Mach-O CI actually produced for 1.10.1
+rather than assumed:
+
+1. It is **arm64 only** — a thin Mach-O, `cputype 0x0100000C`. The manifest
+   declared macOS 13, which runs on Intel Macs back to 2017, so those users
+   would have installed the plugin and got nothing at all. Nobody caught this:
+   it was developed and tested on Apple Silicon.
+2. It is **ad-hoc signed** — identifier `TeamsBridge`, flags `0x20002` with the
+   ad-hoc bit set, one CodeDirectory blob where a Developer ID signature carries
+   a second CMS blob with the certificate chain. Ad-hoc executes on Apple
+   Silicon when the file is not quarantined, which is exactly why a sideload
+   worked and a Marketplace download might not.
+
+The two blockers recorded under 1.10.0 about the description and the gallery
+being Windows-only are resolved by this rather than fixed: there is no macOS
+claim for them to contradict. They come back when macOS does.
+
+The release workflow goes back to packing on Windows alone. Packing on macOS
+existed to get the Mach-O into the bundle, and with nothing to ship there it was
+only making a Swift breakage able to block a Windows release. `build` still
+compiles the Swift on a macOS runner, deliberately as an independent job, so the
+code cannot quietly stop building.
+
+Nothing user-visible changes, so the copy is the 1,456-character block from
+1.9.11 unaltered. What is in flight is 1.9.11 from `release-1.9.x`; this branch
+is where the next one comes from.
+
+### Version 1.10.1 — released, superseded by 1.10.2
 
 Profile switching was going to be dead on arrival on Marketplace, and nowhere
 else.

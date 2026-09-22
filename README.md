@@ -11,7 +11,7 @@ from your Stream Deck, with the real state on every key.**
 [![release](https://img.shields.io/github/v/release/danswett/streamdeck-teams-control?label=release)](https://github.com/danswett/streamdeck-teams-control/releases)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 ![Windows](https://img.shields.io/badge/platform-Windows-0078D4)
-![macOS](https://img.shields.io/badge/platform-macOS-000000)
+![macOS: in progress](https://img.shields.io/badge/macOS-in%20progress-lightgrey)
 
 [Install](#install) · [What you can control](#what-you-can-control) ·
 [Dials](#dials-and-the-touch-strip) · [Your deck](#every-deck-and-what-it-gets) ·
@@ -41,9 +41,9 @@ pressed something.
   get layouts built for their own grid, and the decks with dials get those too.
   [See what yours gets.](#every-deck-and-what-it-gets)
 
-> **Windows** is the fully worked-out path (focus-free clicks, PowerPoint Live
-> ink, slide thumbnails). **macOS** is a first-cut sidecar: meeting toolbar,
-> reactions, live mute/camera state. See [macOS](#macos).
+> **Windows only, for now.** A macOS sidecar exists and builds, but the plugin
+> does not declare macOS yet — see [macOS](#macos) for the two things standing
+> in the way.
 
 ---
 
@@ -1089,6 +1089,34 @@ the helper), then fully quit and reopen it.
 Still missing vs Windows, on purpose for this cut: `AXObserver` (the sidecar
 polls), PowerPoint Live ink colour / slide thumbnails (`thumb` / `forget`),
 and a signed/notarized helper. Tracking: [#4](https://github.com/danswett/streamdeck-teams-control/issues/4).
+
+**The manifest does not declare macOS**, so Stream Deck will not install this on
+a Mac and Marketplace will not list it as supported. Two things have to be true
+first, both measured against the binary CI actually produced:
+
+1. **Universal binary.** It is `arm64` only — a thin Mach-O, `cputype`
+   `0x0100000C`. The manifest would declare macOS 13, which runs on Intel Macs
+   back to 2017, and those would install the plugin and get nothing. Fixed by
+   building `--arch arm64 --arch x86_64`, or `lipo -create` over both.
+2. **A real signature.** It is ad-hoc signed: identifier `TeamsBridge`, flags
+   `0x20002` with the ad-hoc bit set, and a single CodeDirectory blob where a
+   Developer ID signature carries a second CMS blob holding the certificate
+   chain. Ad-hoc runs on Apple Silicon when the file is not quarantined, which
+   is why a sideload works and a download may not.
+
+Worth checking before paying Apple $99/yr: whether Stream Deck actually sets
+`com.apple.quarantine` on what it extracts from a downloaded
+`.streamDeckPlugin`. One command on a Mac — `xattr -p com.apple.quarantine` on
+the installed helper — decides how much of (2) is needed.
+
+Note that a bare Mach-O cannot have a notarization ticket stapled to it; only
+bundles, disk images and archives can. A notarized loose binary is checked
+online at first launch, so an offline user is still blocked. Wrapping the helper
+in a `.app` and stapling that avoids it.
+
+One worry is already answered: Maker Console's DRM leaves binaries untouched —
+`TeamsBridge.exe` came back byte-identical from a processed upload — so a signed
+Mach-O should survive with its signature intact.
 
 ---
 
