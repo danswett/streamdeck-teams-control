@@ -90,20 +90,22 @@ jobs:
         run: npm run build:sidecar:macos
 
       - name: Report what the binary actually is
-        # Printed every run, signed or not, because both facts that made the
-        # 1.10.1 binary unfit to ship were readable straight off the Mach-O and
-        # nobody was looking.
+        # Printed every run, signed or not, because all three facts that made
+        # the 1.10.1 binary unfit to ship were readable straight off the
+        # artifact and nobody was looking.
         run: |
-          BIN=com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge
-          lipo -info "$BIN"
-          codesign --display --verbose=4 "$BIN" 2>&1 | grep -E 'Authority|Signature|TeamCert|flags' || true
-          echo "--- Gatekeeper assessment (fails until notarized, which is the point) ---"
-          spctl --assess --type execute --verbose=4 "$BIN" 2>&1 || true
+          APP=com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge.app
+          lipo -info "$APP/Contents/MacOS/TeamsBridge"
+          codesign --display --verbose=4 "$APP" 2>&1 | grep -E 'Authority|Signature|flags' || true
+          echo "--- stapled ticket (absent until a notarizing run) ---"
+          xcrun stapler validate "$APP" 2>&1 || true
+          echo "--- Gatekeeper assessment ---"
+          spctl --assess --type execute --verbose=4 "$APP" 2>&1 || true
 
       - uses: actions/upload-artifact@v7
         with:
           name: sidecar-macos
-          path: com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge
+          path: com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge.app
           if-no-files-found: error
 
   build:

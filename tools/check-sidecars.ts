@@ -20,14 +20,14 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { sidecarFileName } from "../src/sidecar-path.ts";
+import { sidecarPath } from "../src/sidecar-path.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PLUGIN = path.join(ROOT, "com.bad-duck.teamscontrol.sdPlugin");
 
 /**
  * Manifest platform names to Node's, so the binary name comes from
- * `sidecarFileName` - the same function `bridge.ts` spawns through. Checking
+ * `sidecarPath` - the same function `bridge.ts` spawns through. Checking
  * for a name this file made up would pass while the plugin looked for another.
  */
 const NODE_PLATFORM: Record<string, NodeJS.Platform> = {
@@ -63,8 +63,9 @@ for (const platform of declared) {
 		continue;
 	}
 
-	const name = sidecarFileName(node);
-	const file = path.join(PLUGIN, "bin", "sidecar", name);
+	const name = sidecarPath(node);
+	// A relative path on macOS, since the executable sits inside a .app bundle.
+	const file = path.join(PLUGIN, "bin", "sidecar", ...name.split("/"));
 
 	if (existsSync(file)) {
 		const mb = (statSync(file).size / 1024 / 1024).toFixed(2);
