@@ -1,0 +1,64 @@
+name: notary-status
+
+# Asks Apple what happened to a notarization submission, without burning a
+# build to find out.
+#
+# Two submissions have been made and neither was seen to finish: the first was
+# cancelled at 44 minutes, the second hit its own 30-minute timeout. Both may
+# still have completed server-side - a submission outlives the job that made
+# it - and "eventually accepted" and "rejected for a reason" need very
+# different responses.
+#
+# notarytool is macOS-only, so this is the cheapest way to ask from anywhere.
+
+on:
+  workflow_dispatch:
+    inputs:
+      submission:
+        description: Submission ID to fetch the log for (blank = just list recent history)
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  status:
+    runs-on: macos-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Write the notary key
+        id: notary
+        env:
+          NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+        run: |
+          if [ -z "$NOTARY_KEY" ]; then
+            echo "No MACOS_NOTARY_KEY secret set."
+            exit 1
+          fi
+          printf '%s' "$NOTARY_KEY" > "$RUNNER_TEMP/notary.p8"
+          echo "path=$RUNNER_TEMP/notary.p8" >> "$GITHUB_OUTPUT"
+
+      - name: Recent submissions
+        env:
+          KEY_PATH: ${{ steps.notary.outputs.path }}
+          KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          ISSUER: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: |
+          xcrun notarytool history \
+            --key "$KEY_PATH" --key-id "$KEY_ID" --issuer "$ISSUER"
+
+      - name: Why it was rejected, if it was
+        if: inputs.submission != ''
+        env:
+          KEY_PATH: ${{ steps.notary.outputs.path }}
+          KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          ISSUER: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          SUBMISSION: ${{ inputs.submission }}
+        run: |
+          xcrun notarytool info "$SUBMISSION" \
+            --key "$KEY_PATH" --key-id "$KEY_ID" --issuer "$ISSUER"
+          echo "--- full log, which names the offending binary and reason ---"
+          xcrun notarytool log "$SUBMISSION" \
+            --key "$KEY_PATH" --key-id "$KEY_ID" --issuer "$ISSUER" || true
