@@ -1091,32 +1091,40 @@ polls), PowerPoint Live ink colour / slide thumbnails (`thumb` / `forget`),
 and a signed/notarized helper. Tracking: [#4](https://github.com/danswett/streamdeck-teams-control/issues/4).
 
 **The manifest does not declare macOS**, so Stream Deck will not install this on
-a Mac and Marketplace will not list it as supported. Two things have to be true
-first, both measured against the binary CI actually produced:
+a Mac and Marketplace will not list it as supported. What stood in the way, all
+measured against the binary CI actually produced rather than assumed:
 
-1. **Universal binary.** It is `arm64` only — a thin Mach-O, `cputype`
+1. **Universal binary.** It was `arm64` only — a thin Mach-O, `cputype`
    `0x0100000C`. The manifest would declare macOS 13, which runs on Intel Macs
-   back to 2017, and those would install the plugin and get nothing. Fixed by
-   building `--arch arm64 --arch x86_64`, or `lipo -create` over both.
-2. **A real signature.** It is ad-hoc signed: identifier `TeamsBridge`, flags
+   back to 2017, and those would install the plugin and get nothing. *Fixed:*
+   built `--arch arm64 --arch x86_64`, and the build fails if either slice is
+   missing.
+2. **A real signature.** It was ad-hoc: identifier `TeamsBridge`, flags
    `0x20002` with the ad-hoc bit set, and a single CodeDirectory blob where a
    Developer ID signature carries a second CMS blob holding the certificate
    chain. Ad-hoc runs on Apple Silicon when the file is not quarantined, which
-   is why a sideload works and a download may not.
+   is why a sideload works and a download may not. *Fixed:* signed with a
+   Developer ID certificate, hardened runtime and a trusted timestamp. See
+   [docs/macos-signing.md](docs/macos-signing.md).
+3. **Somewhere to put the ticket.** A notarization ticket cannot be stapled to
+   a bare Mach-O — only to a bundle, a disk image or an archive — so an
+   unstapled helper leaves Gatekeeper asking Apple over the network at first
+   launch, and an offline user blocked with it. *Fixed:* the helper ships as
+   `TeamsBridge.app`, the smallest bundle that can hold a ticket, with
+   `LSBackgroundOnly` so it never appears in the Dock.
 
-Worth checking before paying Apple $99/yr: whether Stream Deck actually sets
-`com.apple.quarantine` on what it extracts from a downloaded
-`.streamDeckPlugin`. One command on a Mac — `xattr -p com.apple.quarantine` on
-the installed helper — decides how much of (2) is needed.
+What is left is behaviour rather than artifacts, and needs a Mac:
 
-Note that a bare Mach-O cannot have a notarization ticket stapled to it; only
-bundles, disk images and archives can. A notarized loose binary is checked
-online at first launch, so an offline user is still blocked. Wrapping the helper
-in a `.app` and stapling that avoids it.
+- **Does Stream Deck quarantine what it extracts?** `xattr -p com.apple.quarantine`
+  on the installed helper, after installing from a *downloaded*
+  `.streamDeckPlugin` rather than a sideload. If nothing is set, Gatekeeper
+  never gets involved and none of the above was load-bearing.
+- **Does the helper launch from a real install, and does Accessibility work
+  against live Teams?**
 
 One worry is already answered: Maker Console's DRM leaves binaries untouched —
 `TeamsBridge.exe` came back byte-identical from a processed upload — so a signed
-Mach-O should survive with its signature intact.
+bundle should survive with its signature intact.
 
 ---
 
