@@ -153,7 +153,51 @@ The first-release notes are kept further down for reference only — they descri
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
 
-### Version 1.9.9 — the notes for this submission
+### Version 1.10.0 — released, not yet submitted
+
+macOS, from [#4](https://github.com/danswett/streamdeck-teams-control/issues/4)
+and [#5](https://github.com/danswett/streamdeck-teams-control/pull/5). The
+sidecar boundary turned out to be the whole port: `plugin.js` is unchanged, and
+`sidecar-macos/` is a Swift binary speaking the same JSON-lines protocol over
+`AXUIElement` that the .NET one speaks over UI Automation.
+
+It is a first cut and says so — the meeting toolbar, reactions and live
+mute/camera state work; slide thumbnails and ink color do not; `AXPress` raises
+the Teams window for about 300 ms where Windows posts a message to a child
+window and nothing moves.
+
+**Do not submit this version without doing three things first.**
+
+1. The description below still says "Requires Windows 10 or later" and names no
+   other platform. It is written for the 1.9.9 submission and is wrong for this
+   one.
+2. The thumbnail and gallery are Windows-only in wording and imagery.
+3. The macOS helper is neither signed nor notarized. A binary extracted from a
+   Marketplace download carries the quarantine attribute, and an unsigned helper
+   may simply refuse to launch — which would be a macOS-shaped repeat of the
+   1.8.2 rejection. Verify an install from a downloaded `.streamDeckPlugin`, not
+   a sideload, before this goes anywhere near review.
+
+The copy below is written and counted so it is ready when those are done. It is
+still a delta from 1.5, for the reason at the top of this section.
+
+```
+Everything since 1.5, and there is a lot of it.
+
+PowerPoint Live, in twenty-five new actions. Watching a deck: move through slides at your own pace, jump back in sync, grid view, high contrast, or pop the deck into its own window, none of it touching anyone else's view. Presenting: slide navigation, laser pointer, pen, highlighter, eraser and cursor, ink color and thickness, presenter view, private viewing, present latest, copy link, layouts, and stop presenting. A live slide counter shows where you are, and keys follow your role.
+
+Eighteen bundled profiles, three each for Mini, Stream Deck, +, Neo, XL and + XL, built for their own grids. They can follow the meeting: meeting controls when you join, attendee or presenter tools when a deck goes up, and back again when it ends. Mute is on every layout. Switching stays off until you turn it on, in any key's settings.
+
+On a + or + XL the dials set ink color and thickness, move through the deck and run the new meeting timer, and the touch strip shows the current and next slide.
+
+macOS support, as a first cut: the meeting toolbar, reactions and live mute and camera state. Slide thumbnails and ink color are Windows-only for now, and pressing a key briefly raises the Teams window.
+
+Joining a meeting now reaches the keys in about four seconds rather than ten. Keys no longer go grey during a meeting that is still running, and a reaction can no longer advance your slides.
+```
+
+1,433 characters.
+
+### Version 1.9.9 — the notes for the submission in flight
 
 Submitted to fix what review asked for on 1.8.2: the icons in the Stream Deck
 app's action list have to be white, and five of ours were not. The notes
