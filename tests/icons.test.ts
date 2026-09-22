@@ -558,6 +558,13 @@ describe("dialling to a slide", () => {
 		expect(svg).toContain(PNG);
 	});
 
+	it("escapes quotes in the thumbnail attribute", () => {
+		const svg = renderSlideJump(`${PNG}" onload="alert(1)`, 7, 14);
+
+		expect(svg).toContain(`${PNG}&quot; onload=&quot;alert(1)`);
+		expect(svg).not.toContain(`${PNG}" onload="alert(1)`);
+	});
+
 	it("still draws without one", () => {
 		const svg = renderSlideJump(undefined, 7, 14);
 		expectSvg(svg);
@@ -596,6 +603,13 @@ describe("slide counter with the slide on it", () => {
 		expect(svg).toContain("<image");
 		expect(svg).toContain(PNG);
 		expect(svg).toContain(">8/14<");
+	});
+
+	it("escapes quotes in the slide image attribute", () => {
+		const svg = renderSlideCount(`${PNG}" onload="alert(1)`, "8/14");
+
+		expect(svg).toContain(`${PNG}&quot; onload=&quot;alert(1)`);
+		expect(svg).not.toContain(`${PNG}" onload="alert(1)`);
 	});
 
 	it("keeps the slide clear of the count", () => {
