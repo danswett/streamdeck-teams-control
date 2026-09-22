@@ -146,7 +146,38 @@ The first-release notes are kept further down for reference only — they descri
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
 
-### Version 1.9.9 — the notes for this submission
+### Version 1.9.10 — the notes for this submission
+
+1.9.9 with one fix, cut from its tag on `release-1.9.x` rather than from `main`,
+because `main` has since gained macOS support whose helper is not yet signed and
+so cannot be submitted.
+
+The fix: `src/profiles.ts` read `manifest.json` at runtime to find which bundled
+profile path shipped. Elgato's [distribution
+docs](https://docs.elgato.com/streamdeck/sdk/introduction/distribution/) make
+the manifest a DRM-protected asset and say not to read it at run time, and this
+plugin meets every DRM precondition — `SDKVersion` 3,
+`Software.MinimumVersion` 7.1, CLI 1.9.0, `@elgato/streamdeck` 2.1.2. DRM is
+applied when Maker Console processes an upload, so the GitHub build and a
+sideload both work and only the copy users download would have failed, silently:
+the read throws, the list comes back empty, and no profile ever switches.
+
+Eighteen profiles that follow the meeting are a headline in the copy below, so
+this had to go in before the copy did.
+
+`tools/build-profile.ts` now also emits `src/profiles.generated.json`, which the
+bundle carries — the alternative Elgato's guidance names. Nothing a reader of
+the listing would notice, so the copy is unchanged from 1.9.9.
+
+**Submit this one with "Publish after review" unselected.** That is the only way
+to get the DRM-processed build back from the Versions tab and confirm profile
+switching survives it, and the same mechanism answers the macOS signing question
+later. 1.9.9 was submitted with auto-publish on, which leaves no gap between
+approval and users.
+
+The copy is the same 1,456-character block as 1.9.9, below.
+
+### Version 1.9.9 — superseded by 1.9.10, submitted with auto-publish on
 
 Submitted to fix what review asked for on 1.8.2: the icons in the Stream Deck
 app's action list have to be white, and five of ours were not.

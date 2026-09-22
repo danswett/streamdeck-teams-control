@@ -14,10 +14,8 @@
  * tools/build-profile.ts exists; a user-made profile cannot be targeted.
  */
 import streamDeck, { DeviceType } from "@elgato/streamdeck";
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 
+import generated from "./profiles.generated.json" with { type: "json" };
 import { bridge, type TeamsState } from "./bridge";
 
 const logger = streamDeck.logger.createScope("Profiles");
@@ -68,32 +66,14 @@ const SUPPORTED = new Map<DeviceType, string>([
  * the path out here as well would mean two places that have to agree about
  * which revision shipped, and the failure when they disagree is silent: the
  * switch is accepted and simply does nothing.
+ *
+ * So the list still comes from the build, but embedded rather than read back.
+ * This used to open manifest.json at runtime, which Elgato's DRM forbids - the
+ * manifest is a protected asset on a Marketplace build, and a failed read left
+ * the list empty and profile switching quietly dead. Same source, same
+ * guarantee, no file access; tests/profiles.test.ts fails if the two drift.
  */
-const declared = readDeclaredProfiles();
-
-function readDeclaredProfiles(): { Name: string; DeviceType: number }[] {
-	const here = path.dirname(fileURLToPath(import.meta.url));
-	const candidates = [
-		// The bundle runs from <plugin>/bin, so the manifest is one level up.
-		path.resolve(here, "..", "manifest.json"),
-		// Running from source, as the tests do.
-		path.resolve(here, "..", "com.bad-duck.teamscontrol.sdPlugin", "manifest.json")
-	];
-
-	for (const file of candidates) {
-		try {
-			const manifest = JSON.parse(readFileSync(file, "utf8")) as { Profiles?: unknown };
-			if (Array.isArray(manifest.Profiles)) {
-				return manifest.Profiles as { Name: string; DeviceType: number }[];
-			}
-		} catch {
-			// Try the next one; a missing manifest is only fatal if none resolve.
-		}
-	}
-
-	logger.error("Could not read the manifest; meeting profiles will not switch");
-	return [];
-}
+const declared = generated.profiles as { Name: string; DeviceType: number }[];
 /** Where a profile lives for a given deck, or null if that deck has no layout. */
 export function profilePath(base: string, device: DeviceType): string | null {
 	const suffix = SUPPORTED.get(device);

@@ -122,6 +122,20 @@ describe("the bundled profiles", () => {
 		expect(manifest.Profiles).toHaveLength(bundled.length);
 	});
 
+	it("embeds the same list the manifest declares", () => {
+		// The plugin carries this list in the bundle rather than reading
+		// manifest.json at runtime: the manifest is a DRM-protected asset on a
+		// Marketplace build, and the old read failed there silently, leaving no
+		// profiles to switch to. Both come out of tools/build-profile.ts, so the
+		// only way they diverge is one being regenerated without the other -
+		// which would again be silent, hence this.
+		const embedded = JSON.parse(
+			readFileSync(path.resolve(__dirname, "..", "src", "profiles.generated.json"), "utf8")
+		) as { profiles: unknown[] };
+
+		expect(embedded.profiles).toEqual(manifest.Profiles);
+	});
+
 	it.each(bundled.map((b) => [b.name, b] as const))("%s ships a profile laid out for its deck", (_label, b) => {
 		const entries = new AdmZip(path.join(PLUGIN, `${b.name}.streamDeckProfile`)).getEntries();
 

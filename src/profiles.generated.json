@@ -1,0 +1,119 @@
+{
+	"$comment": [
+		"GENERATED FILE - do not edit. Run: node tools/build-profile.ts",
+		"",
+		"The profiles manifest.json declares, embedded so the plugin never has",
+		"to read the manifest at runtime - DRM protects it, and the failure is",
+		"silent. tests/profiles.test.ts fails if this and the manifest disagree."
+	],
+	"profiles": [
+		{
+			"Name": "profiles/Teams Meeting",
+			"DeviceType": 0,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Attendee) r2",
+			"DeviceType": 0,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Presenter) r2",
+			"DeviceType": 0,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/Teams Meeting (+ XL)",
+			"DeviceType": 13,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Attendee) (+ XL)",
+			"DeviceType": 13,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Presenter) (+ XL)",
+			"DeviceType": 13,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/Teams Meeting (Mini)",
+			"DeviceType": 1,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Attendee) (Mini)",
+			"DeviceType": 1,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Presenter) (Mini)",
+			"DeviceType": 1,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/Teams Meeting (XL)",
+			"DeviceType": 2,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Attendee) (XL)",
+			"DeviceType": 2,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Presenter) (XL)",
+			"DeviceType": 2,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/Teams Meeting (+)",
+			"DeviceType": 7,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Attendee) (+)",
+			"DeviceType": 7,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Presenter) (+)",
+			"DeviceType": 7,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/Teams Meeting (Neo)",
+			"DeviceType": 9,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Attendee) (Neo)",
+			"DeviceType": 9,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		},
+		{
+			"Name": "profiles/PowerPoint Live (Presenter) (Neo)",
+			"DeviceType": 9,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		}
+	]
+}
