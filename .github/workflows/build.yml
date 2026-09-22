@@ -11,19 +11,79 @@ permissions:
 
 jobs:
   # Builds the macOS sidecar without shipping it. The manifest does not declare
-  # macOS - the binary is arm64-only and ad-hoc signed, so Intel Macs cannot run
-  # it and Gatekeeper would likely refuse a Marketplace download - but the Swift
-  # is in the tree and a job nobody runs is a job that quietly stops compiling.
-  # Deliberately not a dependency of the packaging job below: a Swift breakage
-  # should be visible without blocking a Windows release.
+  # macOS yet, but the Swift is in the tree and a job nobody runs is a job that
+  # quietly stops compiling. Deliberately not a dependency of the packaging job
+  # below: a Swift breakage should be visible without blocking a Windows
+  # release.
+  #
+  # When the signing secrets exist this also proves out the publishing path -
+  # universal binary, Developer ID signature, notarization - so none of it is
+  # first attempted on the day macOS is declared.
   sidecar-macos:
     runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v7
 
+      - name: Write the notary key, if configured
+        id: notary
+        env:
+          NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+        run: |
+          if [ -n "$NOTARY_KEY" ]; then
+            printf '%s' "$NOTARY_KEY" > "$RUNNER_TEMP/notary.p8"
+            echo "path=$RUNNER_TEMP/notary.p8" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Import the signing certificate, if configured
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          if [ -z "$CERT_P12" ]; then
+            echo "No MACOS_CERT_P12 - building unsigned."
+            exit 0
+          fi
+          # A throwaway keychain, unlocked only for this job. Importing into the
+          # login keychain would leave the identity on a shared runner image.
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          PASSPHRASE="$(uuidgen)"
+          security create-keychain -p "$PASSPHRASE" "$KEYCHAIN"
+          security set-keychain-settings -lut 900 "$KEYCHAIN"
+          security unlock-keychain -p "$PASSPHRASE" "$KEYCHAIN"
+          printf '%s' "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+            -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          # Without this codesign blocks on a UI prompt that no one can answer.
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$PASSPHRASE" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
       - name: Build Swift sidecar
-        run: swift build -c release --package-path sidecar-macos
+        env:
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          MACOS_NOTARY_KEY_PATH: ${{ steps.notary.outputs.path }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: npm run build:sidecar:macos
+
+      - name: Report what the binary actually is
+        # Printed every run, signed or not, because both facts that made the
+        # 1.10.1 binary unfit to ship were readable straight off the Mach-O and
+        # nobody was looking.
+        run: |
+          BIN=com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge
+          lipo -info "$BIN"
+          codesign --display --verbose=4 "$BIN" 2>&1 | grep -E 'Authority|Signature|TeamCert|flags' || true
+          echo "--- Gatekeeper assessment (fails until notarized, which is the point) ---"
+          spctl --assess --type execute --verbose=4 "$BIN" 2>&1 || true
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sidecar-macos
+          path: com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge
+          if-no-files-found: error
 
   build:
     # The sidecar is a win-x64 UI Automation host and the Stream Deck CLI packs
