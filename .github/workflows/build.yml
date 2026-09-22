@@ -10,9 +10,23 @@ permissions:
   contents: read
 
 jobs:
+  sidecar-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build Swift sidecar
+        run: npm run build:sidecar:macos
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sidecar-macos
+          path: com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge
+          if-no-files-found: error
+
   build:
-    # The sidecar is a win-x64 UI Automation host and the Stream Deck CLI packs
-    # on Windows, so there is nothing to gain from a matrix here.
+    # The .NET sidecar is a win-x64 UI Automation host. Packaging waits for
+    # the Swift binary below so one .streamDeckPlugin can hold both.
     runs-on: windows-latest
 
     steps:
@@ -44,6 +58,40 @@ jobs:
 
       - name: Validate manifest
         run: npx streamdeck validate com.bad-duck.teamscontrol.sdPlugin --no-update-check
+
+      - name: Upload unpacked plugin
+        uses: actions/upload-artifact@v7
+        with:
+          name: plugin-unpacked
+          path: com.bad-duck.teamscontrol.sdPlugin
+          if-no-files-found: error
+
+  pack:
+    needs: [build, sidecar-macos]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: plugin-unpacked
+          path: com.bad-duck.teamscontrol.sdPlugin
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: sidecar-macos
+          path: com.bad-duck.teamscontrol.sdPlugin/bin/sidecar
+
+      - name: Mark macOS sidecar executable
+        run: chmod +x com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge
 
       - name: Package
         run: npx streamdeck pack com.bad-duck.teamscontrol.sdPlugin --output dist --force --no-update-check

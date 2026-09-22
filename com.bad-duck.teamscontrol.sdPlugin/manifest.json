@@ -17,6 +17,10 @@
 	},
 	"OS": [
 		{
+			"Platform": "mac",
+			"MinimumVersion": "13"
+		},
+		{
 			"Platform": "windows",
 			"MinimumVersion": "10"
 		}
@@ -26,6 +30,9 @@
 	},
 	"UUID": "com.bad-duck.teamscontrol",
 	"ApplicationsToMonitor": {
+		"mac": [
+			"Microsoft Teams"
+		],
 		"windows": [
 			"ms-teams.exe"
 		]

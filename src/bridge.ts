@@ -4,11 +4,12 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { EMPTY_STATE, splitLines, type TeamsState, toState } from "./protocol";
+import { sidecarFileName } from "./sidecar-path";
 
 const logger = streamDeck.logger.createScope("Bridge");
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const SIDECAR = path.join(HERE, "sidecar", "TeamsBridge.exe");
+const SIDECAR = path.join(HERE, "sidecar", sidecarFileName());
 const SELECTORS = path.resolve(HERE, "..", "selectors.json");
 
 /**
