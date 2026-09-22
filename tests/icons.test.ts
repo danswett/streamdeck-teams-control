@@ -622,6 +622,13 @@ describe("slide counter with the slide on it", () => {
 		expect(svg).not.toContain("<text");
 	});
 
+	it("escapes quotes in the slide image URI", () => {
+		const svg = renderSlideCount('data:image/png;base64,x" onload="alert(1)', "");
+
+		expect(svg).toContain('href="data:image/png;base64,x&quot; onload=&quot;alert(1)"');
+		expect(svg).not.toContain('" onload="');
+	});
+
 	it("keeps every count inside the key", () => {
 		for (const label of ["1/9", "8/14", "12/199", "199/199"]) {
 			const box = inkBox(renderSlideCount(PNG, label), 144);
