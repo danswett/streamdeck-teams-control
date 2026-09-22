@@ -20,7 +20,7 @@
 		"marketplace": "node tools/generate-marketplace.ts",
 		"demo": "node tools/build-demo-frames.ts",
 		"profiles": "node tools/build-profile.ts && node tools/preview-profiles.ts",
-		"pack": "npm run build && streamdeck pack com.bad-duck.teamscontrol.sdPlugin --output dist --force --no-update-check"
+		"pack": "npm run build && node tools/check-sidecars.ts && streamdeck pack com.bad-duck.teamscontrol.sdPlugin --output dist --force --no-update-check"
 	},
 	"devDependencies": {
 		"@elgato/cli": "^1.9.0",

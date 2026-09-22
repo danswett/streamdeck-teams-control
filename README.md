@@ -805,6 +805,14 @@ npm run pack            # -> dist/*.streamDeckPlugin
 node tools/build-profile.ts    # rebuild the bundled profiles
 ```
 
+`npm run pack` refuses to build a package whose manifest declares a platform it
+has no sidecar for. Neither machine can cross-build the other's — the .NET host
+is win-x64, the Swift one is Mach-O — so packing on Windows alone would produce
+a plugin that claims macOS support and then sits dimmed on every Mac that
+installs it, with nothing about the file saying so. CI builds both halves and
+packs on macOS. For a deliberate single-platform build, set
+`SKIP_SIDECAR_CHECK=1`.
+
 ### Which copy is Stream Deck running?
 
 Stream Deck loads a plugin from `%APPDATA%\Elgato\StreamDeck\Plugins`, and that
