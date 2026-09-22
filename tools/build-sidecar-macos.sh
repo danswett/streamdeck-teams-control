@@ -142,8 +142,23 @@ ZIP="$(mktemp -d)/$NAME.zip"
 ditto -c -k --keepParent "$BUNDLE" "$ZIP"
 
 # --timeout so a submission that never resolves fails loudly rather than
-# holding the runner.
-xcrun notarytool submit "$ZIP" "${NOTARY_AUTH[@]}" --wait --timeout 30m
+# holding the runner. Generous, because Apple's queue is not ours: two
+# submissions on 2026-09-22 were still "In Progress" after 90 minutes with no
+# incident posted on Apple's status page.
+if ! xcrun notarytool submit "$ZIP" "${NOTARY_AUTH[@]}" --wait --timeout 45m; then
+	echo
+	echo "Notarization did not complete in time."
+	echo
+	echo "The submission is not lost - it lives on Apple's side and carries on"
+	echo "without this job. Check what became of it with the notary-status"
+	echo "workflow, which runs notarytool history and log:"
+	echo
+	echo "  gh workflow run notary-status.yml --ref main"
+	echo
+	echo "If it later reports Accepted, re-run this with MACOS_NOTARIZE=1 and"
+	echo "the ticket will be issued from cache rather than reprocessed."
+	exit 1
+fi
 
 echo
 echo "Stapling the ticket to the bundle..."
