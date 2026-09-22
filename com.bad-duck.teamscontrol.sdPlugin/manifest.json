@@ -31,7 +31,7 @@
 	"UUID": "com.bad-duck.teamscontrol",
 	"ApplicationsToMonitor": {
 		"mac": [
-			"Microsoft Teams"
+			"com.microsoft.teams2"
 		],
 		"windows": [
 			"ms-teams.exe"
