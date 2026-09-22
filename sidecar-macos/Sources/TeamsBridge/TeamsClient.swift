@@ -302,13 +302,19 @@ final class TeamsClient {
         return nodes.compactMap { n in
             if n.id.isEmpty && n.label.isEmpty { return nil }
             if n.actions.isEmpty && n.id.isEmpty { return nil }
-            let row: [String: String] = [
+            var row: [String: String] = [
                 "role": n.role,
                 "id": n.id,
                 "name": n.label,
                 "enabled": n.enabled ? "true" : "false",
                 "actions": n.actions.joined(separator: ","),
             ]
+            // Geometry, so a probe can answer where on screen a thing is -
+            // notably the slide surface, which has to be captured off the
+            // screen because the tree carries its name and never its picture.
+            if let f = n.frame {
+                row["frame"] = "\(Int(f.origin.x)),\(Int(f.origin.y)),\(Int(f.size.width)),\(Int(f.size.height))"
+            }
             return row
         }
     }

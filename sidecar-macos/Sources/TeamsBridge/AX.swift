@@ -81,6 +81,32 @@ enum AX {
         bool(el, kAXEnabledAttribute as String) ?? true
     }
 
+    /**
+     * Screen rectangle of an element, or nil if it has none.
+     *
+     * Needed to answer a question the Windows sidecar answers with a window
+     * rectangle: where on screen is the slide? PowerPoint Live exposes no image
+     * of a slide anywhere in the accessibility tree, only its name, so a
+     * thumbnail has to be taken off the screen - and that needs a rectangle to
+     * take it from.
+     *
+     * AXPosition and AXSize arrive as AXValue, not as plain numbers, so they
+     * have to be unwrapped rather than cast.
+     */
+    static func frame(_ el: AXUIElement) -> CGRect? {
+        guard let pv = value(el, kAXPositionAttribute as String),
+              let sv = value(el, kAXSizeAttribute as String),
+              CFGetTypeID(pv) == AXValueGetTypeID(),
+              CFGetTypeID(sv) == AXValueGetTypeID() else { return nil }
+
+        var point = CGPoint.zero
+        var size = CGSize.zero
+        guard AXValueGetValue(unsafeBitCast(pv, to: AXValue.self), .cgPoint, &point),
+              AXValueGetValue(unsafeBitCast(sv, to: AXValue.self), .cgSize, &size) else { return nil }
+
+        return CGRect(origin: point, size: size)
+    }
+
     static func isTrusted(prompt: Bool = false) -> Bool {
         if prompt {
             let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
@@ -103,6 +129,8 @@ struct AXNode {
     var label: String
     var enabled: Bool
     var actions: [String]
+    /// Screen rectangle, when the element reports one.
+    var frame: CGRect?
 }
 
 enum Tree {
@@ -117,7 +145,8 @@ enum Tree {
                 id: AX.identifier(el) ?? "",
                 label: AX.label(el),
                 enabled: AX.enabled(el),
-                actions: AX.actions(el)
+                actions: AX.actions(el),
+                frame: AX.frame(el)
             ))
             if depth < maxDepth {
                 for child in AX.children(el).reversed() {
