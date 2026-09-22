@@ -63,9 +63,14 @@ jobs:
       - name: Build Swift sidecar
         env:
           MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          # API key, if App Store Connect API access has been granted.
           MACOS_NOTARY_KEY_PATH: ${{ steps.notary.outputs.path }}
           MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
           MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          # App-specific password, which needs no extra access and works now.
+          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
         run: npm run build:sidecar:macos
 
       - name: Report what the binary actually is

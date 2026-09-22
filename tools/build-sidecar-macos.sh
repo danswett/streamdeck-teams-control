@@ -21,8 +21,18 @@
 #
 # Signing needs, in the environment:
 #   MACOS_SIGN_IDENTITY   e.g. "Developer ID Application: Name (TEAMID)"
-# Notarization additionally needs:
-#   MACOS_NOTARY_KEY_ID / MACOS_NOTARY_ISSUER_ID / MACOS_NOTARY_KEY_PATH (.p8)
+#
+# Notarization needs one of two credential sets. notarytool accepts either, and
+# they authenticate the same submission:
+#
+#   API key            MACOS_NOTARY_KEY_PATH (.p8) + _KEY_ID + _ISSUER_ID
+#   app-specific pwd   MACOS_NOTARY_APPLE_ID + _PASSWORD + _TEAM_ID
+#
+# The API key is the better one to end on - revocable on its own, not tied to a
+# person - but it needs App Store Connect API access, which is requested
+# separately from developer membership and is not granted by default. An
+# app-specific password from appleid.apple.com works immediately and is a fine
+# place to start.
 #
 # Run with: npm run build:sidecar:macos
 set -euo pipefail
@@ -65,7 +75,13 @@ echo "Signing with: $MACOS_SIGN_IDENTITY"
 codesign --force --options runtime --timestamp --sign "$MACOS_SIGN_IDENTITY" "$OUT/$NAME"
 codesign --verify --strict --verbose=2 "$OUT/$NAME"
 
-if [ -z "${MACOS_NOTARY_KEY_PATH:-}" ]; then
+if [ -n "${MACOS_NOTARY_KEY_PATH:-}" ]; then
+	NOTARY_AUTH=(--key "$MACOS_NOTARY_KEY_PATH" --key-id "$MACOS_NOTARY_KEY_ID" --issuer "$MACOS_NOTARY_ISSUER_ID")
+	NOTARY_KIND="App Store Connect API key"
+elif [ -n "${MACOS_NOTARY_PASSWORD:-}" ]; then
+	NOTARY_AUTH=(--apple-id "$MACOS_NOTARY_APPLE_ID" --password "$MACOS_NOTARY_PASSWORD" --team-id "$MACOS_NOTARY_TEAM_ID")
+	NOTARY_KIND="app-specific password"
+else
 	echo
 	echo "Signed but not notarized - no notary credentials in the environment."
 	echo "Gatekeeper will still refuse a quarantined copy: a Developer ID"
@@ -74,17 +90,13 @@ if [ -z "${MACOS_NOTARY_KEY_PATH:-}" ]; then
 fi
 
 echo
-echo "Notarizing..."
+echo "Notarizing via $NOTARY_KIND..."
 # notarytool takes an archive, not a loose executable. ditto rather than zip,
 # because it preserves the extended attributes and the signature with them.
 ZIP="$(mktemp -d)/$NAME.zip"
 ditto -c -k --keepParent "$OUT/$NAME" "$ZIP"
 
-xcrun notarytool submit "$ZIP" \
-	--key "$MACOS_NOTARY_KEY_PATH" \
-	--key-id "$MACOS_NOTARY_KEY_ID" \
-	--issuer "$MACOS_NOTARY_ISSUER_ID" \
-	--wait
+xcrun notarytool submit "$ZIP" "${NOTARY_AUTH[@]}" --wait
 
 # A ticket cannot be stapled to a bare Mach-O - only to bundles, disk images and
 # archives - so there is nothing to attach here and Gatekeeper checks Apple
