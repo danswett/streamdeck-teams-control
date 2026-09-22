@@ -149,7 +149,8 @@ the wrong shape now.
 ### Version 1.9.9 — the notes for this submission
 
 Submitted to fix what review asked for on 1.8.2: the icons in the Stream Deck
-app's action list have to be white, and five of ours were not.
+app's action list have to be white, and five of ours were not. The notes
+themselves cover far more than that, for the reason given under the copy.
 
 The PowerPoint Live drawing tools — laser pointer, pen, highlighter, eraser,
 cursor — drew Teams' own artwork there, in Teams' own colors. That was a
@@ -172,12 +173,31 @@ white, on a solid background, or on a blank icon. It reads pixels, not markup,
 because the icons that broke the rule were PNGs with no markup to read.
 
 ```
-Housekeeping, at Elgato's request.
+Everything since 1.5, and most of it is PowerPoint Live.
 
-The five PowerPoint Live drawing tools showed Teams' colored artwork in the Stream Deck app's action list, where the guidelines ask for plain white icons. They now match the rest of the list. The keys on your deck are unchanged, and so is everything the plugin does.
+Twenty-five new actions. Watching a deck: move through slides at your own pace, jump back in sync, open grid view, switch to high contrast, or pop the deck into its own window, none of it touching anyone else's view. Presenting: slide navigation, laser pointer, pen, highlighter, eraser and cursor, ink color and thickness, presenter view, private viewing, present latest, copy link, content and cameo layouts, and stop presenting. A live slide counter shows where you are, and keys follow your role, so taking control re-lights the deck.
+
+Eighteen bundled profiles, three each for Mini, Stream Deck, +, Neo, XL and + XL, laid out for their own grids. They can follow the meeting: meeting controls when you join, attendee or presenter tools when a deck goes up, and back again when it ends. Mute is on every layout, so changing profile never costs you it. Switching stays off until you turn it on, in any key's settings.
+
+On a + or + XL the dials set ink color and thickness, move through the deck and run the new meeting timer, and the touch strip shows the current and next slide.
+
+Joining a meeting now reaches the keys in about four seconds rather than ten, and two decks change together. Keys no longer go grey during a meeting that is still running, and pressing a reaction while presenting can no longer advance the slides.
+
+Action list icons are now plain white, as Elgato's guidelines ask.
 ```
 
-302 characters.
+1,456 characters.
+
+The copy spans four minor versions rather than one, because the listing is
+still on 1.5: 1.8.2 and 1.8.3 went into review and everything after them was
+built and tagged behind that. A reader coming from the published version has
+never seen PowerPoint Live, the profiles, the dials or the touch strip, so
+notes describing only the icon change would be accurate and useless.
+
+The per-version notes below are kept as the record of what each one did, and
+the numbers in this block come from them: 25 actions is 38 today against 13 in
+1.5, the profile count is the 18 files in `profiles/`, and the joining time is
+the 1.9.8 measurement.
 
 ### Version 1.9.8 — submitted
 
