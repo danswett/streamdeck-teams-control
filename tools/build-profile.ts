@@ -845,6 +845,37 @@ if (JSON.stringify(registered) !== before) {
 	console.log(`\nmanifest.json: ${registered.length} profiles registered`);
 }
 
+/*
+	The same list, emitted for the bundle to carry.
+
+	The plugin needs to know which profile path shipped, and used to read it
+	back out of manifest.json at runtime. Elgato's DRM makes the manifest a
+	protected asset and says outright not to read it at run time - so on a
+	Marketplace build that read fails, the list comes back empty, and profile
+	switching stops without an error anyone sees. Their own guidance is to
+	embed the data instead, which is what this is.
+*/
+const generated = path.join(ROOT, "src", "profiles.generated.json");
+writeFileSync(
+	generated,
+	`${JSON.stringify(
+		{
+			$comment: [
+				"GENERATED FILE - do not edit. Run: node tools/build-profile.ts",
+				"",
+				"The profiles manifest.json declares, embedded so the plugin never has",
+				"to read the manifest at runtime - DRM protects it, and the failure is",
+				"silent. tests/profiles.test.ts fails if this and the manifest disagree."
+			],
+			profiles: registered
+		},
+		null,
+		"\t"
+	)}\n`,
+	"utf8"
+);
+console.log(`src/profiles.generated.json: ${registered.length} profiles embedded`);
+
 if (unrecorded.length) {
 	console.log(`\n${unrecorded.length} profile(s) have no layoutHash recorded. Add:`);
 	for (const line of unrecorded) console.log(line);

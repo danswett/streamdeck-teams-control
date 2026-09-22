@@ -153,6 +153,42 @@ The first-release notes are kept further down for reference only — they descri
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
 
+### Version 1.10.1 — released, not yet submitted
+
+Profile switching was going to be dead on arrival on Marketplace, and nowhere
+else.
+
+`src/profiles.ts` read `manifest.json` at runtime to find which bundled profile
+path shipped. Elgato's [distribution
+docs](https://docs.elgato.com/streamdeck/sdk/introduction/distribution/) make
+the manifest a DRM-protected asset and say outright not to read it at run time,
+and this plugin meets every DRM precondition: `SDKVersion` 3,
+`Software.MinimumVersion` 7.1, CLI 1.9.0, `@elgato/streamdeck` 2.1.2. DRM is
+applied when Maker Console processes an upload — so the GitHub build works, a
+sideload works, and only the copy users actually download would have failed.
+
+The failure is silent by construction. The read throws, the list comes back
+empty, `profilePath()` returns null for every deck, and the plugin logs a line
+nobody sees. No error reaches the user; the profiles simply never switch.
+
+It has never shipped broken: 1.5, the published version, has no profiles at all.
+It would have shipped broken in the next submission, where eighteen of them are
+a headline.
+
+`tools/build-profile.ts` now also writes `src/profiles.generated.json`, which
+the bundle carries — Elgato's own suggested alternative. Same source, same
+guarantee about paths matching files, no file access. `tests/profiles.test.ts`
+fails if the embedded list and the manifest disagree, which is the only way they
+can now drift.
+
+**Still unverified, and worth doing before any submission:** that a DRM-processed
+build behaves as expected. Maker Console will hand you one without publishing —
+upload with "Publish after review" unselected, then download it from the
+Versions tab. That is also how to answer the macOS signing question.
+
+No user-facing copy: this changes nothing a reader of the listing would
+recognize, and it ships alongside 1.10.0's notes.
+
 ### Version 1.10.0 — released, not yet submitted
 
 macOS, from [#4](https://github.com/danswett/streamdeck-teams-control/issues/4)
