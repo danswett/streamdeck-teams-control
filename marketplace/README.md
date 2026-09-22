@@ -142,6 +142,13 @@ listing rather than a first publication. Use the version notes below; they
 describe what changed, which is what an existing user opens the listing to find
 out.
 
+**The published listing is on 1.5.** Six submissions were made after it — 1.8.2,
+1.8.3, 1.9.4, 1.9.6, 1.9.7 and 1.9.8 — and every one was rejected; 1.8.2 came
+back on the action-list icons, which is what 1.9.9 fixes. Nothing between 1.5
+and 1.9.9 ever reached a user, so a version's notes below describe what it
+changed against the version before it, not against anything anyone is running.
+Write a submission's copy as the delta from 1.5 until that stops being true.
+
 The first-release notes are kept further down for reference only — they describe
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
@@ -189,9 +196,9 @@ Action list icons are now plain white, as Elgato's guidelines ask.
 1,456 characters.
 
 The copy spans four minor versions rather than one, because the listing is
-still on 1.5: 1.8.2 and 1.8.3 went into review and everything after them was
-built and tagged behind that. A reader coming from the published version has
-never seen PowerPoint Live, the profiles, the dials or the touch strip, so
+still on 1.5: every submission since was rejected, and the versions between
+were built and tagged behind them. A reader coming from the published version
+has never seen PowerPoint Live, the profiles, the dials or the touch strip, so
 notes describing only the icon change would be accurate and useless.
 
 The per-version notes below are kept as the record of what each one did, and
@@ -199,7 +206,7 @@ the numbers in this block come from them: 25 actions is 38 today against 13 in
 1.5, the profile count is the 18 files in `profiles/`, and the joining time is
 the 1.9.8 measurement.
 
-### Version 1.9.8 — submitted
+### Version 1.9.8 — submitted, rejected
 
 One thing, and it is the thing people notice: the deck used to take about ten
 seconds to catch up when you joined a meeting.
@@ -231,7 +238,7 @@ Profile switching is still off until you turn it on, in any key's settings.
 
 360 characters.
 
-### Version 1.9.7 — submitted
+### Version 1.9.7 — submitted, rejected
 No new actions and no profile changed, so by the 1.9.5 test this looks like a
 release with nothing to advertise. It is the opposite. Two of the things the
 listing already promises were not actually true, and now are.
@@ -267,7 +274,7 @@ Everything is quicker as well: reactions land about four times faster, the keys 
 
 654 characters.
 
-### Version 1.9.6 — submitted
+### Version 1.9.6 — submitted, rejected
 
 The first release since 1.9.4 with anything a user can see, so it carries 1.9.5
 with it. 1.9.5 was tagged and built but deliberately not submitted: nothing in it
@@ -312,7 +319,7 @@ almost no one should switch on.
 Fold it into the next submission that does carry user-visible change. The
 internal audience for Direct mode is served by the repo doc instead.
 
-### Version 1.9.4 — submitted
+### Version 1.9.4 — submitted, rejected
 
 Submitted after 1.8.3 was live, so these describe only what changed on top of it.
 Everything about PowerPoint Live and the meeting keys is in the notes below,
@@ -354,7 +361,7 @@ Folded into the 1.9.3 notes above.
 
 Folded into the 1.9.3 notes above.
 
-### Version 1.8.3 — submitted, in review
+### Version 1.8.3 — submitted, rejected
 
 Described only what changed on top of 1.8.2.
 
@@ -370,7 +377,7 @@ No keys changed, and nothing about how the plugin works changed.
 
 473 characters.
 
-### Version 1.8.2 — submitted, in review
+### Version 1.8.2 — submitted, rejected on the action-list icons
 
 Marketplace shows plain text, so this is the GitHub release rewritten for
 someone who has the plugin installed but has never read a commit.
