@@ -116,10 +116,11 @@ if [ "${MACOS_NOTARIZE:-}" != "1" ]; then
 	echo
 	echo "Signed, not notarized - MACOS_NOTARIZE is not set."
 	echo
-	echo "Notarization is a queue at Apple, not work we do: the first submission"
-	echo "from this team sat 'In Progress' for 44 minutes while the build itself"
-	echo "took two. It proves nothing on a routine commit that signing has not"
-	echo "already proved, so it runs when a shippable artifact is being made."
+	echo "Notarization is a queue at Apple, not work we do: submissions from this"
+	echo "team have sat 'In Progress' anywhere from 44 minutes to over 2.5 hours"
+	echo "while the build itself took two. It proves nothing on a routine commit"
+	echo "that signing has not already proved, so it runs when a shippable"
+	echo "artifact is being made."
 	exit 0
 fi
 
@@ -143,8 +144,12 @@ ditto -c -k --keepParent "$BUNDLE" "$ZIP"
 
 # --timeout so a submission that never resolves fails loudly rather than
 # holding the runner. Generous, because Apple's queue is not ours: two
-# submissions on 2026-09-22 were still "In Progress" after 90 minutes with no
-# incident posted on Apple's status page.
+# submissions on 2026-09-22 were still "In Progress" 1h44m and 2h42m after
+# upload, with no incident posted on Apple's status page.
+#
+# Both were Accepted in the end, so this expiring does not mean the submission
+# failed - only that it outlived the job. Ask before re-submitting; the message
+# below says how.
 if ! xcrun notarytool submit "$ZIP" "${NOTARY_AUTH[@]}" --wait --timeout 45m; then
 	echo
 	echo "Notarization did not complete in time."

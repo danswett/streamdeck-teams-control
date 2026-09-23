@@ -129,12 +129,34 @@ Every step is skipped cleanly when the secrets are absent, so a fork still
 builds.
 
 **Notarization is opt-in**, via the `notarize` input on a manual run. It is a
-queue at Apple rather than work we do — this team's first submission sat
-`In Progress` for 44 minutes while the build itself took two — and it proves
-nothing on a routine commit that signing has not already proved. Sign on every
-push, notarize when producing something shippable.
+queue at Apple rather than work we do — this team's submissions have sat
+`In Progress` anywhere from 44 minutes to over 2½ hours while the build itself
+took two — and it proves nothing on a routine commit that signing has not
+already proved. Sign on every push, notarize when producing something
+shippable.
 
 Expect a normal run of about a minute, and a notarizing one to be unpredictable.
+
+### When the queue outlasts the job
+
+**A submission outlives the job that made it.** Two on 2026-09-22 outran their
+own timeouts and were recorded as failed builds, yet both were Accepted by
+Apple — `Ready for distribution`, `issues: null`, with the ticket covering the
+`x86_64` and `arm64` slices alike. A timeout here says nothing about whether
+the binary is good.
+
+So ask before re-submitting:
+
+```
+gh workflow run notary-status.yml --ref main -f submission=<id>
+```
+
+It runs `notarytool history` (blank input lists recent submissions and their
+current status) and, given an id, `notarytool info` plus the full log — which
+names the offending binary and reason when something genuinely is wrong.
+
+If it reports Accepted, re-run the build with notarization on. Apple issues the
+ticket from cache for a cdhash it has already approved, so stapling is quick.
 
 ## 7. The part that needs a Mac
 

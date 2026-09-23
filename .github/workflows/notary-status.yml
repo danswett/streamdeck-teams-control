@@ -3,13 +3,15 @@ name: notary-status
 # Asks Apple what happened to a notarization submission, without burning a
 # build to find out.
 #
-# Two submissions have been made and neither was seen to finish: the first was
-# cancelled at 44 minutes, the second hit its own 30-minute timeout. Both may
-# still have completed server-side - a submission outlives the job that made
-# it - and "eventually accepted" and "rejected for a reason" need very
-# different responses.
+# It exists because two submissions on 2026-09-22 were never seen to finish:
+# the first was cancelled at 44 minutes, the second hit its own timeout. Asking
+# afterwards settled it - both had carried on server-side and both came back
+# Accepted, "Ready for distribution", the ticket covering the x86_64 and arm64
+# slices alike. The queue was the whole problem; the signing was never in doubt.
 #
-# notarytool is macOS-only, so this is the cheapest way to ask from anywhere.
+# Keep it. "Eventually accepted" and "rejected for a reason" still demand very
+# different responses, and a timed-out job cannot tell them apart. notarytool is
+# macOS-only, so this is the cheapest way to ask from anywhere.
 
 on:
   workflow_dispatch:
