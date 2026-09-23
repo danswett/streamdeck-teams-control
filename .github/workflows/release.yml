@@ -38,6 +38,13 @@ jobs:
       - name: Build and package
         run: |
           npm run build
+          # The guard against shipping a package that declares a platform it
+          # cannot serve. Inert while the manifest is Windows-only on a Windows
+          # runner, and that is the point: the day `mac` is added to the
+          # manifest, a release built here would find no Mach-O and pack a
+          # plugin that installs on macOS and does nothing. Nothing about the
+          # file would say so. Fail the release instead.
+          node tools/check-sidecars.ts
           npx streamdeck validate com.bad-duck.teamscontrol.sdPlugin --no-update-check
           npx streamdeck pack com.bad-duck.teamscontrol.sdPlugin --output dist --force --no-update-check
 

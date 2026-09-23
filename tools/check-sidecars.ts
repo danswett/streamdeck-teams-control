@@ -9,8 +9,12 @@
  * dimmed forever, because the sidecar it looks for is not there.
  *
  * That package is indistinguishable from a good one until a Mac user opens it,
- * which is far too late. CI builds both halves and packs on macOS; this exists
- * so a hand-built package cannot quietly skip that.
+ * which is far too late. So this runs in the release workflow, and refuses.
+ *
+ * The release builds on Windows alone today, which is sound only while the
+ * manifest declares Windows alone. Declaring macOS means teaching the release
+ * to build both sidecars and combine them before packing; until that happens,
+ * this check is what stops the mistake from reaching anyone.
  *
  * Run with: node tools/check-sidecars.ts
  * Override for a deliberate single-platform test build:
@@ -93,6 +97,7 @@ console.error("dimmed. Nothing about the file says so.");
 console.error("");
 for (const { platform } of missing) console.error(`  ${HOW[platform]}`);
 console.error("");
-console.error("CI builds both and packs on macOS, which is how a release gets made.");
+console.error("The release workflow builds on Windows alone today. Shipping macOS");
+console.error("means building both sidecars there and combining them before packing.");
 console.error("For a deliberate single-platform build: SKIP_SIDECAR_CHECK=1 npm run pack");
 process.exit(1);
