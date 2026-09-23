@@ -14,17 +14,33 @@ name: macos-testbuild
 # Windows half anyway.
 #
 # Published as a prerelease, clearly marked, never as a Marketplace submission.
+#
+# It runs on every push to main, notarized, because a macOS build that has to be
+# asked for is a macOS build nobody asks for: the Windows work carries on, the
+# Swift quietly stops compiling, and the gap surfaces on the day someone finally
+# wants to ship it. One rolling tag rather than a release per push keeps a single
+# permanent URL to hand a tester, and keeps the release list from filling with
+# builds nobody will install.
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       notarize:
-        description: Notarize as well (adds an unbounded wait on Apple's queue)
+        description: Notarize (untick only to skip Apple's queue)
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: write
+
+# One at a time, newest wins - two runs would fight over the rolling tag and its
+# asset. Cancelling mid-notarization is safe: the submission lives on Apple's
+# side and the next run staples it from cache.
+concurrency:
+  group: macos-testbuild
+  cancel-in-progress: true
 
 jobs:
   testbuild:
@@ -93,14 +109,51 @@ jobs:
           echo "Built as $VERSION, macOS only."
 
       - name: Build
+        id: build
         env:
           MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
-          MACOS_NOTARIZE: ${{ inputs.notarize && '1' || '' }}
+          # On by default now. A push always notarizes; a manual run can untick
+          # it to skip the queue.
+          MACOS_NOTARIZE: ${{ (github.event_name == 'push' || inputs.notarize) && '1' || '' }}
+          NOTARIZE_REQUESTED: ${{ (github.event_name == 'push' || inputs.notarize) && '1' || '' }}
           MACOS_NOTARY_KEY_PATH: ${{ steps.notary.outputs.path }}
           MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
           MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
         run: |
+          APP=com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge.app
+
+          # build-sidecar-macos.sh exits non-zero when Apple's queue outruns its
+          # --timeout. That is not a build failure - the bundle is already built,
+          # signed and valid, and the submission carries on server-side. Judge
+          # from the artifact rather than the exit code, so a slow queue at Apple
+          # cannot turn main red for something nobody here did wrong.
+          set +e
           npm run build:sidecar:macos
+          BUILD_RC=$?
+          set -e
+
+          if [ ! -x "$APP/Contents/MacOS/TeamsBridge" ]; then
+            echo "::error::Sidecar did not build (rc=$BUILD_RC) - no bundle at $APP"
+            exit 1
+          fi
+
+          # Signing is ours, takes seconds and has no queue, so unlike
+          # notarization there is no excuse for it to be missing.
+          if ! codesign --verify --deep --strict "$APP" 2>/dev/null; then
+            echo "::error::Bundle is not validly signed (rc=$BUILD_RC)"
+            exit 1
+          fi
+
+          if xcrun stapler validate "$APP" >/dev/null 2>&1; then
+            echo "notarized=true" >> "$GITHUB_OUTPUT"
+            echo "Notarized, ticket stapled."
+          else
+            echo "notarized=false" >> "$GITHUB_OUTPUT"
+            if [ -n "$NOTARIZE_REQUESTED" ]; then
+              echo "::warning::Signed but not notarized - Apple's queue outran the wait (rc=$BUILD_RC). The submission is not lost; it continues server-side and the next push will staple it from cache. To see where it got to: gh workflow run notary-status.yml --ref main"
+            fi
+          fi
+
           # Not build:sidecar - that is the win-x64 .NET host and cannot be
           # built here. Icons are committed rather than generated at build time.
           npm run build:profiles
@@ -122,26 +175,37 @@ jobs:
           xcrun stapler validate "$APP" 2>&1 || true
           spctl --assess --type execute --verbose=2 "$APP" 2>&1 || true
 
-      - name: Publish as a prerelease
+      - name: Publish the rolling test build
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.manifest.outputs.version }}
+          NOTARIZED: ${{ steps.build.outputs.notarized }}
         run: |
-          NOTARIZED="signed, not notarized"
-          if [ "${{ inputs.notarize }}" = "true" ]; then NOTARIZED="signed and notarized"; fi
+          TAG=macos-test
+
+          if [ "$NOTARIZED" = "true" ]; then
+            STATE="Developer ID signed and **notarized by Apple**, ticket stapled"
+          else
+            STATE="Developer ID signed but **not notarized** - Apple's queue outran the wait on this run, so expect Gatekeeper to ask"
+          fi
 
           cat > notes.md <<NOTES
           **macOS test build — not for publication, not a Marketplace submission.**
 
-          Built from \`main\` at \`${GITHUB_SHA:0:7}\`, $NOTARIZED.
+          Rebuilt automatically on every push to \`main\`. This release rolls: the tag,
+          the notes and the attached package always describe the newest build, so this
+          URL never goes stale and never needs replacing.
+
+          Built from \`main\` at \`${GITHUB_SHA:0:7}\` as version \`$VERSION\`.
+          Sidecar is $STATE.
 
           The manifest is patched to declare **macOS only** so it installs on a Mac;
           \`main\` itself declares Windows only, because the macOS sidecar is not fit
           to publish yet. The Windows sidecar is absent by design — this build is for
           answering the questions in #7 and nothing else.
 
-          Sidecar: universal \`arm64\` + \`x86_64\`, Developer ID signature, wrapped in
-          \`TeamsBridge.app\` so a notarization ticket has somewhere to live.
+          Sidecar: universal \`arm64\` + \`x86_64\`, wrapped in \`TeamsBridge.app\` so a
+          notarization ticket has somewhere to live.
 
           ### Install
           Download the \`.streamDeckPlugin\` below and double-click it. Please do not
@@ -151,14 +215,23 @@ jobs:
           Then follow #7.
           NOTES
 
-          # --target pins the tag to the commit this artifact was actually built
-          # from. Without it gh tags the default branch's current HEAD, which is
-          # whatever main happens to be when the job reaches this step - on
-          # 2026-09-23 a push landed mid-run and the tag recorded a commit the
-          # build had never seen, while the notes above named the right one.
-          gh release create "macos-test-$VERSION" \
-            dist/*.streamDeckPlugin \
-            --target "$GITHUB_SHA" \
-            --title "macOS test build $VERSION" \
-            --notes-file notes.md \
-            --prerelease
+          # Move the tag rather than deleting and recreating it. Deleting a tag
+          # that backs a release turns the release into an untagged draft and
+          # takes its download URL with it - which is exactly what happened on
+          # 2026-09-23 while repointing macos-test-1.10.2.2.
+          git tag -f "$TAG" "$GITHUB_SHA"
+          git push -f origin "refs/tags/$TAG"
+
+          TITLE="macOS test build (latest) — $VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TITLE" --notes-file notes.md --prerelease
+            gh release upload "$TAG" dist/*.streamDeckPlugin --clobber
+          else
+            gh release create "$TAG" dist/*.streamDeckPlugin \
+              --target "$GITHUB_SHA" \
+              --title "$TITLE" \
+              --notes-file notes.md \
+              --prerelease
+          fi
+
+          echo "Published $TITLE to the rolling '$TAG' release."
