@@ -156,7 +156,10 @@ current status) and, given an id, `notarytool info` plus the full log — which
 names the offending binary and reason when something genuinely is wrong.
 
 If it reports Accepted, re-run the build with notarization on. Apple issues the
-ticket from cache for a cdhash it has already approved, so stapling is quick.
+ticket from cache for a cdhash it has already approved, so a rebuild of the
+same source skips the queue outright: the run on 2026-09-23 went from
+`Notarizing via App Store Connect API key...` to `Accepted` in **22 seconds**,
+then stapled and passed `spctl` as `source=Notarized Developer ID`.
 
 ## 7. The part that needs a Mac
 
