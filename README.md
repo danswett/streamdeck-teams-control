@@ -926,6 +926,38 @@ press went:
 slow flyout 'react-like': 3278ms [open=1ms find=1113ms click=2ms settle=216ms away=1ms dismiss=1945ms]
 ```
 
+### Diagnosing a Mac install
+
+`tail-log.ps1` above is Windows-only. On macOS the plugin writes to
+`logs/` inside its own folder, and the interesting failure — the helper not
+launching — looks exactly like Gatekeeper refusing it. `macos-doctor.sh` runs
+every check that tells them apart and prints a verdict:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/danswett/streamdeck-teams-control/main/tools/macos-doctor.sh -o /tmp/doctor.sh
+bash /tmp/doctor.sh
+```
+
+No checkout, no toolchain, and **Teams does not have to be installed** — the
+sidecar answers a status round-trip with `teamsRunning:false` and exits when
+stdin closes, so the whole launch path can be proven on a Mac that has never
+had Teams on it.
+
+It reports the execute bit, whether a sidecar process is alive, whether the
+Mach-O carries a slice for that Mac, the signature and staple, and the log
+lines that discriminate the two failures:
+
+| log line | means |
+|---|---|
+| `Sidecar was mode 644 and could not run; set to 755.` | the packaging repair fired — expected once per install or upgrade |
+| `invoke(...) failed: Teams is not running` | the press reached the sidecar; only Teams is missing |
+| `invoke(...) failed: sidecar not running` | the helper is not launching |
+| `not trusted for Accessibility` | grant it to Stream Deck, then fully quit and reopen |
+
+It repairs nothing on purpose. The state the plugin was left in is the thing
+worth knowing, and a doctor that fixed the mode on its way past would destroy
+the evidence it was run to collect.
+
 ### The sidecar protocol
 
 The sidecar runs standalone, which is the quickest way to debug UIA:
@@ -1132,11 +1164,18 @@ One answer is in, and it is worth having:
   thing standing between a user and a working plugin — which is precisely why
   the mode was worth asking for in the same breath. The two produce an
   identical symptom.
+- **The helper launches from a real install, on Intel.** Confirmed on an
+  x86_64 Mac from a downloaded package: `Sidecar was mode 644 and could not
+  run; set to 755.` then `Sidecar ready`, with `spctl` reporting `accepted`
+  and `source=Notarized Developer ID`. A press reached it and came back
+  `Teams is not running`, which is the whole chain working. Until then the
+  `x86_64` slice had only ever been proven to *exist*; no Intel Mac had run it.
 
-What is left needs a Mac and live Teams:
+What is left needs a Mac with live Teams:
 
-- **Does the helper launch from a real install, and does Accessibility work
-  against live Teams?**
+- **Does Accessibility drive Teams as it does on Windows?** Every control, the
+  state reporting, and the PowerPoint Live capture behind ink colour and slide
+  thumbnails.
 
 One worry is already answered: Maker Console's DRM leaves binaries untouched —
 `TeamsBridge.exe` came back byte-identical from a processed upload — so a signed
