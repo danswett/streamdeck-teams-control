@@ -44,7 +44,11 @@ CANDIDATES=(
 )
 
 for candidate in "${CANDIDATES[@]}"; do
-	if [ -x "$candidate" ]; then
+	# -f, not -x. An installed sidecar arrives without its execute bit, because
+	# streamdeck pack writes every zip entry 0644 (#7). Testing for -x found
+	# nothing and sent the tester off to build a toolchain they were promised
+	# they would not need.
+	if [ -f "$candidate" ]; then
 		APP="$candidate"
 		break
 	fi
@@ -57,6 +61,13 @@ if [ -z "$APP" ]; then
 	echo "Either install the macOS test build, or build it here with:"
 	echo "  npm run build:sidecar:macos"
 	exit 1
+fi
+
+# The plugin repairs this itself before spawning; the probe runs the binary
+# directly, so it has to do the same.
+if [ ! -x "$APP" ]; then
+	echo "Sidecar is not executable (packaging strips the bit) - restoring it."
+	chmod +x "$APP"
 fi
 
 echo "Using: $APP"

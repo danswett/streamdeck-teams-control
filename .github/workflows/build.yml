@@ -35,6 +35,21 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The other home of this suite is windows-latest, where a POSIX file mode
+      # cannot be represented at all - so the tests covering the execute bit the
+      # package loses (#7) would skip everywhere and vouch for nothing. Run
+      # before the keychain work so a failure costs nothing.
+      - name: Unit tests (TypeScript, on a POSIX filesystem)
+        run: npm run test:ts
+
       - name: Write the notary key, if configured
         id: notary
         env:
