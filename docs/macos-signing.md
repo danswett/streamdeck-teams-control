@@ -163,17 +163,49 @@ then stapled and passed `spctl` as `source=Notarized Developer ID`.
 
 ## 7. The part that needs a Mac
 
-Two questions CI cannot answer, both about behaviour rather than artifacts:
-
-1. **Does Stream Deck quarantine what it extracts?** On a Mac, install the
-   plugin from a downloaded `.streamDeckPlugin` and run
-   `xattr -p com.apple.quarantine` against the installed helper. If nothing is
-   set, Gatekeeper never gets involved and the whole signing chain matters less
-   than assumed. Worth checking early — it tells you how load-bearing any of
-   this is.
+1. **Does Stream Deck quarantine what it extracts?** *Answered: no.* Two
+   testers ran `xattr -p com.apple.quarantine` against the helper from a
+   downloaded `.streamDeckPlugin`, on macOS 26.7 and 27.0.1, and both got
+   `No such xattr`. Gatekeeper never gets involved with what Stream Deck
+   unpacks, so everything above is insurance against a path that is not the
+   normal one — worth having, but not what stands between a user and a working
+   plugin.
 2. **Does the helper launch from a real install?** Not a sideload. Grant
    Accessibility to Stream Deck, quit it fully, reopen, join a meeting.
 
 The stapling gap is closed: the helper ships as `TeamsBridge.app` so a
 notarization ticket has somewhere to live, and Gatekeeper can validate locally
 rather than asking Apple over the network at first launch.
+
+## 8. What actually stopped it working: the execute bit
+
+Asked alongside the quarantine question because the two are indistinguishable
+from outside — keys on the alert triangle, Teams untouched — and this was the
+one that was true.
+
+`streamdeck pack` normalises the mode of every entry it writes. Read off the
+package testers installed:
+
+```
+entries: 120
+mode histogram: {'0o644': 120}
+```
+
+All of it, `Contents/MacOS/TeamsBridge` included. Stream Deck extracts the mode
+as stored, so the helper lands as `-rw-r--r--` and cannot be executed by
+anyone. `build-sidecar-macos.sh` does `chmod +x`; the zip discards it.
+
+The repair is in the plugin rather than in the package — `src/sidecar-exec.ts`,
+called from `bridge.ts` before every spawn. That is the one place that holds
+however the plugin arrived: downloaded, sideloaded, upgraded in place, or
+re-packed by Marketplace. An upgrade re-extracts, so it has to be able to run
+again, and it only writes when the bit is actually missing.
+
+It cannot disturb the signing chain. `codesign` seals file contents and records
+hashes in `_CodeSignature/CodeResources`; the notarization ticket is a separate
+file stapled at `Contents/CodeResources`. POSIX mode appears in none of them.
+
+`tools/macos-probe.sh` runs the helper directly rather than through the plugin,
+so it repairs the bit the same way. It previously located the sidecar with
+`[ -x ]`, found nothing on a real install, and told the tester to build a
+toolchain they had been promised they would not need.

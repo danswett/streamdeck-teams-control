@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { EMPTY_STATE, splitLines, type TeamsState, toState } from "./protocol";
+import { ensureExecutable, EXECUTABLE_MODE, octal } from "./sidecar-exec";
 import { sidecarPath } from "./sidecar-path";
 
 const logger = streamDeck.logger.createScope("Bridge");
@@ -108,6 +109,18 @@ class Bridge {
 			return;
 		}
 
+		// Packaging normalises every file in the .streamDeckPlugin to 0644, so
+		// on macOS the helper arrives unable to run and spawn fails with EACCES
+		// - which looks exactly like Gatekeeper refusing it. See sidecar-exec.
+		// A plugin upgrade re-extracts, so this has to run on every spawn.
+		const repair = ensureExecutable(SIDECAR);
+		if (repair.outcome === "repaired")
+			logger.info(
+				`Sidecar was mode ${octal(repair.from)} and could not run; set to ${octal(EXECUTABLE_MODE)}.`
+			);
+		else if (repair.outcome === "failed")
+			logger.error(`Could not make the sidecar executable: ${repair.reason}`);
+
 		const args: string[] = [];
 		if (existsSync(SELECTORS)) args.push("--selectors", SELECTORS);
 
@@ -160,11 +173,26 @@ class Bridge {
 			this.#scheduleRestart();
 		});
 
-		proc.on("error", (err) => logger.error(`Sidecar error: ${err.message}`));
+		// A spawn that fails - EACCES on a helper that lost its execute bit,
+		// ENOENT on one removed mid-upgrade - reports here and not through
+		// "exit", so without a restart the bridge stayed dead for the rest of
+		// the session and every key sat on the alert triangle. That is the
+		// shape #7 arrived in.
+		proc.on("error", (err) => {
+			logger.error(`Sidecar error: ${err.message}`);
+			if (this.#proc !== proc) return;
+			this.#failAllPending(`sidecar error: ${err.message}`);
+			this.#proc = undefined;
+			this.#publish({ ...EMPTY_STATE });
+			this.#scheduleRestart();
+		});
 	}
 
 	#scheduleRestart(): void {
 		if (this.#stopped) return;
+		// Idempotent: "error" and "exit" can both fire for one process, and two
+		// live timers would mean two sidecars.
+		if (this.#restartTimer) clearTimeout(this.#restartTimer);
 		const delay = this.#restartDelay;
 		this.#restartDelay = Math.min(this.#restartDelay * 2, 30_000);
 		logger.info(`Restarting sidecar in ${delay}ms`);

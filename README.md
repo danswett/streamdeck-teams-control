@@ -1112,13 +1112,29 @@ measured against the binary CI actually produced rather than assumed:
    launch, and an offline user blocked with it. *Fixed:* the helper ships as
    `TeamsBridge.app`, the smallest bundle that can hold a ticket, with
    `LSBackgroundOnly` so it never appears in the Dock.
+4. **An execute bit that survives packaging.** `streamdeck pack` writes every
+   entry in the `.streamDeckPlugin` zip with mode `0644` — all 120 of them in
+   the build testers installed, the Mach-O included — and Stream Deck extracts
+   them as written. The build's `chmod +x` never reaches a user, so the helper
+   arrives as `-rw-r--r--` and cannot be executed at all. Two testers hit this
+   on macOS 26.7 and 27.0.1
+   ([#7](https://github.com/danswett/streamdeck-teams-control/issues/7)): every
+   key on the alert triangle, Teams untouched. *Fixed:* the plugin restores the
+   bit itself before each spawn (`src/sidecar-exec.ts`). Mode is not part of a
+   code signature, so this cannot invalidate the signature or the ticket.
 
-What is left is behaviour rather than artifacts, and needs a Mac:
+One answer is in, and it is worth having:
 
-- **Does Stream Deck quarantine what it extracts?** `xattr -p com.apple.quarantine`
-  on the installed helper, after installing from a *downloaded*
-  `.streamDeckPlugin` rather than a sideload. If nothing is set, Gatekeeper
-  never gets involved and none of the above was load-bearing.
+- **Stream Deck does not quarantine what it extracts.** `xattr -p
+  com.apple.quarantine` on the installed helper returns `No such xattr` after a
+  *downloaded* `.streamDeckPlugin`, on both machines that tried it. Gatekeeper
+  never gets involved, so the signing chain above is insurance rather than the
+  thing standing between a user and a working plugin — which is precisely why
+  the mode was worth asking for in the same breath. The two produce an
+  identical symptom.
+
+What is left needs a Mac and live Teams:
+
 - **Does the helper launch from a real install, and does Accessibility work
   against live Teams?**
 
