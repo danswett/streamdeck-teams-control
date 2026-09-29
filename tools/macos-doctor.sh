@@ -55,7 +55,9 @@ else
 		note "ok    sidecar is executable"
 	else
 		note "FAIL  sidecar is NOT executable - it cannot be spawned"
-		note "      if the plugin has been started since install, the repair did not fire"
+		note "      fix: start Stream Deck and let the plugin load. Do NOT chmod it"
+		note "      yourself - macOS restricts writes inside the .app to Stream Deck"
+		note "      and will refuse you with 'Operation not permitted'."
 	fi
 fi
 

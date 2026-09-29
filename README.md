@@ -958,6 +958,13 @@ It repairs nothing on purpose. The state the plugin was left in is the thing
 worth knowing, and a doctor that fixed the mode on its way past would destroy
 the evidence it was run to collect.
 
+It could not repair it anyway. `com.apple.macl` on `TeamsBridge.app` restricts
+writes inside the bundle to Stream Deck, the app that extracted it, so a
+`chmod` from a shell is refused with `Operation not permitted` no matter who
+owns the file. **Never tell anyone to `chmod +x` the helper** — starting Stream
+Deck is what fixes it, because the plugin runs inside the process tree macOS
+allows. Detail in [docs/macos-signing.md](docs/macos-signing.md).
+
 ### The sidecar protocol
 
 The sidecar runs standalone, which is the quickest way to debug UIA:

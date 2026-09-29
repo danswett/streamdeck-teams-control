@@ -205,7 +205,52 @@ It cannot disturb the signing chain. `codesign` seals file contents and records
 hashes in `_CodeSignature/CodeResources`; the notarization ticket is a separate
 file stapled at `Contents/CodeResources`. POSIX mode appears in none of them.
 
+### Why it has to be the plugin that does it
+
+Not a design preference — nothing else is permitted to.
+
+Trying to break a healthy install from a terminal, to prove the repair fires a
+second time, fails:
+
+```
+chmod: Unable to change file mode on .../TeamsBridge.app/Contents/MacOS/TeamsBridge:
+Operation not permitted
+```
+
+The file is owned by the user, mode `755`, with no ACL, no `uchg`/`restricted`
+BSD flag and an empty `xattr -l`. Plain Unix permissions say this should work.
+What refuses it is one attribute on the **bundle directory**:
+
+```
+drwxr-xr-x@ 3 danswett wheel  TeamsBridge.app
+com.apple.macl: <binary blob>
+```
+
+`com.apple.macl` is TCC's mandatory access control label. It restricts
+filesystem operations inside that directory to processes TCC has authorised —
+which is Stream Deck, because Stream Deck is what extracted it — and it
+overrides the Unix mode entirely. Measured on macOS 13.7.8, so this is the
+older TCC file-access mechanism rather than Sonoma's App Management toggle.
+
+Three consequences, all of which matter:
+
+- **A post-install script, a launch agent, or a line of `chmod +x` in the
+  install instructions would all have failed.** None of them run inside Stream
+  Deck's process tree, so none of them may touch the bundle.
+- **A user cannot work around this by hand.** Anyone told to `chmod +x` the
+  helper gets `Operation not permitted`, which looks like a second, worse
+  problem. Do not suggest it.
+- **The plugin can, because Stream Deck spawns it**, so it inherits the
+  authorisation of the app that created the files. That is why the log line
+  `Sidecar was mode 644 and could not run; set to 755.` appears on a real
+  install and an identical `chmod` from a shell does not.
+
+It also means the repeat-firing case cannot be tested by faking the broken
+state; it needs a genuine reinstall through Stream Deck.
+
 `tools/macos-probe.sh` runs the helper directly rather than through the plugin,
-so it repairs the bit the same way. It previously located the sidecar with
-`[ -x ]`, found nothing on a real install, and told the tester to build a
-toolchain they had been promised they would not need.
+so it tries the same repair — and is normally refused, for the reason above. It
+says so and points at the remedy that works: start Stream Deck once. It
+previously located the sidecar with `[ -x ]`, found nothing on a real install,
+and told the tester to build a toolchain they had been promised they would not
+need.

@@ -63,11 +63,25 @@ if [ -z "$APP" ]; then
 	exit 1
 fi
 
-# The plugin repairs this itself before spawning; the probe runs the binary
-# directly, so it has to do the same.
+# The plugin repairs this itself before spawning (#7); the probe runs the binary
+# directly, so it has to try. It will usually fail, and that is not a bug:
+# com.apple.macl on the .app restricts writes inside the bundle to the app that
+# created it, which is Stream Deck. A chmod from a shell gets EPERM however the
+# file is owned. Starting Stream Deck is the real remedy - the plugin is inside
+# the process tree that TCC allows.
 if [ ! -x "$APP" ]; then
-	echo "Sidecar is not executable (packaging strips the bit) - restoring it."
-	chmod +x "$APP"
+	echo "Sidecar is not executable - packaging strips the bit."
+	if chmod +x "$APP" 2>/dev/null; then
+		echo "Restored it."
+	else
+		echo
+		echo "chmod was refused, which is expected: macOS restricts writes inside"
+		echo "TeamsBridge.app to Stream Deck, the app that extracted it."
+		echo
+		echo "Start Stream Deck once and let the plugin load. It repairs the bit"
+		echo "on its first spawn. Then run this again."
+		exit 1
+	fi
 fi
 
 echo "Using: $APP"
