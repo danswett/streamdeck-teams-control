@@ -16,6 +16,7 @@
 		"test": "npm run audit && npm run test:ts && npm run test:cs",
 		"test:ts": "vitest run",
 		"test:cs": "dotnet test sidecar/tests/TeamsBridge.Tests.csproj --nologo",
+		"test:sidecar:macos": "swift test --package-path sidecar-macos",
 		"audit": "node tools/audit-docs.js",
 		"marketplace": "node tools/generate-marketplace.ts",
 		"demo": "node tools/build-demo-frames.ts",

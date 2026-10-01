@@ -119,7 +119,7 @@ if [ -d "$PLUGIN/logs" ]; then
 	newest="$(ls -t "$PLUGIN/logs"/*.log 2>/dev/null | head -1)"
 	if [ -n "${newest:-}" ]; then
 		echo "$newest"
-		grep -E 'Sidecar|sidecar|invoke\(|execute' "$newest" 2>/dev/null | tail -20
+		grep -E 'Sidecar|sidecar|invoke\(|execute|flyout' "$newest" 2>/dev/null | tail -20
 		if grep -q 'set to 755' "$newest" 2>/dev/null; then
 			note "ok    the execute-bit repair fired at least once"
 		fi
@@ -128,6 +128,19 @@ if [ -d "$PLUGIN/logs" ]; then
 		fi
 		if grep -q 'Teams is not running' "$newest" 2>/dev/null; then
 			note "ok    a press reached the sidecar (it replied 'Teams is not running')"
+		fi
+		# A flyout left open takes the whole meeting toolbar out of the
+		# accessibility tree, so until it closes every key reports "not in a
+		# meeting" - reactions, mute, all of them. Which line appeared says
+		# whether that was handled or is still wedging presses.
+		if grep -q 'flyout dismissed by' "$newest" 2>/dev/null; then
+			note "ok    a reaction flyout was closed after use"
+		fi
+		if grep -q 'could not dismiss a Teams flyout' "$newest" 2>/dev/null; then
+			note "FAIL  a flyout would not close - keys stay dead until it is dismissed by hand"
+		fi
+		if grep -q 'recovering: a Teams flyout' "$newest" 2>/dev/null; then
+			note "note  a press found a flyout already open and cleared it first"
 		fi
 	else
 		echo "(no .log files yet - start Stream Deck at least once)"

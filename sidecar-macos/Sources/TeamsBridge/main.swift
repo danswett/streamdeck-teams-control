@@ -1,24 +1,5 @@
 import Foundation
-
-/// Line-delimited JSON sidecar. stdout is the protocol; stderr is diagnostics.
-enum IO {
-    private static let lock = NSLock()
-
-    static func emit(_ obj: [String: Any]) {
-        guard JSONSerialization.isValidJSONObject(obj),
-              let data = try? JSONSerialization.data(withJSONObject: obj, options: []),
-              let line = String(data: data, encoding: .utf8) else { return }
-        lock.lock()
-        fputs(line + "\n", stdout)
-        fflush(stdout)
-        lock.unlock()
-    }
-
-    static func err(_ message: String) {
-        fputs(message + "\n", stderr)
-        fflush(stderr)
-    }
-}
+import TeamsBridgeCore
 
 struct WorkItem {
     var id: Int
@@ -142,6 +123,12 @@ func handle(_ item: WorkItem) {
         var result: [String: Any] = ["type": "result", "id": item.id, "ok": ok]
         if let err { result["error"] = err }
         IO.emit(result)
+        // Answer first, tidy up second. Choosing an item through accessibility
+        // leaves the flyout open, and closing it takes long enough that doing
+        // so before replying would show as a key that stays lit - but it has to
+        // happen before the snapshot below, because a flyout standing over the
+        // toolbar is not a reading worth sending.
+        client.runPendingCleanup()
         let snap = client.getSnapshot()
         lastFingerprint = snap.fingerprint()
         emitState(snap)

@@ -37,15 +37,64 @@ struct ControlSpec {
     }
 }
 
-struct SelectorConfig {
+public struct SelectorConfig {
     var version = 2
     var meetingProbeAutomationId = "microphone-button"
     var fullToolbarAutomationId = "callingButtons-showMoreBtn"
+
+    /**
+     * Any one of these proves a meeting window.
+     *
+     * While a flyout is open Teams drops the whole meeting toolbar from the
+     * accessibility tree and exposes only the popup, so probing for the mic
+     * button alone reads as "meeting ended" every time a menu is opened - and
+     * every control, the reaction that is sitting right there in the open
+     * flyout included, then answers "not in a meeting". That is what testers
+     * hit on #7: the first reaction worked, the flyout stayed open, and
+     * nothing worked again until it was closed by hand.
+     *
+     * The last two live in the reactions flyout, so they survive exactly the
+     * case the mic button does not. Matches the Windows sidecar's MeetingMarkers.
+     */
+    var meetingMarkerAutomationIds = [
+        "microphone-button", "hangup-button", "raisehands-button", "like-button",
+    ]
+
     var controls: [String: ControlSpec] = [:]
+
+    /// The markers actually searched for, with the probe always among them.
+    /// Overriding one without the other should narrow a meeting's definition,
+    /// never leave it unable to recognise the window it is configured for.
+    var meetingMarkers: [String] {
+        var seen = Set<String>()
+        return ([meetingProbeAutomationId] + meetingMarkerAutomationIds)
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+    }
+
+    /**
+     * Identifiers that exist only while one of our own flyouts is open.
+     *
+     * Used to tell "a menu is covering the toolbar", which is recoverable, from
+     * "the meeting ended", which is not. Taken from the control map rather than
+     * hard-coded so an overlay that renames a menu item keeps working, and
+     * templated entries are skipped because '{arg}' matches nothing on its own.
+     */
+    var flyoutItemAutomationIds: [String] {
+        var seen = Set<String>()
+        var out: [String] = []
+        for spec in controls.values {
+            guard let menu = spec.menu, !menu.isEmpty else { continue }
+            for id in [spec.menuItemAutomationId, spec.menuItemToggleAutomationId] {
+                guard let id, !id.isEmpty, !id.contains("{arg}") else { continue }
+                if seen.insert(id).inserted { out.append(id) }
+            }
+        }
+        return out.sorted()
+    }
 }
 
-enum Defaults {
-    static func config() -> SelectorConfig {
+public enum Defaults {
+    public static func config() -> SelectorConfig {
         var c = SelectorConfig()
         c.controls = [
             "mute": ControlSpec(
@@ -180,7 +229,7 @@ enum Defaults {
         return c
     }
 
-    static func overlay(_ base: SelectorConfig, json: String) -> SelectorConfig {
+    public static func overlay(_ base: SelectorConfig, json: String) -> SelectorConfig {
         guard let data = json.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return base
@@ -191,6 +240,10 @@ enum Defaults {
         }
         if let v = obj["fullToolbarAutomationId"] as? String, !v.isEmpty {
             cfg.fullToolbarAutomationId = v
+        }
+        if let v = obj["meetingMarkerAutomationIds"] as? [String] {
+            let kept = v.filter { !$0.isEmpty }
+            if !kept.isEmpty { cfg.meetingMarkerAutomationIds = kept }
         }
         guard let controls = obj["controls"] as? [String: Any] else { return cfg }
         for (key, raw) in controls {

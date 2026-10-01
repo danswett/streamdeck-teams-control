@@ -1,8 +1,9 @@
 import AppKit
 import ApplicationServices
+import CoreGraphics
 import Foundation
 
-enum AX {
+public enum AX {
     static func value(_ el: AXUIElement, _ name: String) -> CFTypeRef? {
         var v: CFTypeRef?
         guard AXUIElementCopyAttributeValue(el, name as CFString, &v) == .success else { return nil }
@@ -36,6 +37,29 @@ enum AX {
         return asElements(v)
     }
 
+    static func parent(_ el: AXUIElement) -> AXUIElement? {
+        guard let v = value(el, kAXParentAttribute as String) else { return nil }
+        return asElement(v)
+    }
+
+    /**
+     * The chain of ancestors above an element, nearest first.
+     *
+     * Needed to dismiss a flyout. Teams' popups are closed by whatever sits
+     * above their items - the popup container rather than any item in it - and
+     * that container carries no identifier to look it up by, so the only way to
+     * reach it is to climb from something inside.
+     */
+    static func ancestors(_ el: AXUIElement, limit: Int = 6) -> [AXUIElement] {
+        var chain: [AXUIElement] = []
+        var node = parent(el)
+        while chain.count < limit, let current = node {
+            chain.append(current)
+            node = parent(current)
+        }
+        return chain
+    }
+
     static func windows(_ app: AXUIElement) -> [AXUIElement] {
         if let v = value(app, kAXWindowsAttribute as String) {
             let wins = asElements(v)
@@ -60,6 +84,49 @@ enum AX {
         let action = preferred.first { names.contains($0) } ?? names.first
         guard let action else { return .actionUnsupported }
         return AXUIElementPerformAction(el, action as CFString)
+    }
+
+    /**
+     * Asks an element to cancel itself, which is how a popup is dismissed
+     * without pressing anything.
+     *
+     * This is the only dismissal that cannot have a side effect, so it is tried
+     * first. Not every element offers it - the action is reported in
+     * AXUIElementCopyActionNames like any other, and asking for one that is not
+     * offered returns .actionUnsupported rather than doing something else.
+     */
+    static func cancel(_ el: AXUIElement) -> AXError {
+        guard actions(el).contains(kAXCancelAction as String) else { return .actionUnsupported }
+        return AXUIElementPerformAction(el, kAXCancelAction as CFString)
+    }
+
+    /// Escape's virtual key code, which is a hardware constant rather than a
+    /// keyboard-layout one: it is 53 on every Mac and in every layout.
+    private static let escapeKeyCode: CGKeyCode = 53
+
+    /**
+     * Presses Escape in a process, which is what a user does to close a flyout.
+     *
+     * Posted to the process rather than to the system event stream, so it
+     * reaches Teams whether or not Teams is frontmost and can never land in
+     * whatever the user is actually typing in. That matters here: the plugin
+     * deliberately hands focus back after every press, so by the time a flyout
+     * is being cleaned up the foreground app is usually not Teams.
+     *
+     * Needs the same Accessibility permission the rest of the sidecar needs,
+     * and nothing more.
+     */
+    @discardableResult
+    static func postEscape(pid: pid_t) -> Bool {
+        guard pid > 0,
+              let source = CGEventSource(stateID: .hidSystemState),
+              let down = CGEvent(keyboardEventSource: source, virtualKey: escapeKeyCode, keyDown: true),
+              let up = CGEvent(keyboardEventSource: source, virtualKey: escapeKeyCode, keyDown: false) else {
+            return false
+        }
+        down.postToPid(pid)
+        up.postToPid(pid)
+        return true
     }
 
     static func raise(_ el: AXUIElement) -> AXError {
@@ -107,7 +174,7 @@ enum AX {
         return CGRect(origin: point, size: size)
     }
 
-    static func isTrusted(prompt: Bool = false) -> Bool {
+    public static func isTrusted(prompt: Bool = false) -> Bool {
         if prompt {
             let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
             return AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
@@ -163,5 +230,40 @@ enum Tree {
             out[n.id] = n
         }
         return out
+    }
+
+    /**
+     * Whether any of these identifiers is in the tree, stopping at the first.
+     *
+     * The question "is the toolbar back yet" is asked repeatedly while waiting
+     * for a flyout to close, and answering it with a full walk each time is the
+     * most expensive thing on that path - a walk that finds nothing visits
+     * every node in the window. Stopping on the first match makes the common
+     * answer cheap; a negative still costs a full walk, which is why the wait
+     * below polls slowly rather than tightly.
+     */
+    static func containsAny(
+        windows: [AXUIElement],
+        ids: [String],
+        maxDepth: Int = 40,
+        maxNodes: Int = 12_000
+    ) -> Bool {
+        guard !ids.isEmpty else { return false }
+        let wanted = Set(ids.filter { !$0.isEmpty })
+        guard !wanted.isEmpty else { return false }
+
+        var visited = 0
+        var stack: [(AXUIElement, Int)] = windows.map { ($0, 0) }
+        while let (el, depth) = stack.popLast() {
+            if visited >= maxNodes { break }
+            visited += 1
+            if let id = AX.identifier(el), wanted.contains(id) { return true }
+            if depth < maxDepth {
+                for child in AX.children(el).reversed() {
+                    stack.append((child, depth + 1))
+                }
+            }
+        }
+        return false
     }
 }

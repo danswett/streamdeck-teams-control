@@ -58,6 +58,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The build a tester downloads. A Swift change that breaks these rules
+      # would otherwise be found by a human in a live meeting, which is how
+      # both rounds of #7 went.
+      - name: Unit tests (Swift sidecar)
+        run: npm run test:sidecar:macos
+
       - name: Write the notary key, if configured
         id: notary
         env:
