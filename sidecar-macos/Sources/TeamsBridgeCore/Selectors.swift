@@ -2,6 +2,22 @@ import Foundation
 
 struct ControlSpec {
     var automationId = ""
+
+    /**
+     * Accessible name to match when there is no identifier to go on.
+     *
+     * One control needs this: the button that answers Teams' "Stop presenting?"
+     * confirmation, whose buttons carry no DOM id at all. Localized, unlike an
+     * identifier, which is why it is the last resort rather than the first.
+     */
+    var name: String?
+
+    /// Keeps a name match inside a particular part of the page - the
+    /// confirmation dialog - so it cannot pick up a toolbar button that happens
+    /// to read the same. Chromium publishes this as AXDOMClassList on macOS and
+    /// as ClassName on Windows.
+    var withinClass: String?
+
     var menu: String?
     var submenu: String?
     var menuItemAutomationId: String?
@@ -24,6 +40,7 @@ struct ControlSpec {
     var menuItemRegex: NSRegularExpression? { Self.compile(menuItemName) }
     var menuItemOffRegex: NSRegularExpression? { Self.compile(menuItemOffName) }
     var offRegex: NSRegularExpression? { Self.compile(offName) }
+    var nameRegex: NSRegularExpression? { Self.compile(name) }
 
     static func compile(_ pattern: String?) -> NSRegularExpression? {
         guard let pattern, !pattern.isEmpty else { return nil }
@@ -35,6 +52,28 @@ struct ControlSpec {
         let range = NSRange(text.startIndex..., in: text)
         return regex.firstMatch(in: text, options: [], range: range) != nil
     }
+}
+
+/**
+ * How a shared deck is recognized and read.
+ *
+ * Defaults match the Windows sidecar's PowerPointLive section, and - as there -
+ * the whole block is overlayable, because the ids change when Teams updates and
+ * selectors.json is where that gets corrected without a rebuild. macOS used to
+ * hard-code these in Swift, which meant the file's own advice ("after a Teams
+ * update, correct the ids below") fixed Windows and silently did nothing here.
+ */
+struct PowerPointLiveConfig {
+    var rootAutomationId = "ppt-previewer-root"
+    var presenterMarkerAutomationId = "stopPresentingPptBtn"
+    var attendeeMarkerAutomationId = "takeControlPptBtn"
+    var slidePositionPattern = #"^\s*(\d+)\s*(?:of|/)\s*(\d+)\s*$"#
+    var toolColorPattern = #"^[^:]+:\s*([^,]+?)\s*(?:,|$)"#
+    var toolThicknessPattern = #"Thickness\s*(\d+)"#
+
+    var slidePositionRegex: NSRegularExpression? { ControlSpec.compile(slidePositionPattern) }
+    var toolColorRegex: NSRegularExpression? { ControlSpec.compile(toolColorPattern) }
+    var toolThicknessRegex: NSRegularExpression? { ControlSpec.compile(toolThicknessPattern) }
 }
 
 public struct SelectorConfig {
@@ -61,6 +100,7 @@ public struct SelectorConfig {
     ]
 
     var controls: [String: ControlSpec] = [:]
+    var powerPointLive = PowerPointLiveConfig()
 
     /// The markers actually searched for, with the probe always among them.
     /// Overriding one without the other should narrow a meeting's definition,
@@ -138,7 +178,6 @@ public enum Defaults {
                 surface: "slideShow"
             ),
             "ppt-sync": ControlSpec(automationId: "syncToPresenterToolbarButton", surface: "slideShow"),
-            "ppt-copilot": ControlSpec(automationId: "inkToExplainToolbarButton", surface: "slideShow"),
             "ppt-popout": ControlSpec(automationId: "popout-content-button"),
             "ppt-take-control": ControlSpec(automationId: "takeControlPptBtn", requiresRole: "attendee"),
             "ppt-high-contrast": ControlSpec(
@@ -146,14 +185,17 @@ public enum Defaults {
                 menuItemAutomationId: "toolbarHighContrastOverflowButton",
                 surface: "slideShow"
             ),
-            "ppt-translate": ControlSpec(
-                menu: "toolbarChangeViewButton",
-                submenu: "toolbarTranslateSlidesOverflowButton",
-                menuItemAutomationId: "toolbarTranslateSlidesLanguageMenuItem-{arg}",
-                requiresRole: "attendee",
-                surface: "slideShow"
-            ),
             "ppt-stop-presenting": ControlSpec(automationId: "stopPresentingPptBtn", requiresRole: "presenter"),
+            // Teams asks before ending a presentation for everyone, and the key
+            // answers that dialog when it is held down. The dialog's buttons
+            // carry no DOM id, so this is the one control matched by name -
+            // and therefore the one control that needs editing if Teams is not
+            // in English.
+            "ppt-stop-presenting-confirm": ControlSpec(
+                name: #"^\s*Stop presenting\s*$"#,
+                withinClass: "ui-dialog",
+                requiresRole: "presenter"
+            ),
             "ppt-private-view": ControlSpec(
                 automationId: "toggleEnablePrivateViewingButton",
                 requiresRole: "presenter",
@@ -245,11 +287,33 @@ public enum Defaults {
             let kept = v.filter { !$0.isEmpty }
             if !kept.isEmpty { cfg.meetingMarkerAutomationIds = kept }
         }
+        if let ppt = obj["powerPointLive"] as? [String: Any] {
+            if let v = ppt["rootAutomationId"] as? String, !v.isEmpty {
+                cfg.powerPointLive.rootAutomationId = v
+            }
+            if let v = ppt["presenterMarkerAutomationId"] as? String, !v.isEmpty {
+                cfg.powerPointLive.presenterMarkerAutomationId = v
+            }
+            if let v = ppt["attendeeMarkerAutomationId"] as? String, !v.isEmpty {
+                cfg.powerPointLive.attendeeMarkerAutomationId = v
+            }
+            if let v = ppt["slidePositionPattern"] as? String, !v.isEmpty {
+                cfg.powerPointLive.slidePositionPattern = v
+            }
+            if let v = ppt["toolColorPattern"] as? String, !v.isEmpty {
+                cfg.powerPointLive.toolColorPattern = v
+            }
+            if let v = ppt["toolThicknessPattern"] as? String, !v.isEmpty {
+                cfg.powerPointLive.toolThicknessPattern = v
+            }
+        }
         guard let controls = obj["controls"] as? [String: Any] else { return cfg }
         for (key, raw) in controls {
             guard let o = raw as? [String: Any] else { continue }
             var spec = cfg.controls[key] ?? ControlSpec()
             if let v = o["automationId"] as? String { spec.automationId = v }
+            if let v = o["name"] as? String { spec.name = v }
+            if let v = o["withinClass"] as? String { spec.withinClass = v }
             if let v = o["menu"] as? String { spec.menu = v }
             if let v = o["submenu"] as? String { spec.submenu = v }
             if let v = o["menuItemAutomationId"] as? String { spec.menuItemAutomationId = v }

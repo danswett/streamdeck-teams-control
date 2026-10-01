@@ -62,6 +62,12 @@ if hasFlag(args, "-h") || hasFlag(args, "--help") {
       {"id":4,"cmd":"ping"}
       {"cmd":"shutdown"}
 
+    Answered, but not implemented here - they report that rather than looking
+    like an unrecognised command:
+      {"id":5,"cmd":"thumb","arg":"current"}   slide capture
+      {"id":6,"cmd":"directmode"}              drive Teams through a debug port
+      {"id":7,"cmd":"forget","arg":"current"}  (no reply, as on Windows)
+
     """, stderr)
     exit(0)
 }
@@ -140,6 +146,37 @@ func handle(_ item: WorkItem) {
             "id": item.id,
             "menu": item.menu ?? "",
             "elements": rows,
+        ])
+    case "thumb":
+        // Answered in the shape the plugin waits for. Letting this fall through
+        // to "unknown command" below sent back a "result", which the plugin
+        // routes to a different table entirely - so the request sat in its
+        // capture table until the capture timeout expired, and every slide
+        // preview cost that wait instead of failing at once.
+        IO.emit([
+            "type": "thumb",
+            "id": item.id,
+            "ok": false,
+            "which": item.arg ?? "current",
+            "end": false,
+            "error": "slide capture is not implemented in the macOS sidecar yet",
+        ])
+    case "forget":
+        // No reply, matching Windows: the plugin sends this to drop a held
+        // slide and has nothing to do with an answer. There is no slide held
+        // here, so there is nothing to drop either.
+        break
+    case "directmode":
+        // Direct mode drives Teams through a debugging port the user opens
+        // themselves, and has no macOS implementation. Answered rather than
+        // refused so anything asking gets a usable "no" with a reason.
+        IO.emit([
+            "type": "directmode",
+            "id": item.id,
+            "ok": true,
+            "usable": false,
+            "reason": "direct mode is not implemented in the macOS sidecar",
+            "deckShared": false,
         ])
     case "shutdown":
         running = false

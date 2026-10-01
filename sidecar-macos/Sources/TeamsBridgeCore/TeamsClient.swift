@@ -29,6 +29,9 @@ public final class TeamsClient {
     private var lastStates: [String: Bool] = [:]
     private var lastAvailable: [String: Bool] = [:]
     private var lastRole: String?
+    /// Last ink colour and thickness seen per tool, carried across the moments
+    /// the tool button leaves the tree - which is whenever its flyout opens.
+    private var lastInk: [String: String] = [:]
     private var appEl: AXUIElement?
     private var teamsPID: pid_t = 0
 
@@ -98,8 +101,11 @@ public final class TeamsClient {
                 snap.states[key] = value
             }
             snap.available = lastAvailable
+            for (key, value) in lastInk { snap.context[key] = value }
             return snap
         }
+
+        readSlidePosition(nodes, into: &snap)
 
         for (key, spec) in config.controls {
             if let need = spec.requiresRole, need.lowercased() != (role ?? "") {
@@ -132,15 +138,17 @@ public final class TeamsClient {
                 continue
             }
 
-            let node = resolve(spec, byID: byID)
+            let node = resolve(spec, byID: byID, nodes: nodes)
             guard let node else {
                 snap.available[key] = false
                 lastAvailable[key] = false
                 if snap.states[key] == nil, let prev = lastStates[key] { snap.states[key] = prev }
+                if spec.colorFromName { readInkStyle(key, label: "", into: &snap) }
                 continue
             }
             snap.available[key] = node.enabled
             lastAvailable[key] = node.enabled
+            if spec.colorFromName { readInkStyle(key, label: node.label, into: &snap) }
             if spec.activeWhenPresentAutomationId == nil {
                 applyNameState(spec, node: node, key: key, snap: &snap)
             }
@@ -169,10 +177,67 @@ public final class TeamsClient {
     }
 
     private func readPPTRole(byID: [String: AXNode]) -> String? {
-        if byID["stopPresentingPptBtn"] != nil { return "presenter" }
-        if byID["takeControlPptBtn"] != nil { return "attendee" }
-        if byID["ppt-previewer-root"] != nil { return "attendee" }
+        let ppt = config.powerPointLive
+        if byID[ppt.presenterMarkerAutomationId] != nil { return "presenter" }
+        if byID[ppt.attendeeMarkerAutomationId] != nil { return "attendee" }
+        if byID[ppt.rootAutomationId] != nil { return "attendee" }
         return nil
+    }
+
+    /// First capture group of a pattern against a label, or nil.
+    static func capture(_ rx: NSRegularExpression?, from text: String, group: Int = 1) -> String? {
+        guard let rx, !text.isEmpty else { return nil }
+        let range = NSRange(text.startIndex..., in: text)
+        guard let m = rx.firstMatch(in: text, options: [], range: range),
+              m.numberOfRanges > group,
+              let r = Range(m.range(at: group), in: text) else { return nil }
+        return String(text[r])
+    }
+
+    /// "3 of 12" -> ("3", "12"). The counter's name is the only place
+    /// PowerPoint Live publishes either number.
+    static func slidePosition(from text: String, _ rx: NSRegularExpression?) -> (at: String, of: String)? {
+        guard let at = capture(rx, from: text, group: 1),
+              let of = capture(rx, from: text, group: 2) else { return nil }
+        return (at, of)
+    }
+
+    /**
+     * Where in the deck we are, read off the slide counter's label.
+     *
+     * PowerPoint Live publishes "3 of 12" as the name of a control and nowhere
+     * else, so there is nothing to look it up by - only a pattern to recognise
+     * it with, which is why the pattern is configurable.
+     */
+    private func readSlidePosition(_ nodes: [AXNode], into snap: inout MeetingSnapshot) {
+        let rx = config.powerPointLive.slidePositionRegex
+        for node in nodes where !node.label.isEmpty {
+            guard let found = Self.slidePosition(from: node.label, rx) else { continue }
+            snap.context["ppt.slide"] = found.at
+            snap.context["ppt.slides"] = found.of
+            return
+        }
+    }
+
+    /**
+     * Ink colour and thickness, read off a drawing tool's own name.
+     *
+     * The name reads like "Pen: Light blue, Thickness 3". Both are published
+     * only there, so a key showing the pen's colour has nothing else to go on.
+     * Carried forward when the tool leaves the tree, which it does whenever its
+     * own flyout opens - the one moment the colour is most likely to change.
+     */
+    private func readInkStyle(_ key: String, label: String, into snap: inout MeetingSnapshot) {
+        let ppt = config.powerPointLive
+        for (suffix, rx) in [("color", ppt.toolColorRegex), ("thickness", ppt.toolThicknessRegex)] {
+            let contextKey = "ppt.\(suffix).\(key)"
+            if let value = Self.capture(rx, from: label) {
+                snap.context[contextKey] = value
+                lastInk[contextKey] = value
+            } else if let held = lastInk[contextKey] {
+                snap.context[contextKey] = held
+            }
+        }
     }
 
     private struct MeetingWindow {
@@ -238,12 +303,55 @@ public final class TeamsClient {
         return candidates.first
     }
 
-    private func resolve(_ spec: ControlSpec, byID: [String: AXNode]) -> AXNode? {
+    /**
+     * Finds the element a control describes.
+     *
+     * An identifier wherever there is one: it is locale-independent and unique.
+     * Falling back to the accessible name is only for the "Stop presenting?"
+     * confirmation, whose buttons carry no id - and a bare name match is not
+     * enough there, because the toolbar button that raises that dialog reads
+     * the same. Two things separate them, and both are required: the dialog's
+     * button has no identifier at all, and it sits inside an element whose
+     * class says so.
+     */
+    private func resolve(_ spec: ControlSpec, byID: [String: AXNode], nodes: [AXNode]) -> AXNode? {
         if !spec.automationId.isEmpty, let n = byID[spec.automationId] { return n }
-        return nil
+        guard let rx = spec.nameRegex else { return nil }
+
+        let named = nodes.filter { $0.id.isEmpty && spec.matches(rx, text: $0.label) && $0.enabled }
+        guard let want = spec.withinClass, !want.isEmpty else { return named.first }
+        return named.first { within(class: want, of: $0) } ?? nil
     }
 
+    /// Whether an element, or anything it hangs off, carries this CSS class.
+    private func within(class want: String, of node: AXNode) -> Bool {
+        for el in [node.element] + AX.ancestors(node.element, limit: 8) {
+            if AX.classList(el).localizedCaseInsensitiveContains(want) { return true }
+        }
+        return false
+    }
+
+    /**
+     * Targets the plugin knows how to ask for and this sidecar cannot yet do.
+     *
+     * Named rather than left to fall through to "unknown target", which reads
+     * like a mismatched build or a corrupted config and sends anyone debugging
+     * it looking in the wrong place. Each of these is a real Windows feature
+     * with no macOS implementation: driving the ink flyout, jumping to a slide
+     * on the filmstrip, and the meeting timer.
+     */
+    static let unimplementedTargets: [String: String] = [
+        "ppt-ink-color": "ink colour",
+        "ppt-ink-thickness": "ink thickness",
+        "ppt-goto-slide": "jumping to a slide",
+        "timer-toggle": "the meeting timer",
+        "timer-reset": "the meeting timer",
+    ]
+
     public func invoke(target: String, arg: String?) -> (ok: Bool, error: String?) {
+        if let what = Self.unimplementedTargets[target] {
+            return (false, "\(what) is not implemented in the macOS sidecar yet")
+        }
         guard config.controls[target] != nil else { return (false, "unknown target '\(target)'") }
         guard attach(), appEl != nil else { return (false, "Teams is not running") }
         guard AX.isTrusted() else { return (false, "not trusted for Accessibility") }
@@ -314,14 +422,14 @@ public final class TeamsClient {
             if let off = nodes.first(where: { spec.matches(spec.offRegex, text: $0.label) && $0.enabled }) {
                 return press(off.element, name: target)
             }
-            if let selfNode = resolve(spec, byID: byID) {
+            if let selfNode = resolve(spec, byID: byID, nodes: nodes) {
                 return press(selfNode.element, name: target)
             }
             return (false, "could not find how to turn '\(target)' off")
         }
 
         if spec.menu == nil || spec.menu?.isEmpty == true {
-            guard let node = resolve(spec, byID: byID) else { return (false, "control '\(target)' not found") }
+            guard let node = resolve(spec, byID: byID, nodes: nodes) else { return (false, "control '\(target)' not found") }
             if !node.enabled { return (false, "control '\(target)' is disabled") }
             let result = press(node.element, name: target)
             if result.ok { rememberToggle(target) }
@@ -341,29 +449,38 @@ public final class TeamsClient {
             }
         }
 
-        guard let menuID = spec.menu, let host = byID[menuID] else {
-            return (false, "menu '\(spec.menu ?? "")' not found")
+        guard let menuID = spec.menu else { return (false, "menu '' not found") }
+
+        // Teams rebuilds the toolbar after a flyout closes, and Chromium only
+        // keeps an accessibility tree alive while something is using it - so
+        // the button that was there a moment ago can be missing from the tree
+        // while still plainly on screen. Waking it costs a few tens of
+        // milliseconds and only happens on a path that has already failed,
+        // which is cheaper than telling the user the press did not work.
+        var host = byID[menuID]
+        if host == nil {
+            IO.err("menu '\(menuID)' not in the tree; waking accessibility and retrying")
+            AX.bootstrap(appEl)
+            Thread.sleep(forTimeInterval: Self.retrySettle)
+            host = Tree.indexByID(Tree.walk(windows: AX.windows(appEl)))[menuID]
         }
+        guard let host else { return (false, "menu '\(menuID)' not found") }
         if !host.enabled { return (false, "menu '\(menuID)' is disabled") }
 
         let opened = press(host.element, name: menuID)
         if !opened.ok { return (false, "could not open menu '\(menuID)'") }
 
-        let deadline = Date().addingTimeInterval(2.5)
-        var item: AXNode?
-        while Date() < deadline && item == nil {
-            Thread.sleep(forTimeInterval: 0.05)
+        var item = findMenuItem(spec, itemID: itemID, itemToggleID: itemToggleID, within: 2.5)
+
+        // If the toolbar is still showing, the menu never opened: Teams
+        // swallows exactly one press on the trigger after a previous selection,
+        // including one the user made by hand. Pressing it again opens it.
+        if item == nil, Tree.containsAny(windows: AX.windows(appEl), ids: [config.meetingProbeAutomationId]) {
+            IO.err("menu '\(menuID)' did not open; pressing it again")
+            Thread.sleep(forTimeInterval: Self.retrySettle)
             let live = Tree.indexByID(Tree.walk(windows: AX.windows(appEl)))
-            if let sub = spec.submenu, !sub.isEmpty, let subNode = live[sub], item == nil {
-                _ = press(subNode.element, name: sub)
-                Thread.sleep(forTimeInterval: 0.2)
-            }
-            for id in [itemID, itemToggleID].compactMap({ $0 }) where !id.isEmpty {
-                if let found = live[id], found.enabled { item = found; break }
-            }
-            if item == nil, let rx = spec.menuItemRegex {
-                let liveNodes = Tree.walk(windows: AX.windows(appEl))
-                item = liveNodes.first { spec.matches(rx, text: $0.label) && $0.enabled }
+            if press((live[menuID] ?? host).element, name: menuID).ok {
+                item = findMenuItem(spec, itemID: itemID, itemToggleID: itemToggleID, within: 2.0)
             }
         }
 
@@ -383,6 +500,44 @@ public final class TeamsClient {
         if result.ok { lastStates[target] = true }
         scheduleDismissal(anchor: item, hostID: menuID)
         return result
+    }
+
+    /// Pause before re-pressing a menu trigger Teams swallowed the first press
+    /// on. Pressing again immediately reads as a double-press on the same
+    /// control, which opens the menu and closes it again.
+    private static let retrySettle: TimeInterval = 0.12
+
+    /// Waits for a flyout to populate and hands back the item we came for.
+    private func findMenuItem(
+        _ spec: ControlSpec,
+        itemID: String?,
+        itemToggleID: String?,
+        within timeout: TimeInterval
+    ) -> AXNode? {
+        guard let appEl else { return nil }
+        let deadline = Date().addingTimeInterval(timeout)
+        var openedSubmenu = false
+        while Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
+            let liveNodes = Tree.walk(windows: AX.windows(appEl))
+            let live = Tree.indexByID(liveNodes)
+            // Once only. A nested menu stays in the tree after it opens, so
+            // pressing it on every pass would close it again.
+            if let sub = spec.submenu, !sub.isEmpty, !openedSubmenu, let subNode = live[sub] {
+                openedSubmenu = true
+                _ = press(subNode.element, name: sub)
+                Thread.sleep(forTimeInterval: 0.2)
+                continue
+            }
+            for id in [itemID, itemToggleID].compactMap({ $0 }) where !id.isEmpty {
+                if let found = live[id], found.enabled { return found }
+            }
+            if let rx = spec.menuItemRegex,
+               let found = liveNodes.first(where: { spec.matches(rx, text: $0.label) && $0.enabled }) {
+                return found
+            }
+        }
+        return nil
     }
 
     /// Owes a dismissal to whoever sends the result. See runPendingCleanup.
