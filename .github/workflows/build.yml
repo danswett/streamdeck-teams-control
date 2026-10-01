@@ -50,6 +50,13 @@ jobs:
       - name: Unit tests (TypeScript, on a POSIX filesystem)
         run: npm run test:ts
 
+      # The Swift half has its own suite now. It covers the rules that decide
+      # what the sidecar does while a Teams flyout is open (#7) - none of which
+      # can be re-checked on the Windows machine the plugin is developed on,
+      # and all of which a tester would otherwise be the first to find.
+      - name: Unit tests (Swift sidecar)
+        run: npm run test:sidecar:macos
+
       - name: Write the notary key, if configured
         id: notary
         env:
