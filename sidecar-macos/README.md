@@ -28,7 +28,10 @@ sidecar would be broken without either:
 
 - A meeting is recognised by any of `meetingMarkerAutomationIds`, not by the
   mic button alone. Probing for one toolbar button reads as "meeting ended"
-  every time a menu opens.
+  every time a menu opens. The markers that only exist inside a flyout count
+  for a minute after the toolbar was last seen for certain — a popup can only
+  be covering a toolbar that was there a moment ago, and a press clears an open
+  flyout and looks again however long it has been up.
 - Pressing a flyout item through accessibility fires its handler but not the
   outside click that normally dismisses the popup, so the sidecar closes it
   itself after answering. Leaving it open wedges every later press, reactions

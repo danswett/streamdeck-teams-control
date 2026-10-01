@@ -189,8 +189,28 @@ public final class TeamsClient {
         byID[config.meetingProbeAutomationId] != nil
     }
 
+    /**
+     * How long a flyout marker on its own is allowed to stand for a meeting.
+     *
+     * Widening the markers is what keeps an open flyout from reading as
+     * "meeting ended", and the cost of that is that a button named like one of
+     * them somewhere else in Teams could make a window that is not a meeting
+     * look like one. A popup can only be covering a toolbar that was there a
+     * moment ago, so requiring one to have been seen recently gives the width
+     * where it is needed and nowhere else.
+     *
+     * Generous, because it only decides what the keys display: a press clears
+     * an open flyout and looks again regardless of how long it has been up.
+     */
+    private static let flyoutMarkerGrace: TimeInterval = 60
+
+    /// When the meeting toolbar was last seen in the tree for certain.
+    private var toolbarSeenAt: Date?
+
     private func pickMeetingWindow(wins: [AXUIElement], byID: [String: AXNode]) -> MeetingWindow? {
-        let markers = config.meetingMarkers
+        let probe = config.meetingProbeAutomationId
+        let recentlyInAMeeting = toolbarSeenAt.map { Date().timeIntervalSince($0) < Self.flyoutMarkerGrace } ?? false
+        let markers = recentlyInAMeeting ? config.meetingMarkers : [probe]
         guard markers.contains(where: { byID[$0] != nil }) else { return nil }
 
         var candidates: [MeetingWindow] = []
@@ -204,9 +224,11 @@ public final class TeamsClient {
                 window: w,
                 title: title,
                 rich: ids[config.fullToolbarAutomationId] != nil,
-                hasToolbar: isToolbarVisible(ids)
+                hasToolbar: ids[probe] != nil
             ))
         }
+        if candidates.contains(where: { $0.hasToolbar }) { toolbarSeenAt = Date() }
+
         if let rich = candidates.first(where: { $0.rich }) { return rich }
         // Teams renders some popups as windows of their own, and one of those
         // can match on a flyout marker alone. The window still holding the
