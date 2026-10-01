@@ -137,6 +137,21 @@ public enum AX {
         string(el, "AXDOMIdentifier") ?? string(el, kAXIdentifierAttribute as String)
     }
 
+    /**
+     * The CSS classes Chromium publishes for an element, as one string.
+     *
+     * The macOS counterpart of the Windows sidecar's ClassName, and the only
+     * way to tell Teams' "Stop presenting?" confirmation from the toolbar
+     * button that opens it, since neither carries a DOM id and both read
+     * "Stop presenting".
+     *
+     * Read on demand rather than captured during a walk: it is one more
+     * attribute fetch per element, and a walk already visits thousands.
+     */
+    static func classList(_ el: AXUIElement) -> String {
+        string(el, "AXDOMClassList") ?? string(el, "AXDOMClass") ?? ""
+    }
+
     static func label(_ el: AXUIElement) -> String {
         string(el, kAXDescriptionAttribute as String)
             ?? string(el, kAXTitleAttribute as String)
@@ -201,11 +216,29 @@ struct AXNode {
 }
 
 enum Tree {
+    /// Last time a truncated walk was reported, so a wedged tree does not fill
+    /// the log with the same line at the poll interval.
+    private static var lastCapWarning = Date.distantPast
+
+    /**
+     * Says so when a walk ran out of room.
+     *
+     * A truncated walk and a missing control are indistinguishable to
+     * everything above here - both end as "control not found" - so the one
+     * case that is a limit of this code rather than a change in Teams has to
+     * announce itself, or it would be diagnosed as a selector problem.
+     */
+    private static func reportCap(_ visited: Int, _ maxNodes: Int) {
+        guard Date().timeIntervalSince(lastCapWarning) > 30 else { return }
+        lastCapWarning = Date()
+        IO.err("warning: stopped walking the accessibility tree at \(visited) of a \(maxNodes)-node limit; a control past that point will read as missing")
+    }
+
     static func walk(windows: [AXUIElement], maxDepth: Int = 40, maxNodes: Int = 12_000) -> [AXNode] {
         var nodes: [AXNode] = []
         var stack: [(AXUIElement, Int)] = windows.map { ($0, 0) }
         while let (el, depth) = stack.popLast() {
-            if nodes.count >= maxNodes { break }
+            if nodes.count >= maxNodes { reportCap(nodes.count, maxNodes); break }
             nodes.append(AXNode(
                 element: el,
                 role: AX.string(el, kAXRoleAttribute as String) ?? "",
@@ -255,7 +288,7 @@ enum Tree {
         var visited = 0
         var stack: [(AXUIElement, Int)] = windows.map { ($0, 0) }
         while let (el, depth) = stack.popLast() {
-            if visited >= maxNodes { break }
+            if visited >= maxNodes { reportCap(visited, maxNodes); break }
             visited += 1
             if let id = AX.identifier(el), wanted.contains(id) { return true }
             if depth < maxDepth {

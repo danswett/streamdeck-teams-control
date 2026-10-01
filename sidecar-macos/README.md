@@ -42,6 +42,13 @@ Dismissal runs after the result is sent, so it does not show up as a key that
 stays lit, and it is bounded so a popup that will not close cannot stall the
 queue. It is logged: look for `flyout dismissed by …` in the plugin log.
 
-Known gaps vs Windows: polling instead of AXObserver; `AXPress` raises the Teams
-window for ~300ms (then we `AXRaise` the previous app); PowerPoint Live ink /
-slide thumbnails (`thumb` / `forget`) are not implemented.
+Known gaps vs Windows, all of which now *say so* rather than failing as though
+something were broken: polling instead of AXObserver; `AXPress` raises the Teams
+window for ~300ms (then we `AXRaise` the previous app); slide capture (`thumb`),
+ink colour and thickness actuation (`ppt-ink-color` / `ppt-ink-thickness`),
+slide jumping (`ppt-goto-slide`), the meeting timer (`timer-toggle` /
+`timer-reset`) and direct mode are not implemented.
+
+Ink colour, ink thickness and the slide counter are *read* and published in the
+snapshot context, so keys and dials display correctly even where they cannot yet
+be driven.

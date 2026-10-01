@@ -9,6 +9,11 @@ import XCTest
  * tester did.
  */
 final class ShippedSelectorsTests: XCTestCase {
+    /// The shipped overlay, shared with the parity suite.
+    static func shippedJSON() -> String? {
+        shipped.isEmpty ? nil : shipped
+    }
+
     private static let shipped: String = {
         // .../sidecar-macos/Tests/TeamsBridgeCoreTests/<this file>
         var dir = URL(fileURLWithPath: #filePath)
