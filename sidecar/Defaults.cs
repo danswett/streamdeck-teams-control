@@ -36,6 +36,16 @@ public static class Defaults
                 ActivePattern = @"camera\s+off",
                 InactivePattern = @"camera\s+on"
             },
+            ["camera-select"] = new()
+            {
+                Menu = "video-button-configure",
+                MenuItemAutomationId = "{arg}"
+            },
+            ["camera-swap"] = new()
+            {
+                Menu = "video-button-configure",
+                MenuItemAutomationId = "{arg}"
+            },
             ["leave"] = new() { AutomationId = "hangup-button" },
             ["share"] = new()
             {

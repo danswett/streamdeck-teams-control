@@ -15,6 +15,12 @@ globalThis.ACTION_DESCRIPTIONS = {
 	"com.bad-duck.teamscontrol.camera":
 		"Turns your camera on or off. The key follows the live state, including changes made in Teams itself.",
 
+	"com.bad-duck.teamscontrol.camera-select":
+		"Switches Teams to the webcam chosen below, without toggling your camera on or off. The list comes from Windows and includes virtual cameras. The key shows availability, not the currently selected webcam.",
+
+	"com.bad-duck.teamscontrol.camera-swap":
+		"Swaps between two different webcams. If Teams is using the first camera, selects the second; otherwise selects the first. Reads Teams on every press, so changes made elsewhere stay in sync. Both devices must be available. Preserves video on/off; the key shows availability, not the selected webcam.",
+
 	"com.bad-duck.teamscontrol.hand":
 		"Raises or lowers your hand. It lives in Teams' React flyout, which the key opens, clicks and closes in one press. That flyout cannot be read without opening it, so the key shows whatever your last press set.",
 

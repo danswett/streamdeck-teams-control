@@ -1,4 +1,5 @@
-import { action, type KeyDownEvent } from "@elgato/streamdeck";
+import streamDeck, { action, type KeyDownEvent, type SendToPluginEvent } from "@elgato/streamdeck";
+import type { JsonValue } from "@elgato/utils";
 
 import { bridge, type TeamsState } from "../bridge";
 import {
@@ -48,6 +49,53 @@ export class CameraAction extends TeamsAction {
 			active: state.states["camera"],
 			available: usable(state, "camera")
 		});
+	}
+}
+
+type CameraSettings = { cameraId?: string; secondCameraId?: string };
+
+abstract class WebcamAction extends TeamsAction<CameraSettings> {
+	protected abstract override targetFor(): string;
+
+	protected override draw(state: TeamsState): string {
+		return renderSimple("camera", usable(state, this.targetFor()));
+	}
+
+	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, CameraSettings>): Promise<void> {
+		if (typeof ev.payload !== "object" || ev.payload === null ||
+			!("event" in ev.payload) ||
+			(ev.payload.event !== "webcams" && ev.payload.event !== "webcams-second")) return;
+
+		const result = await bridge.cameras();
+		// The user may have selected another key while enumeration was running.
+		if (streamDeck.ui.action?.id !== ev.action.id) return;
+		await streamDeck.ui.sendToPropertyInspector({
+			event: ev.payload.event,
+			items: (result.cameras ?? []).map((camera) => ({ label: camera.name, value: camera.id })),
+			error: result.ok ? "" : result.error ?? "Could not load webcams"
+		});
+	}
+}
+
+@action({ UUID: "com.bad-duck.teamscontrol.camera-select" })
+export class SelectCameraAction extends WebcamAction {
+	protected override targetFor(): string {
+		return "camera-select";
+	}
+
+	protected override argFor(settings: CameraSettings): string | undefined {
+		return settings.cameraId;
+	}
+}
+
+@action({ UUID: "com.bad-duck.teamscontrol.camera-swap" })
+export class SwapCameraAction extends WebcamAction {
+	protected override targetFor(): string {
+		return "camera-swap";
+	}
+
+	protected override argFor(settings: CameraSettings): string {
+		return JSON.stringify([settings.cameraId ?? "", settings.secondCameraId ?? ""]);
 	}
 }
 

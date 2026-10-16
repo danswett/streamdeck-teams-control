@@ -179,6 +179,42 @@
 			]
 		},
 		{
+			"Name": "Select Webcam",
+			"UUID": "com.bad-duck.teamscontrol.camera-select",
+			"Icon": "imgs/actions/camera/icon",
+			"Tooltip": "Switch Teams to the webcam chosen in this button's settings",
+			"PropertyInspectorPath": "ui/camera-select.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": true,
+			"States": [
+				{
+					"Image": "imgs/actions/camera/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "Swap Camera",
+			"UUID": "com.bad-duck.teamscontrol.camera-swap",
+			"Icon": "imgs/actions/camera/icon",
+			"Tooltip": "Toggle Teams between two webcams chosen in this button's settings",
+			"PropertyInspectorPath": "ui/camera-select.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": true,
+			"States": [
+				{
+					"Image": "imgs/actions/camera/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
 			"Name": "Raise Hand",
 			"UUID": "com.bad-duck.teamscontrol.hand",
 			"Icon": "imgs/actions/hand/icon",

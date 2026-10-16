@@ -515,6 +515,35 @@ public static class Program
                 break;
             }
 
+            case "cameras":
+            {
+                CameraDevice[] cameras = [];
+                string? error = null;
+                try { cameras = Cameras.Enumerate(); }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"webcam enumeration failed: {ex.Message}");
+                    error = "could not enumerate Windows webcams";
+                }
+                Emit(w =>
+                {
+                    w.WriteString("type", "cameras");
+                    w.WriteNumber("id", item.Id);
+                    w.WriteBoolean("ok", error is null);
+                    if (error is not null) w.WriteString("error", error);
+                    w.WriteStartArray("cameras");
+                    foreach (var camera in cameras)
+                    {
+                        w.WriteStartObject();
+                        w.WriteString("id", camera.Id);
+                        w.WriteString("name", camera.Name);
+                        w.WriteEndObject();
+                    }
+                    w.WriteEndArray();
+                });
+                break;
+            }
+
             case "thumb":
             {
                 // Its own message type rather than a result, because it carries
