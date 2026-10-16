@@ -82,7 +82,7 @@ the same accessibility layer screen readers use.
 |---|---|---|
 | **Mute** | ✅ muted / unmuted | Slashed glyph when muted |
 | **Camera** | ✅ on / off | Slashed glyph when off |
-| **Select Webcam** | availability only | Choose a specific Windows webcam in each button's settings; does not toggle camera on/off |
+| **Change Camera** | availability only | Choose a specific Windows webcam in each button's settings; does not toggle camera on/off |
 | **Swap Camera** | availability only | Toggle between two configured webcams, using Teams' current selection |
 | **Raise Hand** | availability only | Lifts on press |
 | **React** — Like, Love, Applause, Laugh, Wow | availability only | Five actions, each animates on press |
@@ -92,7 +92,7 @@ the same accessibility layer screen readers use.
 | **People** | availability only | Toggles the participant roster |
 | **Leave** | availability only | Press opens Teams' confirmation; hold to answer it |
 
-**Select Webcam** lists Windows video inputs, including virtual cameras, without
+**Change Camera** lists Windows video inputs, including virtual cameras, without
 requiring a meeting. Add one key per webcam and choose its target in the key's
 settings. Use **Refresh webcams** after connecting a device. Switching requires
 an active meeting and that exact device to be available in Teams; a missing

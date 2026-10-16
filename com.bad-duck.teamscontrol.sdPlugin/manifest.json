@@ -179,7 +179,7 @@
 			]
 		},
 		{
-			"Name": "Select Webcam",
+			"Name": "Change Camera",
 			"UUID": "com.bad-duck.teamscontrol.camera-select",
 			"Icon": "imgs/actions/camera/icon",
 			"Tooltip": "Switch Teams to the webcam chosen in this button's settings",
