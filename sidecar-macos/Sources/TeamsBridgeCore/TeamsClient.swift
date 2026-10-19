@@ -338,9 +338,11 @@ public final class TeamsClient {
      * like a mismatched build or a corrupted config and sends anyone debugging
      * it looking in the wrong place. Each of these is a real Windows feature
      * with no macOS implementation: driving the ink flyout, jumping to a slide
-     * on the filmstrip, and the meeting timer.
+     * on the filmstrip, the meeting timer, and selecting cameras.
      */
     static let unimplementedTargets: [String: String] = [
+        "camera-select": "camera selection",
+        "camera-swap": "camera swapping",
         "ppt-ink-color": "ink colour",
         "ppt-ink-thickness": "ink thickness",
         "ppt-goto-slide": "jumping to a slide",

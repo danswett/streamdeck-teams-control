@@ -62,6 +62,14 @@ describe("webcam discovery bridge", () => {
 		}
 	);
 
+	it("surfaces the macOS unsupported response immediately", async () => {
+		const result = bridge.cameras();
+		const { id } = JSON.parse(proc.stdin.write.mock.calls[0][0] as string);
+		const error = "camera enumeration is not implemented in the macOS sidecar yet";
+		proc.stdout.emit("data", JSON.stringify({ type: "cameras", id, ok: false, error }) + "\n");
+		expect(await result).toEqual({ ok: false, error });
+	});
+
 	it("surfaces sidecar errors, timeouts and process exit", async () => {
 		const failed = bridge.cameras();
 		const { id } = JSON.parse(proc.stdin.write.mock.calls[0][0] as string);

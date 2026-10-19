@@ -147,6 +147,13 @@ func handle(_ item: WorkItem) {
             "menu": item.menu ?? "",
             "elements": rows,
         ])
+    case "cameras":
+        IO.emit([
+            "type": "cameras",
+            "id": item.id,
+            "ok": false,
+            "error": "camera enumeration is not implemented in the macOS sidecar yet",
+        ])
     case "thumb":
         // Answered in the shape the plugin waits for. Letting this fall through
         // to "unknown command" below sent back a "result", which the plugin

@@ -45,7 +45,7 @@ final class ParityTests: XCTestCase {
     func testUnimplementedTargetsAreNamed() {
         // These used to fall through to "unknown target", which reads like a
         // mismatched build and sends anyone debugging it to the wrong place.
-        for target in ["ppt-ink-color", "ppt-ink-thickness", "ppt-goto-slide", "timer-toggle", "timer-reset"] {
+        for target in ["ppt-ink-color", "ppt-ink-thickness", "ppt-goto-slide", "timer-toggle", "timer-reset", "camera-select", "camera-swap"] {
             let message = TeamsClient.unimplementedTargets[target]
             XCTAssertNotNil(message, "\(target) should report itself unimplemented")
             XCTAssertFalse(message?.isEmpty ?? true)

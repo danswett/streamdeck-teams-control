@@ -66,6 +66,10 @@ internal static class Cameras
                     moniker.GetDisplayName(null!, null!, out var displayName);
                     cameras.Add(new(DeviceId(displayName), (string)name));
                 }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"could not enumerate a Windows webcam; skipping device: {ex.Message}");
+                }
                 finally
                 {
                     if (bag is not null) Marshal.ReleaseComObject(bag);

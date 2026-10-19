@@ -4145,13 +4145,13 @@ public sealed class TeamsClient : IDisposable
                 var second = FindInPopup(win, [cameraPair[1]], null, 1500);
                 if (second is null || !SafeEnabled(item) || !SafeEnabled(second))
                     return (false, "both configured webcams must be available in Teams to swap");
-                var firstSelection = item.Patterns.SelectionItem.PatternOrDefault;
-                var secondSelection = second.Patterns.SelectionItem.PatternOrDefault;
+                var firstSelection = IsSelected(item);
+                var secondSelection = IsSelected(second);
                 if (firstSelection is null || secondSelection is null)
                     return (false, "Teams did not expose webcam selection");
                 // Read Teams, not the previous press: manual changes and other
                 // camera buttons must not put this toggle out of sync.
-                if (firstSelection.IsSelected.Value) item = second;
+                if (firstSelection == true) item = second;
             }
 
             // Radio-style menus need the "off" entry to undo the selection.
@@ -4176,15 +4176,15 @@ public sealed class TeamsClient : IDisposable
 
             if (target is "camera-select" or "camera-swap")
             {
-                var selection = item.Patterns.SelectionItem.PatternOrDefault;
+                var selection = IsSelected(item);
                 if (selection is null) return (false, "Teams did not expose webcam selection");
-                if (selection.IsSelected.Value) return (true, null);
-                if (!TryInvoke(item)) return (false, "could not select the configured webcam");
+                if (selection == true) return (true, null);
+                if (!Press(item)) return (false, "could not select the configured webcam");
                 pressed = true;
                 var deadline = Environment.TickCount64 + 1500;
                 do
                 {
-                    if (selection.IsSelected.Value) return (true, null);
+                    if (IsSelected(item) == true) return (true, null);
                     Thread.Sleep(PopupScanIntervalMs);
                 } while (Environment.TickCount64 < deadline);
                 return (false, "Teams did not confirm the webcam selection");
@@ -4295,6 +4295,18 @@ public sealed class TeamsClient : IDisposable
             return (r.X + r.Width / 2, r.Y + r.Height / 2);
         }
         catch { return null; }
+    }
+
+    private static bool? IsSelected(AutomationElement el)
+    {
+        try
+        {
+            var selection = el.Patterns.SelectionItem.PatternOrDefault;
+            if (selection is not null && selection.IsSelected.IsSupported)
+                return selection.IsSelected.ValueOrDefault;
+        }
+        catch { }
+        return null;
     }
 
     /// <summary>Reads a menu item's checked state, where it exposes one.</summary>
