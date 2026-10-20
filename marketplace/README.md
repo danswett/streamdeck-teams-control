@@ -61,7 +61,7 @@ The first 250 characters are what search engines show, so the opening sentences
 carry the requirements and the differentiator rather than a preamble.
 
 ```
-Control Microsoft Teams meetings from your Stream Deck: mute, camera, raise hand, the five reactions, background blur, screen share, chat, people and leave. Every key shows the real state of the meeting, so a muted mic looks muted before you press it.
+Control Microsoft Teams meetings from your Stream Deck: mute, camera, raise hand, the five reactions, background blur, screen share, chat, people and leave. Every key shows the real state of the meeting, so a muted mic looks muted before you press it. Switch webcams with a key, or swap between two.
 
 Full PowerPoint Live control too. Watching a deck? Move through slides at your own pace, jump back in sync, open grid view, or pop the deck into its own window, without touching anyone else's view. Presenting? Slide navigation, laser pointer, pen, highlighter and eraser, presenter view, private view and stop sharing, with a live slide counter. Keys follow your role, so taking control re-lights the deck.
 
@@ -69,16 +69,18 @@ On a Stream Deck + or + XL the dials set ink color and thickness, move through t
 
 Three bundled profiles can follow the meeting: meeting controls when you join, attendee or presenter tools when a deck goes up, and back again when it ends. Every Stream Deck gets its own set, laid out for its grid.
 
-Teams never needs focus and is never pulled to the front, so you can keep working while you mute, react or raise your hand. No keystrokes are sent, so nothing leaks into whatever you are typing in, and no global hotkeys are taken.
+Teams never needs focus and is never pulled to the front, so you can keep working while you mute, react or raise your hand. No keystrokes are sent, so nothing leaks into whatever you are typing in, and no hotkeys are taken.
 
-Keys dim when no meeting is running, so there is nothing to press by mistake.
+Keys dim when no meeting is running.
 
 Requires Windows 10 or later, Stream Deck 7.1 or later, and the Microsoft Teams desktop app. Not affiliated with or endorsed by Microsoft.
 ```
 
 1,497 characters, within the 1,500 limit and above the 250 minimum. The opening
 two sentences run to 251 characters, so the search-engine snippet reads as
-complete sentences rather than breaking mid-clause.
+complete sentences rather than breaking mid-clause. 1.11.0 added the webcam
+sentence and made room for it by trimming "global" from the hotkeys claim and
+the second half of the sentence about dimmed keys.
 
 Character counts are asserted by `tests/marketplace.test.ts`, which also checks
 that the copy does not name a control the plugin no longer ships — an earlier
@@ -142,18 +144,43 @@ listing rather than a first publication. Use the version notes below; they
 describe what changed, which is what an existing user opens the listing to find
 out.
 
-**The published listing is on 1.5.** Six submissions were made after it — 1.8.2,
-1.8.3, 1.9.4, 1.9.6, 1.9.7 and 1.9.8 — and every one was rejected; 1.8.2 came
-back on the action-list icons, which is what 1.9.9 fixes. Nothing between 1.5
-and 1.9.9 ever reached a user, so a version's notes below describe what it
-changed against the version before it, not against anything anyone is running.
-Write a submission's copy as the delta from 1.5 until that stops being true.
+**The published listing is on 1.9.11**, built from `release-1.9.x` and
+submitted with the 1.9.9 copy below. Before it, the six submissions after 1.5 —
+1.8.2, 1.8.3, 1.9.4, 1.9.6, 1.9.7 and 1.9.8 — were all rejected; 1.8.2 came
+back on the action-list icons, which is what 1.9.9 fixed. 1.10.0 to 1.10.2 were
+released on GitHub and never submitted, and nothing in them is visible on
+Windows, so write a submission's copy as the delta from 1.9.11.
 
 The first-release notes are kept further down for reference only — they describe
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
 
-### Version 1.10.2 — released, and the first 1.10.x that could be submitted
+### Version 1.11.0 — the next submission
+
+Webcam switching, from
+[#17](https://github.com/danswett/streamdeck-teams-control/pull/17), and the fix
+for [#18](https://github.com/danswett/streamdeck-teams-control/issues/18): when a
+flyout could only be closed through UI Automation, Teams was left in front of
+whatever you were working in, and nothing put your window back. The
+[2026-10-20 review](../docs/review-2026-10-20.md) covers both, with the live
+measurements.
+
+The copy is the delta from 1.9.11, the published version.
+
+```
+Two new actions switch webcams.
+
+Change Camera switches Teams to the webcam chosen in the key's settings, and Swap Camera flips between two. The list comes from Windows, so virtual cameras are included, and switching leaves your camera on or off as it was. Both read Teams on every press, so a webcam changed in Teams itself never puts them out of step.
+
+Keys that open a Teams menu, such as reactions, raise hand and background blur, no longer leave Teams in front of the window you were working in.
+```
+
+500 characters.
+
+The description above gained a sentence about the webcam actions. A new version
+does not refresh it, so paste it into the **Details** tab as well.
+
+### Version 1.10.2 — released, never submitted; 1.11.0 supersedes it
 
 macOS is withdrawn from the manifest. The Swift sidecar stays in the tree and
 still builds in CI; the plugin simply stops claiming a platform it cannot serve
@@ -183,8 +210,8 @@ compiles the Swift on a macOS runner, deliberately as an independent job, so the
 code cannot quietly stop building.
 
 Nothing user-visible changes, so the copy is the 1,456-character block from
-1.9.11 unaltered. What is in flight is 1.9.11 from `release-1.9.x`; this branch
-is where the next one comes from.
+1.9.11 unaltered. What was in flight, and is now published, is 1.9.11 from
+`release-1.9.x`; this branch is where the next one comes from.
 
 ### Version 1.10.1 — released, superseded by 1.10.2
 
@@ -222,7 +249,7 @@ Versions tab. That is also how to answer the macOS signing question.
 No user-facing copy: this changes nothing a reader of the listing would
 recognize, and it ships alongside 1.10.0's notes.
 
-### Version 1.10.0 — released, not yet submitted
+### Version 1.10.0 — released, never submitted
 
 macOS, from [#4](https://github.com/danswett/streamdeck-teams-control/issues/4)
 and [#5](https://github.com/danswett/streamdeck-teams-control/pull/5). The
@@ -266,7 +293,7 @@ Joining a meeting now reaches the keys in about four seconds rather than ten. Ke
 
 1,433 characters.
 
-### Version 1.9.9 — the notes for the submission in flight
+### Version 1.9.9 — the notes 1.9.11 was published with
 
 Submitted to fix what review asked for on 1.8.2: the icons in the Stream Deck
 app's action list have to be white, and five of ours were not. The notes
