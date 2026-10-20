@@ -3860,6 +3860,44 @@ public sealed class TeamsClient : IDisposable
     }
 
     /// <summary>
+    /// The ids and name pattern that find a control's menu item, with a key's
+    /// argument filled in.
+    ///
+    /// Swap Camera finds two items with one control's selectors, so both go
+    /// through here. The second used to be looked up by its raw device id,
+    /// which matches only while the template is exactly <c>{arg}</c>: a
+    /// selectors.json fix after a Teams update would have reached the first
+    /// webcam and left every swap failing on the second.
+    /// </summary>
+    internal static bool TryItemSelectors(
+        ControlSpec spec, string? arg, out string?[] ids, out Regex? nameRx, out string? error)
+    {
+        ids = [Fill(spec.MenuItemAutomationId, arg, forRegex: false), Fill(spec.MenuItemToggleAutomationId, arg, forRegex: false)];
+        error = null;
+
+        var pattern = Fill(spec.MenuItemName, arg, forRegex: true);
+        if (ReferenceEquals(pattern, spec.MenuItemName))
+        {
+            nameRx = spec.MenuItemRegex;
+            return true;
+        }
+
+        try
+        {
+            nameRx = string.IsNullOrWhiteSpace(pattern)
+                ? null
+                : new Regex(pattern!, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, ControlSpec.MatchTimeout);
+            return true;
+        }
+        catch (ArgumentException ex)
+        {
+            nameRx = null;
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    /// <summary>
     /// The element that turns an already-on control off.
     ///
     /// Falls back to the control's own selector, because most toggles close the
@@ -4012,28 +4050,16 @@ public sealed class TeamsClient : IDisposable
             return Press(off) ? (true, null) : (false, $"could not turn '{target}' off");
         }
 
-        var itemId = Fill(spec.MenuItemAutomationId, arg, forRegex: false);
-        var itemToggleId = Fill(spec.MenuItemToggleAutomationId, arg, forRegex: false);
-        var itemIds = new[] { itemId, itemToggleId };
-        var itemNamePattern = Fill(spec.MenuItemName, arg, forRegex: true);
-        Regex? itemNameRx;
-        if (ReferenceEquals(itemNamePattern, spec.MenuItemName))
-        {
-            itemNameRx = spec.MenuItemRegex;
-        }
-        else
-        {
-            try
-            {
-                itemNameRx = string.IsNullOrWhiteSpace(itemNamePattern)
-                    ? null
-                    : new Regex(itemNamePattern!, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, ControlSpec.MatchTimeout);
-            }
-            catch (ArgumentException ex) { return (false, $"bad item pattern for '{target}': {ex.Message}"); }
-        }
+        if (!TryItemSelectors(spec, arg, out var itemIds, out var itemNameRx, out var patternError))
+            return (false, $"bad item pattern for '{target}': {patternError}");
 
-        if (!string.IsNullOrEmpty(spec.MenuItemAutomationId) && string.IsNullOrEmpty(itemId))
+        if (!string.IsNullOrEmpty(spec.MenuItemAutomationId) && string.IsNullOrEmpty(itemIds[0]))
             return (false, $"'{target}' needs a value but none was set");
+
+        string?[] secondIds = [];
+        Regex? secondNameRx = null;
+        if (cameraPair is not null && !TryItemSelectors(spec, cameraPair[1], out secondIds, out secondNameRx, out patternError))
+            return (false, $"bad item pattern for '{target}': {patternError}");
 
         // A flyout left open by a previous action, or by the user, hides the
         // toolbar. Clear it first so a key press is never a no-op.
@@ -4112,7 +4138,6 @@ public sealed class TeamsClient : IDisposable
         stages.Mark("open");
 
         AutomationElement? item = null;
-        var pressed = false;
         try
         {
             // A nested menu has to be opened before its items exist. Opened the
@@ -4160,7 +4185,7 @@ public sealed class TeamsClient : IDisposable
 
             if (cameraPair is not null)
             {
-                var second = FindInPopup(win, [cameraPair[1]], null, 1500);
+                var second = FindInPopup(win, secondIds, secondNameRx, 1500);
                 if (second is null || !SafeEnabled(item) || !SafeEnabled(second))
                     return (false, "both configured webcams must be available in Teams to swap");
                 var firstSelection = IsSelected(item);
@@ -4198,7 +4223,6 @@ public sealed class TeamsClient : IDisposable
                 if (selection is null) return (false, "Teams did not expose webcam selection");
                 if (selection == true) return (true, null);
                 if (!Press(item)) return (false, "could not select the configured webcam");
-                pressed = true;
                 var deadline = Environment.TickCount64 + 1500;
                 do
                 {
@@ -4213,7 +4237,6 @@ public sealed class TeamsClient : IDisposable
 
             if (wasChecked.HasValue) _lastStates[target] = !wasChecked.Value;
 
-            pressed = true;
             return (true, null);
         }
         finally
@@ -4232,8 +4255,7 @@ public sealed class TeamsClient : IDisposable
             // patience on housekeeping. The worker runs it immediately after
             // the result goes out, so the flyout is still shut before anything
             // else touches the tree.
-            var justPressed = item;
-            var didPress = pressed;
+            var anchor = item;
             DeferCleanup(() =>
             {
                 // Two problems, one fix. The flyout does not reliably close on
@@ -4248,10 +4270,15 @@ public sealed class TeamsClient : IDisposable
                 // adds failed tree searches to a delay that is going to run in
                 // full anyway.
                 //
-                // Only after a press actually landed. On the failure paths the
-                // menu may never have opened, and clicking inert space then is
-                // a click into a meeting for no reason.
-                if (didPress)
+                // Whenever the item was found, because that proves the menu
+                // opened - including when nothing was pressed, as for a webcam
+                // that is already selected or an entry Teams has greyed out.
+                // Those used to be left to DismissFlyout, whose UI Automation
+                // fallbacks bring Teams to the front (#20). When the item was
+                // never found the menu may never have opened either, and
+                // clicking inert space then is a click into a meeting for no
+                // reason.
+                if (anchor is not null)
                 {
                     Thread.Sleep(PostSelectSettleMs);
                     stages.Mark("settle");
@@ -4259,7 +4286,7 @@ public sealed class TeamsClient : IDisposable
                     stages.Mark("away");
                 }
 
-                DismissFlyout(win, justPressed, host, hostPoint, spec.Menu);
+                DismissFlyout(win, anchor, host, hostPoint, spec.Menu);
                 stages.Mark("dismiss");
                 stages.ReportIfSlow(target, SlowFlyoutMs);
             });

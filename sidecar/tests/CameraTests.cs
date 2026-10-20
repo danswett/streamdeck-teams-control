@@ -52,4 +52,26 @@ public class CameraTests
         Assert.Equal("{arg}", swap.MenuItemAutomationId);
         Assert.Null(swap.MenuItemOffName);
     }
+
+    [Fact]
+    public void Both_webcams_of_a_swap_go_through_the_selector_template()
+    {
+        // A selectors.json fix after a Teams update may wrap the device id. The
+        // second webcam used to be looked up raw, so it would never have matched.
+        var spec = new ControlSpec
+        {
+            Menu = "video-button-configure",
+            MenuItemAutomationId = "camera-{arg}",
+            MenuItemName = "^{arg}$"
+        };
+        var pair = Cameras.ParseSwap("""["usb-cam", "virtual.cam"]""")!;
+
+        foreach (var id in pair)
+        {
+            Assert.True(TeamsClient.TryItemSelectors(spec, id, out var ids, out var nameRx, out _));
+            Assert.Equal($"camera-{id}", ids[0]);
+            Assert.True(nameRx!.IsMatch(id));
+            Assert.False(nameRx.IsMatch("virtualXcam"));
+        }
+    }
 }
