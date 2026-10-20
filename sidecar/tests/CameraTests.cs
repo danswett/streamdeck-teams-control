@@ -70,8 +70,9 @@ public class CameraTests
         {
             Assert.True(TeamsClient.TryItemSelectors(spec, id, out var ids, out var nameRx, out _));
             Assert.Equal($"camera-{id}", ids[0]);
-            Assert.True(nameRx!.IsMatch(id));
-            Assert.False(nameRx.IsMatch("virtualXcam"));
+            Assert.NotNull(nameRx);
+            Assert.Matches(nameRx, id);
+            Assert.DoesNotMatch(nameRx, "virtualXcam");
         }
     }
 }
