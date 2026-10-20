@@ -410,7 +410,9 @@ Five things make this reliable:
    `Chrome_RenderWidgetHostHWND` goes into that window's message queue instead:
    no focus, no raised window, no cursor movement. Sampled every 10 ms, the
    foreground window never changes. UIA `Invoke` stays as the fallback where
-   there are no on-screen bounds, such as a minimized window.
+   there are no on-screen bounds, such as a minimized window. That fallback, and
+   the UI Automation calls that close a flyout that will not close by itself,
+   run under a focus guard that puts back whichever window was in front.
 
    It is also why flyouts are not disruptive — the popup opens *behind* whatever
    you are working in.
@@ -898,7 +900,7 @@ the suite is in two halves.
 | `test-soak.ps1` | either | handle and memory drift over a long run |
 | `test-flyouts.ps1` | yes | hand, reactions and blur, twice each |
 | `test-reactions.ps1` | yes | all five reactions |
-| `test-focus-strict.ps1` | yes | foreground never changes, sampled every 10 ms |
+| `test-focus-strict.ps1` | yes | foreground never changes, sampled every 10 ms until flyout cleanup ends |
 | `test-dimming.ps1` | yes | keys stay lit while a flyout is open |
 | `test-state-latency-external.ps1` | yes | latency for a change the plugin did not make |
 | `measure-perf.ps1` | either | CPU and memory of the installed plugin |
@@ -1008,7 +1010,7 @@ It speaks line-delimited JSON:
 | `--poll <ms>` | override the in-meeting backstop interval |
 | `--no-events` | disable UIA subscriptions and poll only |
 | `--debug-events` | log every subscription and event to stderr |
-| `--no-focus-guard` | skip restoring foreground after the UIA fallback |
+| `--no-focus-guard` | skip restoring foreground after a UIA fallback or flyout dismissal |
 
 `--no-events` is the quickest way to tell whether a state problem is in the event
 path or underneath it.

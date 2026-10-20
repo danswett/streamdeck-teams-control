@@ -67,32 +67,70 @@ internal static class FocusGuard
     /// already returned — so restoring once immediately is too early to catch
     /// it. This runs off the UIA worker thread so a key press stays responsive.
     /// </summary>
-    public static void RestoreAfter(IntPtr previous, int watchMs = 1500)
-    {
-        if (previous == IntPtr.Zero) return;
+    public static void RestoreAfter(IntPtr previous, int watchMs = 1500) => Watch(previous, watchMs).Dispose();
 
-        var watcher = new Thread(() =>
+    /// <summary>
+    /// Watches from now until <paramref name="trailingMs"/> after the returned
+    /// scope is disposed, for an operation that can bring Teams forward while it
+    /// is still running rather than only once it has returned. Teams' Collapse
+    /// has been measured blocking for two seconds before it returns; watching
+    /// only from then would leave Teams in front for all of that.
+    /// </summary>
+    public static IDisposable Watch(IntPtr previous, int trailingMs = 1500)
+    {
+        if (previous == IntPtr.Zero) return NoWatch.Instance;
+        var watch = new FocusWatch(previous, trailingMs);
+        watch.Start();
+        return watch;
+    }
+
+    private sealed class FocusWatch : IDisposable
+    {
+        private readonly IntPtr _previous;
+        private readonly int _trailingMs;
+        private long _until = long.MaxValue;
+
+        public FocusWatch(IntPtr previous, int trailingMs)
         {
-            var deadline = Environment.TickCount64 + watchMs;
-            while (Environment.TickCount64 < deadline)
+            _previous = previous;
+            _trailingMs = trailingMs;
+        }
+
+        public void Start()
+        {
+            var watcher = new Thread(Run)
+            {
+                IsBackground = true,
+                Name = "focus-guard"
+            };
+            watcher.Start();
+        }
+
+        public void Dispose() =>
+            Interlocked.CompareExchange(ref _until, Environment.TickCount64 + _trailingMs, long.MaxValue);
+
+        private void Run()
+        {
+            while (Environment.TickCount64 < Interlocked.Read(ref _until))
             {
                 Thread.Sleep(60);
                 try
                 {
-                    if (!IsWindow(previous)) return;
+                    if (!IsWindow(_previous)) return;
                     var current = GetForegroundWindow();
-                    if (current == previous) continue;
+                    if (current == _previous) continue;
                     if (current == IntPtr.Zero || !IsTeamsWindow(current)) continue;
-                    Restore(previous);
+                    Restore(_previous);
                 }
                 catch { return; }
             }
-        })
-        {
-            IsBackground = true,
-            Name = "focus-guard"
-        };
-        watcher.Start();
+        }
+    }
+
+    private sealed class NoWatch : IDisposable
+    {
+        public static readonly NoWatch Instance = new();
+        public void Dispose() { }
     }
 
     /// <summary>Puts focus back, if Teams took it during the operation.</summary>

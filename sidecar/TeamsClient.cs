@@ -2902,6 +2902,23 @@ public sealed class TeamsClient : IDisposable
     }
 
     /// <summary>
+    /// Makes a UI Automation call that can bring Teams to the front, and puts
+    /// back whichever window was in front when it was made.
+    ///
+    /// <see cref="Invoke"/> guards a press, but a flyout is closed after the
+    /// press has returned - deferred, so the key gets its answer first - and
+    /// also while polling and in discovery. None of that is inside the press's
+    /// guard, so Collapse and the dismiss layer's Invoke could leave Teams in
+    /// front (#18). The window is captured at the call rather than at the
+    /// press, so a user who has since switched to Teams on purpose stays there.
+    /// </summary>
+    private void Guarded(Action call)
+    {
+        using var watch = FocusGuard.Watch(_restoreFocus ? FocusGuard.Capture() : IntPtr.Zero);
+        call();
+    }
+
+    /// <summary>
     /// Closes an open Teams flyout without sending any input.
     ///
     /// Invoking a flyout item through UI Automation fires the item's handler but
@@ -2946,14 +2963,15 @@ public sealed class TeamsClient : IDisposable
         rungs.Mark("natural");
 
         // Ask the menu to close itself before clicking anything. This is the
-        // only dismissal that cannot have a side effect, and it matters most
+        // only dismissal that cannot act on the meeting, and it matters most
         // during PowerPoint Live: a stray click on the slide surface advances
-        // the deck for everyone watching.
+        // the deck for everyone watching. It can bring Teams to the front,
+        // which the guard puts right.
         var fresh = FreshHost();
         rungs.Mark("refind");
         if (fresh is not null)
         {
-            TryCollapse(fresh);
+            Guarded(() => TryCollapse(fresh));
             rungs.Mark("collapseCall");
             if (WaitForDismissed(win, fresh, 700)) { rungs.ReportIfSlow("dismiss:collapse", SlowFlyoutMs); return; }
         }
@@ -2978,7 +2996,7 @@ public sealed class TeamsClient : IDisposable
         // Re-found again: the clicks above are another chance for the surface
         // to have been replaced under us.
         fresh = FreshHost();
-        if (fresh is not null) TryCollapse(fresh);
+        if (fresh is not null) Guarded(() => TryCollapse(fresh));
         if (WaitForDismissed(win, fresh, 300)) { rungs.ReportIfSlow("dismiss:collapse2", SlowFlyoutMs); return; }
         rungs.Mark("collapse2");
 
@@ -3016,7 +3034,7 @@ public sealed class TeamsClient : IDisposable
                 {
                     var invoke = chain[i].Patterns.Invoke.PatternOrDefault;
                     if (invoke is null) continue;
-                    invoke.Invoke();
+                    Guarded(invoke.Invoke);
                     if (WaitForDismissed(win, fresh, 600)) { rungs.ReportIfSlow("dismiss:ancestor", SlowFlyoutMs); return; }
                 }
                 catch { }
