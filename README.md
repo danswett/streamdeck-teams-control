@@ -901,6 +901,7 @@ the suite is in two halves.
 | `test-flyouts.ps1` | yes | hand, reactions and blur, twice each |
 | `test-reactions.ps1` | yes | all five reactions |
 | `test-focus-strict.ps1` | yes | foreground never changes, sampled every 10 ms until flyout cleanup ends |
+| `test-cameras.ps1` | yes | Change Camera and Swap Camera against Teams' own selection, video state and focus |
 | `test-dimming.ps1` | yes | keys stay lit while a flyout is open |
 | `test-state-latency-external.ps1` | yes | latency for a change the plugin did not make |
 | `measure-perf.ps1` | either | CPU and memory of the installed plugin |

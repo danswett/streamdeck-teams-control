@@ -164,6 +164,14 @@ describe("action list icons", () => {
 	it.each(listIcons)("%s actually draws something", (_name, icon) => {
 		expect(coverage(resolveImage(icon)!)).toBeGreaterThan(0.01);
 	});
+
+	it("gives every action its own icon file", () => {
+		// Change Camera and Swap Camera first shipped pointing at the Camera
+		// action's files, which reads in the list as one control three times.
+		const byIcon = new Map<string, string[]>();
+		for (const [name, icon] of listIcons) byIcon.set(icon, [...(byIcon.get(icon) ?? []), name]);
+		expect([...byIcon.values()].filter((names) => names.length > 1)).toEqual([]);
+	});
 });
 
 describe("category", () => {

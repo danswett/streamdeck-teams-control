@@ -181,7 +181,7 @@
 		{
 			"Name": "Change Camera",
 			"UUID": "com.bad-duck.teamscontrol.camera-select",
-			"Icon": "imgs/actions/camera/icon",
+			"Icon": "imgs/actions/camera-select/icon",
 			"Tooltip": "Switch Teams to the webcam chosen in this button's settings",
 			"PropertyInspectorPath": "ui/camera-select.html",
 			"Controllers": [
@@ -191,7 +191,7 @@
 			"UserTitleEnabled": true,
 			"States": [
 				{
-					"Image": "imgs/actions/camera/key",
+					"Image": "imgs/actions/camera-select/key",
 					"TitleAlignment": "bottom"
 				}
 			]
@@ -199,7 +199,7 @@
 		{
 			"Name": "Swap Camera",
 			"UUID": "com.bad-duck.teamscontrol.camera-swap",
-			"Icon": "imgs/actions/camera/icon",
+			"Icon": "imgs/actions/camera-swap/icon",
 			"Tooltip": "Toggle Teams between two webcams chosen in this button's settings",
 			"PropertyInspectorPath": "ui/camera-select.html",
 			"Controllers": [
@@ -209,7 +209,7 @@
 			"UserTitleEnabled": true,
 			"States": [
 				{
-					"Image": "imgs/actions/camera/key",
+					"Image": "imgs/actions/camera-swap/key",
 					"TitleAlignment": "bottom"
 				}
 			]

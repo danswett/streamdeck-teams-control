@@ -21,6 +21,8 @@ const IMGS = path.join(ROOT, "com.bad-duck.teamscontrol.sdPlugin", "imgs");
 const ACTIONS: Record<string, { glyph: string; danger?: boolean }> = {
 	mute: { glyph: "mic" },
 	camera: { glyph: "camera" },
+	"camera-select": { glyph: "cameraSelect" },
+	"camera-swap": { glyph: "cameraSwap" },
 	blur: { glyph: "blur" },
 	share: { glyph: "share" },
 	chat: { glyph: "chat" },

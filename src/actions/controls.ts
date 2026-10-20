@@ -57,8 +57,11 @@ type CameraSettings = { cameraId?: string; secondCameraId?: string };
 abstract class WebcamAction extends TeamsAction<CameraSettings> {
 	protected abstract override targetFor(): string;
 
+	/** Each webcam action has its own mark, so it reads apart from the Camera key beside it. */
+	protected abstract glyph(): string;
+
 	protected override draw(state: TeamsState): string {
-		return renderSimple("camera", usable(state, this.targetFor()));
+		return renderSimple(this.glyph(), usable(state, this.targetFor()));
 	}
 
 	override async onSendToPlugin(ev: SendToPluginEvent<JsonValue, CameraSettings>): Promise<void> {
@@ -83,6 +86,10 @@ export class SelectCameraAction extends WebcamAction {
 		return "camera-select";
 	}
 
+	protected override glyph(): string {
+		return "cameraSelect";
+	}
+
 	protected override argFor(settings: CameraSettings): string | undefined {
 		return settings.cameraId;
 	}
@@ -92,6 +99,10 @@ export class SelectCameraAction extends WebcamAction {
 export class SwapCameraAction extends WebcamAction {
 	protected override targetFor(): string {
 		return "camera-swap";
+	}
+
+	protected override glyph(): string {
+		return "cameraSwap";
 	}
 
 	protected override argFor(settings: CameraSettings): string {
