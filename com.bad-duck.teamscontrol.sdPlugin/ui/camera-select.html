@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Webcam settings</title>
+		<link rel="stylesheet" href="inspector.css" />
+		<script src="sdpi-components.js"></script>
+	</head>
+	<body>
+		<p class="hint" id="action-description"></p>
+		<sdpi-item label="Webcam">
+			<sdpi-select id="webcams" setting="cameraId" datasource="webcams" placeholder="Choose a webcam"></sdpi-select>
+		</sdpi-item>
+		<sdpi-item id="second-camera" label="Second webcam" style="display: none">
+			<sdpi-select id="webcams-second" setting="secondCameraId" placeholder="Choose a different webcam"></sdpi-select>
+		</sdpi-item>
+		<sdpi-item>
+			<sdpi-button onclick="refreshWebcams()">Refresh webcams</sdpi-button>
+		</sdpi-item>
+		<p class="hint" id="status" role="status"></p>
+		<p class="hint">
+			Listed by Windows, including virtual cameras. No meeting is needed to
+			configure this button. Switching requires a Teams meeting and the device
+			to be available in Teams. If you reconnect a webcam to a different USB
+			port, refresh and select it again. No other webcam is used as a fallback.
+		</p>
+		<script src="action-descriptions.js"></script>
+		<script>
+			SDPIComponents.streamDeckClient.getConnectionInfo().then(({ actionInfo }) => {
+				const text = globalThis.ACTION_DESCRIPTIONS?.[actionInfo?.action];
+				if (text) document.getElementById("action-description").textContent = text;
+				if (actionInfo?.action?.endsWith(".camera-swap")) {
+					document.getElementById("second-camera").style.display = "";
+					document.getElementById("webcams-second").setAttribute("datasource", "webcams-second");
+				}
+			});
+			const errors = new Map();
+			function refreshWebcams() {
+				document.getElementById("webcams").refresh();
+				const second = document.getElementById("webcams-second");
+				if (second.hasAttribute("datasource")) second.refresh();
+			}
+			SDPIComponents.streamDeckClient.sendToPropertyInspector.subscribe(({ payload }) => {
+				if (payload?.event !== "webcams" && payload?.event !== "webcams-second") return;
+				errors.set(payload.event, payload.error || (payload.items?.length ? "" : "No webcams found in Windows."));
+				document.getElementById("status").textContent = [...errors.values()].find(Boolean) || "";
+			});
+		</script>
+	</body>
+</html>

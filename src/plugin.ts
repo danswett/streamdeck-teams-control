@@ -13,7 +13,9 @@ import {
 	ReactLikeAction,
 	ReactLoveAction,
 	ReactWowAction,
-	ShareAction
+	SelectCameraAction,
+	ShareAction,
+	SwapCameraAction
 } from "./actions/controls";
 import {
 	PptCopyLinkAction,
@@ -51,6 +53,8 @@ streamDeck.logger.setLevel("info");
 
 streamDeck.actions.registerAction(new MuteAction());
 streamDeck.actions.registerAction(new CameraAction());
+streamDeck.actions.registerAction(new SelectCameraAction());
+streamDeck.actions.registerAction(new SwapCameraAction());
 streamDeck.actions.registerAction(new HandAction());
 streamDeck.actions.registerAction(new ReactLikeAction());
 streamDeck.actions.registerAction(new ReactLoveAction());

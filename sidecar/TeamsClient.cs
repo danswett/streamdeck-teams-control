@@ -3506,7 +3506,7 @@ public sealed class TeamsClient : IDisposable
         // The timer has no ids to find anything by, and ink colour is read back
         // out of a flyout the UIA path already knows how to drive. Neither is
         // worth a second implementation yet.
-        if (timer || ink) return null;
+        if (timer || ink || target is "camera-select" or "camera-swap") return null;
 
         try
         {
@@ -3955,6 +3955,12 @@ public sealed class TeamsClient : IDisposable
 
     private (bool ok, string? error) InvokeCore(string target, ControlSpec spec, string? arg = null)
     {
+        var swap = target == "camera-swap";
+        var cameraPair = swap ? Cameras.ParseSwap(arg) : null;
+        if (swap && cameraPair is null)
+            return (false, "choose two different webcams in this button's settings");
+        if (cameraPair is not null) arg = cameraPair[0];
+
         var win = ResolveMeetingWindow();
         if (win is null)
         {
@@ -4134,6 +4140,20 @@ public sealed class TeamsClient : IDisposable
                 return (false, $"item for '{target}' not found in menu");
             }
 
+            if (cameraPair is not null)
+            {
+                var second = FindInPopup(win, [cameraPair[1]], null, 1500);
+                if (second is null || !SafeEnabled(item) || !SafeEnabled(second))
+                    return (false, "both configured webcams must be available in Teams to swap");
+                var firstSelection = IsSelected(item);
+                var secondSelection = IsSelected(second);
+                if (firstSelection is null || secondSelection is null)
+                    return (false, "Teams did not expose webcam selection");
+                // Read Teams, not the previous press: manual changes and other
+                // camera buttons must not put this toggle out of sync.
+                if (firstSelection == true) item = second;
+            }
+
             // Radio-style menus need the "off" entry to undo the selection.
             if (spec.MenuItemOffRegex is not null && IsChecked(item) == true)
             {
@@ -4153,6 +4173,22 @@ public sealed class TeamsClient : IDisposable
             // re-syncs on every one after, instead of never showing state at
             // all. Only stale if the same setting is changed in Teams directly.
             var wasChecked = IsChecked(item);
+
+            if (target is "camera-select" or "camera-swap")
+            {
+                var selection = IsSelected(item);
+                if (selection is null) return (false, "Teams did not expose webcam selection");
+                if (selection == true) return (true, null);
+                if (!Press(item)) return (false, "could not select the configured webcam");
+                pressed = true;
+                var deadline = Environment.TickCount64 + 1500;
+                do
+                {
+                    if (IsSelected(item) == true) return (true, null);
+                    Thread.Sleep(PopupScanIntervalMs);
+                } while (Environment.TickCount64 < deadline);
+                return (false, "Teams did not confirm the webcam selection");
+            }
 
             if (!Press(item)) return (false, $"could not invoke item for '{target}'");
             stages.Mark("click");
@@ -4259,6 +4295,18 @@ public sealed class TeamsClient : IDisposable
             return (r.X + r.Width / 2, r.Y + r.Height / 2);
         }
         catch { return null; }
+    }
+
+    private static bool? IsSelected(AutomationElement el)
+    {
+        try
+        {
+            var selection = el.Patterns.SelectionItem.PatternOrDefault;
+            if (selection is not null && selection.IsSelected.IsSupported)
+                return selection.IsSelected.ValueOrDefault;
+        }
+        catch { }
+        return null;
     }
 
     /// <summary>Reads a menu item's checked state, where it exposes one.</summary>

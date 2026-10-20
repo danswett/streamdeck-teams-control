@@ -82,6 +82,8 @@ the same accessibility layer screen readers use.
 |---|---|---|
 | **Mute** | ✅ muted / unmuted | Slashed glyph when muted |
 | **Camera** | ✅ on / off | Slashed glyph when off |
+| **Change Camera** | availability only | Choose a specific Windows webcam in each button's settings; does not toggle camera on/off |
+| **Swap Camera** | availability only | Toggle between two configured webcams, using Teams' current selection |
 | **Raise Hand** | availability only | Lifts on press |
 | **React** — Like, Love, Applause, Laugh, Wow | availability only | Five actions, each animates on press |
 | **Background Blur** | availability only | |
@@ -89,6 +91,19 @@ the same accessibility layer screen readers use.
 | **Chat** | availability only | Toggles the meeting chat pane |
 | **People** | availability only | Toggles the participant roster |
 | **Leave** | availability only | Press opens Teams' confirmation; hold to answer it |
+
+**Change Camera** lists Windows video inputs, including virtual cameras, without
+requiring a meeting. Add one key per webcam and choose its target in the key's
+settings. Use **Refresh webcams** after connecting a device. Switching requires
+an active meeting and that exact device to be available in Teams; a missing
+device produces an alert rather than selecting a different webcam. Re-select
+the device if moving it to another USB port changes its Windows device ID.
+
+**Swap Camera** uses the same Windows camera list, with two dropdowns. Choose two
+different webcams. Each press selects the second if Teams is using the first,
+or the first otherwise, including when a third camera is selected. Both
+configured devices must be available in Teams. Video stays on or off as it was;
+the key does not indicate which webcam is currently selected.
 
 ### Presenting a deck
 

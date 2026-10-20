@@ -24,8 +24,11 @@ const INVOKE_TIMEOUT_MS = 10_000;
 
 export { EMPTY_STATE, type TeamsState };
 
+export type CameraDevice = { id: string; name: string };
+type BridgeResult = { ok: boolean; error?: string; cameras?: CameraDevice[] };
+
 type Pending = {
-	resolve: (v: { ok: boolean; error?: string }) => void;
+	resolve: (v: BridgeResult) => void;
 	timer: NodeJS.Timeout;
 };
 
@@ -234,13 +237,26 @@ class Bridge {
 				this.#publish(toState(msg));
 				break;
 
+			case "cameras":
 			case "result": {
 				const id = Number(msg["id"]);
 				const pending = this.#pending.get(id);
 				if (pending) {
 					clearTimeout(pending.timer);
 					this.#pending.delete(id);
-					pending.resolve({ ok: Boolean(msg["ok"]), error: msg["error"] as string | undefined });
+					const result: BridgeResult = { ok: Boolean(msg["ok"]), error: msg["error"] as string | undefined };
+					if (msg["type"] === "cameras" && result.ok) {
+						const cameras = msg["cameras"];
+						if (Array.isArray(cameras) && cameras.every((c: unknown): c is CameraDevice =>
+							typeof c === "object" && c !== null && "id" in c && "name" in c &&
+							typeof c.id === "string" && c.id.length > 0 && typeof c.name === "string")) {
+							result.cameras = cameras;
+						} else {
+							result.ok = false;
+							result.error = "invalid webcam list from sidecar";
+						}
+					}
+					pending.resolve(result);
 				}
 				break;
 			}
@@ -342,6 +358,20 @@ class Bridge {
 			const timer = setTimeout(() => {
 				this.#pending.delete(id);
 				resolve({ ok: false, error: "timed out" });
+			}, INVOKE_TIMEOUT_MS);
+			this.#pending.set(id, { resolve, timer });
+		});
+	}
+
+	cameras(): Promise<BridgeResult> {
+		const id = this.#nextId++;
+		if (!this.#send({ id, cmd: "cameras" })) {
+			return Promise.resolve({ ok: false, error: "sidecar not running" });
+		}
+		return new Promise((resolve) => {
+			const timer = setTimeout(() => {
+				this.#pending.delete(id);
+				resolve({ ok: false, error: "webcam enumeration timed out" });
 			}, INVOKE_TIMEOUT_MS);
 			this.#pending.set(id, { resolve, timer });
 		});

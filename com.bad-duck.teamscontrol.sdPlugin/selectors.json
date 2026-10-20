@@ -123,6 +123,14 @@
 			"activePattern": "camera\\s+off",
 			"inactivePattern": "camera\\s+on"
 		},
+		"camera-select": {
+			"menu": "video-button-configure",
+			"menuItemAutomationId": "{arg}"
+		},
+		"camera-swap": {
+			"menu": "video-button-configure",
+			"menuItemAutomationId": "{arg}"
+		},
 		"leave": {
 			"automationId": "hangup-button"
 		},

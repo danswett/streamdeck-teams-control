@@ -224,6 +224,22 @@ public class SelectorConfigTests : IDisposable
     }
 
     [Fact]
+    public void The_shipped_camera_selectors_match_the_defaults()
+    {
+        var path = Path.Combine(FindRepoRoot(), "com.bad-duck.teamscontrol.sdPlugin", "selectors.json");
+        var parsed = Program.ParseConfig(File.ReadAllText(path));
+        Assert.NotNull(parsed);
+        foreach (var target in new[] { "camera-select", "camera-swap" })
+        {
+            var spec = parsed.Controls[target];
+            var defaults = Defaults.Config().Controls[target];
+            Assert.Equal(defaults.Menu, spec.Menu);
+            Assert.Equal(defaults.MenuItemAutomationId, spec.MenuItemAutomationId);
+            Assert.Null(spec.MenuItemName);
+        }
+    }
+
+    [Fact]
     public void The_shipped_selectors_file_is_valid()
     {
         // Guards against shipping a selectors.json that the sidecar would reject
