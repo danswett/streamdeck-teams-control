@@ -61,26 +61,38 @@ The first 250 characters are what search engines show, so the opening sentences
 carry the requirements and the differentiator rather than a preamble.
 
 ```
-Control Microsoft Teams meetings from your Stream Deck: mute, camera, raise hand, the five reactions, background blur, screen share, chat, people and leave. Every key shows the real state of the meeting, so a muted mic looks muted before you press it. Switch webcams with a key, or swap between two.
+Control Microsoft Teams from your Stream Deck: mute, camera, webcam switching, background blur, raise hand, reactions, screen share, chat, people and leave. Every key shows the real state of the meeting, so a muted mic looks muted before you press it.
 
-Full PowerPoint Live control too. Watching a deck? Move through slides at your own pace, jump back in sync, open grid view, or pop the deck into its own window, without touching anyone else's view. Presenting? Slide navigation, laser pointer, pen, highlighter and eraser, presenter view, private view and stop sharing, with a live slide counter. Keys follow your role, so taking control re-lights the deck.
+Change Camera switches Teams to the webcam you pick, capture cards and virtual cameras included, and Swap Camera flips between two. Neither turns your video on or off.
+
+Full PowerPoint Live control too. Watching a deck? Move through slides at your own pace, jump back in sync, open grid view, or pop the deck into its own window, without touching anyone else's view. Presenting? Slide navigation, laser pointer, pen, highlighter and eraser, presenter view, private view and stop sharing, with a live slide counter. Keys follow your role.
 
 On a Stream Deck + or + XL the dials set ink color and thickness, move through the deck and run the meeting timer, and the touch strip shows the current and next slide.
 
-Three bundled profiles can follow the meeting: meeting controls when you join, attendee or presenter tools when a deck goes up, and back again when it ends. Every Stream Deck gets its own set, laid out for its grid.
+Three bundled profiles can follow the meeting: meeting controls when you join, attendee or presenter tools when a deck goes up, and back again when it ends. Every Stream Deck gets its own set.
 
-Teams never needs focus and is never pulled to the front, so you can keep working while you mute, react or raise your hand. No keystrokes are sent, so nothing leaks into whatever you are typing in, and no hotkeys are taken.
-
-Keys dim when no meeting is running.
+Teams never needs focus: keep working while you mute, react or raise your hand. No keystrokes are sent, so nothing leaks into what you type, and no hotkeys are taken. Keys dim when no meeting is running.
 
 Requires Windows 10 or later, Stream Deck 7.1 or later, and the Microsoft Teams desktop app. Not affiliated with or endorsed by Microsoft.
 ```
 
-1,497 characters, within the 1,500 limit and above the 250 minimum. The opening
-two sentences run to 251 characters, so the search-engine snippet reads as
-complete sentences rather than breaking mid-clause. 1.11.0 added the webcam
-sentence and made room for it by trimming "global" from the hotkeys claim and
-the second half of the sentence about dimmed keys.
+1,499 characters.
+
+That is within the 1,500 limit and above the 250 minimum, and the opening two
+sentences run to 251 characters, so the search-engine snippet reads as complete
+sentences rather than breaking mid-clause. Maker Console accepted the 1,497 that
+was here before, which is the count this file and the test both use: line
+breaks as one character each.
+
+1.11.0 rewrote it for the webcam actions. They go in the opening, because search
+weighs those characters most, and "meetings" and "the five" came out to keep it
+at 251. The copy also stopped saying Teams "is never pulled to the front": when
+a menu has to be closed through UI Automation, which happens most while a deck
+is on screen, Teams comes forward for up to about 200 ms before the focus guard
+puts your window back
+([#20](https://github.com/danswett/streamdeck-teams-control/issues/20)). Room
+came from the role and profile sentences, which kept their point and lost their
+second clause.
 
 Character counts are asserted by `tests/marketplace.test.ts`, which also checks
 that the copy does not name a control the plugin no longer ships — an earlier
@@ -144,12 +156,22 @@ listing rather than a first publication. Use the version notes below; they
 describe what changed, which is what an existing user opens the listing to find
 out.
 
-**The published listing is on 1.9.11**, built from `release-1.9.x` and
-submitted with the 1.9.9 copy below. Before it, the six submissions after 1.5 —
+**The published listing is on 1.9.11**, built from `release-1.9.x`. Its notes
+on the listing are the description text, not the 1.9.9 copy below. Before it,
+the six submissions after 1.5 —
 1.8.2, 1.8.3, 1.9.4, 1.9.6, 1.9.7 and 1.9.8 — were all rejected; 1.8.2 came
 back on the action-list icons, which is what 1.9.9 fixed. 1.10.0 to 1.10.2 were
 released on GitHub and never submitted, and nothing in them is visible on
 Windows, so write a submission's copy as the delta from 1.9.11.
+
+Maker Console stores the notes and the description as Markdown, and Marketplace
+renders them: the listing draws its description through a `markdown-editor`
+component, one `<p>` per paragraph, and the 1.5 and 1.8.2 notes on the listing
+carry `**` headings. So paragraphs need a blank line between them, and notes
+follow the shape those two were pasted in: a one-line summary, then **BOLD
+CAPS** headings, each with a blank line after it. The description stays
+unformatted; Elgato requires that of its first 250 characters, which search
+engines show.
 
 The first-release notes are kept further down for reference only — they describe
 the plugin from scratch, which is the right shape for a first publication and
@@ -168,17 +190,45 @@ measurements.
 The copy is the delta from 1.9.11, the published version.
 
 ```
-Two new actions switch webcams.
+Webcam switching, and Teams stays out of your way.
 
-Change Camera switches Teams to the webcam chosen in the key's settings, and Swap Camera flips between two. The list comes from Windows, so virtual cameras are included, and switching leaves your camera on or off as it was. Both read Teams on every press, so a webcam changed in Teams itself never puts them out of step.
+**SWITCH WEBCAMS!**
 
-Keys that open a Teams menu, such as reactions, raise hand and background blur, no longer leave Teams in front of the window you were working in.
+Two new keys in the Teams Meeting Controls category, for anyone with more than one camera.
+
+Change Camera switches Teams to the webcam you pick in the key's settings. Give each camera its own key and move between them with a press.
+
+Swap Camera flips between two webcams you pick, so one key takes you from a face camera to an overhead one and back.
+
+The settings list every camera Windows reports, capture cards and virtual cameras included, and switching never turns your video on or off. Swap Camera checks which webcam Teams is using on every press, so changing camera in Teams itself never puts it out of step.
+
+**STAYS OUT OF YOUR WAY**
+
+Keys that open a Teams menu, such as reactions, raise hand and background blur, could leave Teams in front of the window you were working in, especially while a PowerPoint Live deck was on screen. Your window now comes straight back.
 ```
 
-500 characters.
+950 characters.
 
-The description above gained a sentence about the webcam actions. A new version
-does not refresh it, so paste it into the **Details** tab as well.
+What each claim rests on:
+
+- **Capture cards and virtual cameras** — the list is Windows' video capture
+  devices, and the live run listed a Cam Link 4K and NVIDIA Broadcast beside an
+  ordinary webcam.
+- **Never turns your video on or off** — `sidecar/test-cameras.ps1` checks the
+  video state after every switch.
+- **Especially with a deck on screen** — click-away is refused whenever a
+  PowerPoint Live surface was seen in the last minute, so any menu that did not
+  close on its own fell through to the UI Automation calls that bring Teams
+  forward.
+- **Comes straight back** rather than "never comes forward", because it still
+  does for up to about 200 ms
+  ([#20](https://github.com/danswett/streamdeck-teams-control/issues/20)).
+
+The keys show whether the webcam can be switched, not which one is live, so the
+copy says nothing about what they display.
+
+The description above was rewritten for the webcam actions. A new version does
+not refresh it, so paste it into the **Details** tab as well.
 
 ### Version 1.10.2 — released, never submitted; 1.11.0 supersedes it
 
@@ -293,7 +343,7 @@ Joining a meeting now reaches the keys in about four seconds rather than ten. Ke
 
 1,433 characters.
 
-### Version 1.9.9 — the notes 1.9.11 was published with
+### Version 1.9.9 — the notes written for the 1.9.x submission
 
 Submitted to fix what review asked for on 1.8.2: the icons in the Stream Deck
 app's action list have to be white, and five of ours were not. The notes
@@ -519,7 +569,7 @@ No keys changed, and nothing about how the plugin works changed.
 
 ### Version 1.8.2 — submitted, rejected on the action-list icons
 
-Marketplace shows plain text, so this is the GitHub release rewritten for
+This is the GitHub release rewritten for
 someone who has the plugin installed but has never read a commit.
 
 ```
@@ -647,10 +697,9 @@ to maker@elgato.com.
       open decision.
 - [ ] `npm run test` passes and CI is green on the commit being shipped.
 - [ ] The `.streamDeckPlugin` uploaded is the one the release workflow built.
-- [ ] The **Details** tab carries the long description from this file. The
-      published listing currently shows the 215-character manifest text, which
-      is below Elgato's 250-character minimum for a description and says
-      nothing about PowerPoint Live.
+- [ ] The **Details** tab carries the description from this file. A new
+      version does not refresh it, and the listing still shows the copy from
+      before the webcam actions.
 - [ ] The **Media** tab carries all seven gallery items, not the original three.
 
 Media and copy are versioned separately from the product file, so the two
