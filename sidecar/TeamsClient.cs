@@ -4197,11 +4197,26 @@ public sealed class TeamsClient : IDisposable
                 if (firstSelection == true) item = second;
             }
 
+            // A checkbox inside a flyout can only be read while the flyout is
+            // open, which is exactly now. Reading the truth here and recording
+            // the flipped value means the key is right from the first press and
+            // re-syncs on every one after, instead of never showing state at
+            // all. Only stale if the same setting is changed in Teams directly.
+            //
+            // Read off the item that was asked for, before a radio group swaps
+            // in its "off" entry below. That entry's own tick says nothing about
+            // the setting, and reading it there recorded blur as on at the
+            // moment it was turned off, so the key stayed lit.
+            var wasChecked = IsChecked(item);
+
             // Radio-style menus need the "off" entry to undo the selection.
-            if (spec.MenuItemOffRegex is not null && IsChecked(item) == true)
+            // Without one, pressing the item again would change nothing and
+            // still report success.
+            if (spec.MenuItemOffRegex is not null && wasChecked == true)
             {
                 var offItem = FindInPopup(win, Array.Empty<string?>(), spec.MenuItemOffRegex, 800);
-                if (offItem is not null) item = offItem;
+                if (offItem is null) return (false, $"'{target}' is on, but its menu has no entry to turn it off");
+                item = offItem;
             }
 
             // Teams greys out entries that do not apply — Cameo needs your
@@ -4209,13 +4224,6 @@ public sealed class TeamsClient : IDisposable
             // than pressing nothing and leaving the flyout open.
             if (!SafeEnabled(item))
                 return (false, $"'{target}' is not available right now");
-
-            // A checkbox inside a flyout can only be read while the flyout is
-            // open, which is exactly now. Reading the truth here and recording
-            // the flipped value means the key is right from the first press and
-            // re-syncs on every one after, instead of never showing state at
-            // all. Only stale if the same setting is changed in Teams directly.
-            var wasChecked = IsChecked(item);
 
             if (target is "camera-select" or "camera-swap")
             {

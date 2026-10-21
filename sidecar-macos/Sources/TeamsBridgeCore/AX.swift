@@ -164,6 +164,22 @@ public enum AX {
     }
 
     /**
+     * Whether a checkable element is ticked, or nil when it does not say.
+     *
+     * The macOS counterpart of the Windows sidecar's IsChecked. Chromium
+     * publishes aria-checked as AXValue - a number, 1 ticked and 0 not - and
+     * only on elements that carry a checked state, which is what tells "not
+     * ticked" apart from "nothing to tick". Menu items also get
+     * AXMenuItemMarkChar, but that is empty in both of those cases, so only a
+     * mark that is actually there counts.
+     */
+    static func checked(_ el: AXUIElement) -> Bool? {
+        if let n = value(el, kAXValueAttribute as String) as? NSNumber { return n.intValue == 1 }
+        if string(el, "AXMenuItemMarkChar") != nil { return true }
+        return nil
+    }
+
+    /**
      * Screen rectangle of an element, or nil if it has none.
      *
      * Needed to answer a question the Windows sidecar answers with a window

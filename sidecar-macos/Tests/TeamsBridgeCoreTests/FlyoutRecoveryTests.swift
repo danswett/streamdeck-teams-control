@@ -135,4 +135,37 @@ final class FlyoutRecoveryTests: XCTestCase {
         let itemID = fillArg(spec.menuItemAutomationId, nil)
         XCTAssertEqual(TeamsClient.reachableIDs(spec, itemID: itemID, itemToggleID: nil), ["heart-2"])
     }
+
+    // MARK: - Turning a radio group off (#16)
+
+    func testBlurThatIsOnIsTurnedOffThroughItsOffEntry() {
+        // Choosing "Standard blur" again leaves it on, which is what #16
+        // reported: the menu came up, went away, and blur stayed.
+        let plan = TeamsClient.menuPress(hasOffEntry: true, itemChecked: true, remembered: nil)
+        XCTAssertEqual(plan, TeamsClient.MenuPress(pressOff: true, nowOn: false))
+    }
+
+    func testWhatTeamsSaysWinsOverTheLastPress() {
+        // Blur turned off in Teams itself, after the key last turned it on.
+        let plan = TeamsClient.menuPress(hasOffEntry: true, itemChecked: false, remembered: true)
+        XCTAssertEqual(plan, TeamsClient.MenuPress(pressOff: false, nowOn: true))
+    }
+
+    func testTheLastPressStandsInWhenTeamsDoesNotSay() {
+        let plan = TeamsClient.menuPress(hasOffEntry: true, itemChecked: nil, remembered: true)
+        XCTAssertEqual(plan, TeamsClient.MenuPress(pressOff: true, nowOn: false))
+    }
+
+    func testAnItemWithNoOffEntryIsSimplyPressed() {
+        // A ticked checkbox item is unticked by the press; a reaction, which
+        // has no tick, reads as on as it always has.
+        XCTAssertEqual(
+            TeamsClient.menuPress(hasOffEntry: false, itemChecked: true, remembered: nil),
+            TeamsClient.MenuPress(pressOff: false, nowOn: false)
+        )
+        XCTAssertEqual(
+            TeamsClient.menuPress(hasOffEntry: false, itemChecked: nil, remembered: true),
+            TeamsClient.MenuPress(pressOff: false, nowOn: true)
+        )
+    }
 }
