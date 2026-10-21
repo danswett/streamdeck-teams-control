@@ -2962,6 +2962,20 @@ public sealed class TeamsClient : IDisposable
         if (WaitForDismissed(win, host, 1500)) { rungs.ReportIfSlow("dismiss:natural", SlowFlyoutMs); return; }
         rungs.Mark("natural");
 
+        // While Teams is behind whatever the user is working in, Collapse
+        // brings it forward for a moment (#20). Pressing the menu button again
+        // closes the flyout with a posted click, which activates nothing, so
+        // that goes first - unless a deck is up. The point was remembered
+        // before the menu opened, PowerPoint Live re-renders the toolbar under
+        // it, and a click that lands on the wrong control there can drive the
+        // presentation for everyone watching.
+        if (hostPoint is { } early && !IsPresentingDeck() && !FocusGuard.IsTeamsInFront() &&
+            InputPoster.TryClickPoint(_renderWidget, early.x, early.y))
+        {
+            if (WaitForDismissed(win, host, 900)) { rungs.ReportIfSlow("dismiss:hostPointFirst", SlowFlyoutMs); return; }
+        }
+        rungs.Mark("hostPointFirst");
+
         // Ask the menu to close itself before clicking anything. This is the
         // only dismissal that cannot act on the meeting, and it matters most
         // during PowerPoint Live: a stray click on the slide surface advances
@@ -3065,6 +3079,12 @@ public sealed class TeamsClient : IDisposable
     /// </summary>
     private bool TryClickAway(AutomationElement win)
     {
+        if (_noClickAway)
+        {
+            Console.Error.WriteLine("not clicking to dismiss: TEAMSBRIDGE_NO_CLICK_AWAY is set");
+            return false;
+        }
+
         // Never while a deck is up.
         //
         // This posts a click at a spot guessed to be inert, and during
@@ -3148,6 +3168,16 @@ public sealed class TeamsClient : IDisposable
         Environment.TickCount64 - _pptSurfaceSeenAt < PresentingGraceMs;
 
     private const int PresentingGraceMs = 60_000;
+
+    /// <summary>
+    /// Turns click-away off, so a flyout has to be closed by the fallbacks a
+    /// meeting with no inert space to click, or a presented deck, would reach.
+    /// For measuring those (#20) without a patched build: off unless
+    /// TEAMSBRIDGE_NO_CLICK_AWAY is set, which test-focus-strict.ps1
+    /// -ForceFallback does.
+    /// </summary>
+    private static readonly bool _noClickAway =
+        !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("TEAMSBRIDGE_NO_CLICK_AWAY"));
 
     /// <summary>
     /// Screen bounds of the PowerPoint Live slide surface, when one is up.
