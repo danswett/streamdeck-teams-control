@@ -412,7 +412,8 @@ Five things make this reliable:
    foreground window never changes. UIA `Invoke` stays as the fallback where
    there are no on-screen bounds, such as a minimized window. That fallback, and
    the UI Automation calls that close a flyout that will not close by itself,
-   run under a focus guard that puts back whichever window was in front.
+   run under a focus guard that puts back whichever window was in front as soon
+   as Windows reports Teams taking it.
 
    It is also why flyouts are not disruptive — the popup opens *behind* whatever
    you are working in.
@@ -900,7 +901,7 @@ the suite is in two halves.
 | `test-soak.ps1` | either | handle and memory drift over a long run |
 | `test-flyouts.ps1` | yes | hand, reactions and blur, twice each |
 | `test-reactions.ps1` | yes | all five reactions |
-| `test-focus-strict.ps1` | yes | foreground never changes, sampled every 10 ms until flyout cleanup ends |
+| `test-focus-strict.ps1` | yes | foreground never changes, every change timed as it happens until flyout cleanup ends; `-ForceFallback` turns click-away off to reach the UI Automation fallbacks |
 | `test-cameras.ps1` | yes | Change Camera and Swap Camera against Teams' own selection, video state and focus |
 | `test-dimming.ps1` | yes | keys stay lit while a flyout is open |
 | `test-state-latency-external.ps1` | yes | latency for a change the plugin did not make |
@@ -909,9 +910,11 @@ the suite is in two halves.
 `test-state-latency-external.ps1` toggles mute by default; pass `-Target camera`
 when audio is unavailable, such as in a remote session.
 
-`sidecar/probe-*.ps1` are read-only diagnostics that dump what a part of the
-Teams tree currently looks like. They are how every selector in this repo was
-derived, and how to re-derive one when Teams changes.
+`sidecar/probe-*.ps1` are diagnostics that dump what a part of the Teams tree
+currently looks like. They are how every selector in this repo was derived, and
+how to re-derive one when Teams changes. A few instead try one input mechanism
+in isolation and touch the meeting: `probe-postmessage-*.ps1` post clicks, and
+`probe-posted-escape.ps1` opens flyouts and posts Escape to close them.
 
 ### Logs
 

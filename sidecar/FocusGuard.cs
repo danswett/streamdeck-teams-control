@@ -46,6 +46,51 @@ internal static class FocusGuard
     [DllImport("kernel32.dll")]
     private static extern uint GetCurrentThreadId();
 
+    private delegate void WinEventProc(
+        IntPtr hook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint eventThread, uint eventTimeMs);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetWinEventHook(
+        uint eventMin, uint eventMax, IntPtr module, WinEventProc callback, uint processId, uint threadId, uint flags);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool UnhookWinEvent(IntPtr hook);
+
+    [DllImport("user32.dll", EntryPoint = "GetMessageW")]
+    private static extern int GetMessage(out MSG msg, IntPtr hWnd, uint filterMin, uint filterMax);
+
+    [DllImport("user32.dll")]
+    private static extern UIntPtr SetTimer(IntPtr hWnd, UIntPtr id, uint elapseMs, IntPtr timerProc);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool KillTimer(IntPtr hWnd, UIntPtr id);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MSG
+    {
+        public IntPtr hwnd;
+        public uint message;
+        public UIntPtr wParam;
+        public IntPtr lParam;
+        public uint time;
+        public int x;
+        public int y;
+        public uint lPrivate;
+    }
+
+    private const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
+    private const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+    private const uint WM_TIMER = 0x0113;
+
+    /// <summary>
+    /// How often a watch looks for itself, as well as being told. Ends the
+    /// watch on time, and catches Teams coming forward if the hook could not
+    /// be installed - which is how every change was found before it existed.
+    /// </summary>
+    private const int BackstopMs = 60;
+
     /// <summary>
     /// The window that was in front, or zero when the guard should not act
     /// (nothing focused, or Teams already had focus and should keep it).
@@ -57,6 +102,16 @@ internal static class FocusGuard
 
         // If the user was already working in Teams, leave focus alone.
         return IsTeamsWindow(hwnd) ? IntPtr.Zero : hwnd;
+    }
+
+    /// <summary>
+    /// Whether Teams is in front, where activating it takes nothing from
+    /// anyone.
+    /// </summary>
+    public static bool IsTeamsInFront()
+    {
+        var hwnd = GetForegroundWindow();
+        return hwnd != IntPtr.Zero && IsTeamsWindow(hwnd);
     }
 
     /// <summary>
@@ -90,6 +145,11 @@ internal static class FocusGuard
         private readonly int _trailingMs;
         private long _until = long.MaxValue;
 
+        // Held for as long as the hook is installed. Windows calls back through
+        // it, and a delegate only native code refers to is otherwise free for
+        // the garbage collector to take.
+        private WinEventProc? _onForeground;
+
         public FocusWatch(IntPtr previous, int trailingMs)
         {
             _previous = previous;
@@ -109,21 +169,72 @@ internal static class FocusGuard
         public void Dispose() =>
             Interlocked.CompareExchange(ref _until, Environment.TickCount64 + _trailingMs, long.MaxValue);
 
+        /// <summary>
+        /// Puts focus back the moment Teams takes it, rather than at the next
+        /// look.
+        ///
+        /// Looking every 60 ms left Teams in front for as long as it took to
+        /// notice, and that was the flash still visible after #19 (#20). A
+        /// foreground hook is told of the change as it happens. Its callbacks
+        /// arrive inside GetMessage, so this thread waits there, and the
+        /// backstop timer is the message that wakes it to end on time.
+        /// </summary>
         private void Run()
+        {
+            _onForeground = (_, _, _, _, _, _, _) => PutBack();
+            var hook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, IntPtr.Zero,
+                _onForeground, 0, 0, WINEVENT_OUTOFCONTEXT);
+            var timer = SetTimer(IntPtr.Zero, UIntPtr.Zero, BackstopMs, IntPtr.Zero);
+            try
+            {
+                if (timer == UIntPtr.Zero)
+                {
+                    // Nothing would wake GetMessage to end the watch.
+                    Poll();
+                    return;
+                }
+
+                // Teams may have come forward before the hook was in place.
+                if (!PutBack()) return;
+
+                while (Environment.TickCount64 < Interlocked.Read(ref _until))
+                {
+                    if (GetMessage(out var msg, IntPtr.Zero, 0, 0) <= 0) return;
+                    if (msg.message == WM_TIMER && !PutBack()) return;
+                }
+            }
+            finally
+            {
+                if (timer != UIntPtr.Zero) KillTimer(IntPtr.Zero, timer);
+                if (hook != IntPtr.Zero) UnhookWinEvent(hook);
+                GC.KeepAlive(_onForeground);
+            }
+        }
+
+        private void Poll()
         {
             while (Environment.TickCount64 < Interlocked.Read(ref _until))
             {
-                Thread.Sleep(60);
-                try
-                {
-                    if (!IsWindow(_previous)) return;
-                    var current = GetForegroundWindow();
-                    if (current == _previous) continue;
-                    if (current == IntPtr.Zero || !IsTeamsWindow(current)) continue;
-                    Restore(_previous);
-                }
-                catch { return; }
+                Thread.Sleep(BackstopMs);
+                if (!PutBack()) return;
             }
+        }
+
+        /// <summary>
+        /// Puts focus back if Teams has it. False once there is nothing to put
+        /// it back to, which ends the watch.
+        /// </summary>
+        private bool PutBack()
+        {
+            try
+            {
+                if (!IsWindow(_previous)) return false;
+                var current = GetForegroundWindow();
+                if (current == _previous || current == IntPtr.Zero || !IsTeamsWindow(current)) return true;
+                Restore(_previous);
+                return true;
+            }
+            catch { return false; }
         }
     }
 
