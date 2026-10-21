@@ -156,9 +156,16 @@ listing rather than a first publication. Use the version notes below; they
 describe what changed, which is what an existing user opens the listing to find
 out.
 
-**The published listing is on 1.9.11**, built from `release-1.9.x`. Its notes
-on the listing are the description text, not the 1.9.9 copy below. Before it,
-the six submissions after 1.5 —
+**The published listing is on 1.11.0.17, the macOS test build, submitted by
+mistake in place of 1.11.0.** It is the package from the rolling `macos-test`
+prerelease: it declares macOS only and carries no Windows sidecar, so it cannot
+be installed on Windows. Test builds are numbered `<manifest version>.<run
+number>`, so it also outranks the stable 1.11.0.0, which therefore cannot
+replace it. 1.11.1.0 can.
+
+The last version Windows users could install from the listing is 1.9.11, built
+from `release-1.9.x`. Its notes on the listing are the description text, not the
+1.9.9 copy below. Before it, the six submissions after 1.5 —
 1.8.2, 1.8.3, 1.9.4, 1.9.6, 1.9.7 and 1.9.8 — were all rejected; 1.8.2 came
 back on the action-list icons, which is what 1.9.9 fixed. 1.10.0 to 1.10.2 were
 released on GitHub and never submitted, and nothing in them is visible on
@@ -177,7 +184,70 @@ The first-release notes are kept further down for reference only — they descri
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
 
-### Version 1.11.0 — the next submission
+### Version 1.11.1 — the next submission
+
+Puts the Windows plugin back on the listing, carrying 1.11.0 with it, plus two
+fixes: [#27](https://github.com/danswett/streamdeck-teams-control/pull/27), the
+Background Blur key staying lit after blur was turned off, and
+[#29](https://github.com/danswett/streamdeck-teams-control/pull/29), Teams
+coming forward when a menu had to be closed through UI Automation.
+
+The copy is the delta from 1.9.11, the last version Windows users could
+install, so it repeats 1.11.0's webcam section: anyone on Windows is reading it
+for the first time.
+
+```
+Installs on Windows again, and brings webcam switching with it.
+
+**BACK ON WINDOWS**
+
+The previous version, 1.11.0.17, was a macOS test build published by mistake. It could not be installed on Windows, and macOS is not supported yet. This version restores the Windows plugin, with everything 1.11.0 was meant to bring.
+
+**SWITCH WEBCAMS!**
+
+Two new keys in the Teams Meeting Controls category, for anyone with more than one camera.
+
+Change Camera switches Teams to the webcam you pick in the key's settings. Give each camera its own key and move between them with a press.
+
+Swap Camera flips between two webcams you pick, so one key takes you from a face camera to an overhead one and back.
+
+The settings list every camera Windows reports, capture cards and virtual cameras included, and switching never turns your video on or off. Swap Camera checks which webcam Teams is using on every press, so changing camera in Teams itself never puts it out of step.
+
+**STAYS OUT OF YOUR WAY**
+
+Keys that open a Teams menu, such as reactions, raise hand and background blur, no longer pull Teams in front of the window you are working in. While a PowerPoint Live deck is on screen Teams can still appear for a moment, and your window comes straight back.
+
+**FIXED**
+
+The Background Blur key shows blur as off once you turn it off, instead of staying highlighted.
+```
+
+1,352 characters.
+
+What each claim rests on, beyond 1.11.0's list below:
+
+- **A macOS test build** — the package Marketplace serves for 1.11.0.17
+  contains `bin/sidecar/TeamsBridge.app` and no `TeamsBridge.exe`, which is the
+  rolling `macos-test` prerelease.
+- **No longer pull Teams in front** — #29's live run, in a meeting with
+  click-away forced off so every menu reached the fallbacks: 1.11.0 brought
+  Teams forward on 5 of 5 menu presses, 65–77 ms each, and 1.11.1 on none.
+  With click-away on, neither does.
+- **Can still appear while a deck is on screen** — click-away and #29's
+  posted click on the menu button are both skipped while presenting, because a
+  stray click there can drive the presentation, so the UI Automation fallback
+  still runs. [#20](https://github.com/danswett/streamdeck-teams-control/issues/20)
+  stays open for it.
+- **Blur shows as off** — #27's live run: 1.11.0 recorded blur as on after
+  turning it off, and 1.11.1 records it as off.
+
+The description is unchanged from 1.11.0. Paste it into the **Details** tab if
+that was not done when 1.11.0.17 went in.
+
+### Version 1.11.0 — released; 1.11.1 supersedes it
+
+Submitted as the wrong package — the macOS test build 1.11.0.17 — so it never
+reached Windows through the listing. 1.11.1 carries everything below.
 
 Webcam switching, from
 [#17](https://github.com/danswett/streamdeck-teams-control/pull/17), and the fix
@@ -669,8 +739,12 @@ through the workflow's `workflow_dispatch` input.
 [Maker Console](https://maker.elgato.com):
 
 1. **Products** → the product → **Versions** → **Create version**.
-2. Upload the `.streamDeckPlugin` attached to the GitHub release, so what
-   ships is the artifact CI built rather than a local rebuild.
+2. Upload the `.streamDeckPlugin` attached to the stable `v*` GitHub release,
+   so what ships is the artifact CI built rather than a local rebuild. **Never
+   the rolling `macos-test` prerelease.** Its package has the same file name,
+   declares macOS only, carries no Windows sidecar, and is numbered above the
+   stable release of the same version, so Maker Console accepts it as an
+   update. That is how 1.11.0.17 was published in place of 1.11.0.
 3. Paste the release notes.
 4. Tick **Automatically publish after being approved** unless the release has
    to land on a particular date — if it does, leave it unticked and press
@@ -697,6 +771,9 @@ to maker@elgato.com.
       open decision.
 - [ ] `npm run test` passes and CI is green on the commit being shipped.
 - [ ] The `.streamDeckPlugin` uploaded is the one the release workflow built.
+- [ ] It is the stable `v*` release's package, not `macos-test`'s: its manifest
+      declares Windows, it contains `bin/sidecar/TeamsBridge.exe`, and its
+      version is above the one the listing is on.
 - [ ] The **Details** tab carries the description from this file. A new
       version does not refresh it, and the listing still shows the copy from
       before the webcam actions.
