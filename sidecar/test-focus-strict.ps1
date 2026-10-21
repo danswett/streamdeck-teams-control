@@ -13,6 +13,9 @@
     Sampling from this loop looked every 30-60 ms at best, so a flash could be
     missed outright and one that was caught was timed in whole sampling
     intervals - too coarse to tell a faster focus guard from a slower one (#20).
+    Chromium raises the same event for its own accessibility, naming windows
+    that are not in front, so each event is only a cue to read the window that
+    really is.
 
     -ForceFallback starts the sidecar with click-away turned off, so every
     flyout has to be closed by the fallbacks a crowded meeting or a presented
@@ -65,6 +68,8 @@ public static class StrictForegroundLog {
     [DllImport("user32.dll")] static extern bool PostThreadMessage(uint tid, uint msg, IntPtr w, IntPtr l);
     [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint flags);
 
     const uint EVENT_SYSTEM_FOREGROUND = 3;
     const uint WM_QUIT = 0x0012;
@@ -110,10 +115,23 @@ public static class StrictForegroundLog {
         }
     }
 
+    // Chromium raises this event itself for accessibility, naming windows that
+    // are not in front - a child window, or Teams while another app has the
+    // foreground. So an event is only a cue: what is recorded is the window
+    // actually in front, by the top of its parent and owner chain, and only
+    // when that has changed.
+    static IntPtr lastRoot;
     static void OnChange(IntPtr hook, uint ev, IntPtr hwnd, int idObject, int idChild, uint thread, uint time) {
-        uint pid;
-        GetWindowThreadProcessId(hwnd, out pid);
-        lock (Changes) { Changes.Add(new StrictForegroundChange { At = Now(), Pid = (int)pid }); }
+        IntPtr fg = GetForegroundWindow();
+        IntPtr root = GetAncestor(fg, 3);   // GA_ROOTOWNER
+        if (root == IntPtr.Zero) root = fg;
+        lock (Changes) {
+            if (root == lastRoot) return;
+            lastRoot = root;
+            uint pid;
+            GetWindowThreadProcessId(root, out pid);
+            Changes.Add(new StrictForegroundChange { At = Now(), Pid = (int)pid });
+        }
     }
 
     public static StrictForegroundChange[] Between(double from, double to) {

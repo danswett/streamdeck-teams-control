@@ -105,6 +105,8 @@ public static class EscProbeForegroundLog {
     [DllImport("user32.dll")] static extern bool PostThreadMessage(uint tid, uint msg, IntPtr w, IntPtr l);
     [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr h, uint flags);
     static readonly Stopwatch Clock = Stopwatch.StartNew();
     static readonly List<EscProbeForegroundChange> Changes = new List<EscProbeForegroundChange>();
     static readonly object Gate = new object();
@@ -142,9 +144,20 @@ public static class EscProbeForegroundLog {
             worker = null;
         }
     }
+    // Chromium raises this event itself for accessibility, naming windows that
+    // are not in front, so an event is only a cue to read what actually is -
+    // by the top of its parent and owner chain, and only when it has changed.
+    static IntPtr lastRoot;
     static void OnChange(IntPtr hook, uint ev, IntPtr hwnd, int idObject, int idChild, uint thread, uint time) {
-        uint pid; GetWindowThreadProcessId(hwnd, out pid);
-        lock (Changes) { Changes.Add(new EscProbeForegroundChange { At = Now(), Pid = (int)pid }); }
+        IntPtr fg = GetForegroundWindow();
+        IntPtr root = GetAncestor(fg, 3);   // GA_ROOTOWNER
+        if (root == IntPtr.Zero) root = fg;
+        lock (Changes) {
+            if (root == lastRoot) return;
+            lastRoot = root;
+            uint pid; GetWindowThreadProcessId(root, out pid);
+            Changes.Add(new EscProbeForegroundChange { At = Now(), Pid = (int)pid });
+        }
     }
     public static EscProbeForegroundChange[] Between(double from, double to) {
         lock (Changes) { return Changes.FindAll(c => c.At >= from && c.At <= to).ToArray(); }
