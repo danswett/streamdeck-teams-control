@@ -724,7 +724,7 @@ public final class TeamsClient {
             _ = press(host.element, name: menu)
             Thread.sleep(forTimeInterval: 0.4)
         }
-        let nodes = Tree.walk(windows: AX.windows(appEl))
+        let nodes = Tree.walk(windows: AX.windows(appEl), withFrames: true)
         return nodes.compactMap { n in
             if n.id.isEmpty && n.label.isEmpty { return nil }
             if n.actions.isEmpty && n.id.isEmpty { return nil }

@@ -211,7 +211,8 @@ struct AXNode {
     var label: String
     var enabled: Bool
     var actions: [String]
-    /// Screen rectangle, when the element reports one.
+    /// Screen rectangle, when the element reports one and the walk asked for
+    /// it.
     var frame: CGRect?
 }
 
@@ -234,7 +235,21 @@ enum Tree {
         IO.err("warning: stopped walking the accessibility tree at \(visited) of a \(maxNodes)-node limit; a control past that point will read as missing")
     }
 
-    static func walk(windows: [AXUIElement], maxDepth: Int = 40, maxNodes: Int = 12_000) -> [AXNode] {
+    /**
+     * Every element under the windows, depth first.
+     *
+     * Frames are left out unless asked for. Reading one is two more calls into
+     * Teams per element, on top of the six to nine every node already costs,
+     * and only `discover` reports them - so every poll, every press, and the
+     * flyout wait that walks the whole window every 50 ms would otherwise pay a
+     * quarter more for geometry nothing reads (#21).
+     */
+    static func walk(
+        windows: [AXUIElement],
+        maxDepth: Int = 40,
+        maxNodes: Int = 12_000,
+        withFrames: Bool = false
+    ) -> [AXNode] {
         var nodes: [AXNode] = []
         var stack: [(AXUIElement, Int)] = windows.map { ($0, 0) }
         while let (el, depth) = stack.popLast() {
@@ -246,7 +261,7 @@ enum Tree {
                 label: AX.label(el),
                 enabled: AX.enabled(el),
                 actions: AX.actions(el),
-                frame: AX.frame(el)
+                frame: withFrames ? AX.frame(el) : nil
             ))
             if depth < maxDepth {
                 for child in AX.children(el).reversed() {
