@@ -493,15 +493,69 @@ public final class TeamsClient {
             return (false, "menu item for '\(target)' not found")
         }
 
-        if let offRx = spec.menuItemOffRegex, spec.matches(spec.menuItemRegex, text: item.label) {
-            // Radio: if already on, click the off item instead. We don't know
-            // "already on" cheaply; press the requested item.
-            _ = offRx
+        let plan = Self.menuPress(
+            hasOffEntry: spec.menuItemOffRegex != nil,
+            itemChecked: AX.checked(item.element),
+            remembered: lastStates[target]
+        )
+        var chosen = item
+        if plan.pressOff {
+            guard let offRx = spec.menuItemOffRegex, let off = findItem(named: offRx, spec: spec, within: 0.8) else {
+                scheduleDismissal(anchor: item, hostID: menuID)
+                return (false, "'\(target)' is on, but its menu has no entry to turn it off")
+            }
+            chosen = off
         }
-        let result = press(item.element, name: target)
-        if result.ok { lastStates[target] = true }
-        scheduleDismissal(anchor: item, hostID: menuID)
+        let result = press(chosen.element, name: target)
+        if result.ok { lastStates[target] = plan.nowOn }
+        scheduleDismissal(anchor: chosen, hostID: menuID)
         return result
+    }
+
+    /// What a press on a flyout item should do, settled before anything is
+    /// pressed.
+    struct MenuPress: Equatable {
+        /// Choose the group's "off" entry instead of the item itself.
+        var pressOff: Bool
+        /// What the control reads once the press has landed.
+        var nowOn: Bool
+    }
+
+    /**
+     * Decides what pressing a flyout item does, and what it leaves the key
+     * showing.
+     *
+     * Background effects are a radio group. Choosing "Standard blur" while it
+     * is already chosen changes nothing, so turning blur off means choosing the
+     * group's "off" entry instead - the step this sidecar never took, which let
+     * the key turn blur on and never off again (#16). Whether it is on is read
+     * off the item while the flyout is open, the only time it can be; when
+     * Teams does not say, the last press stands in for it.
+     *
+     * Anything else has no off entry and is simply pressed. Where it says
+     * whether it is ticked, the press flips that; where it does not - a
+     * reaction - it reads as on, as it always has.
+     */
+    static func menuPress(hasOffEntry: Bool, itemChecked: Bool?, remembered: Bool?) -> MenuPress {
+        if hasOffEntry {
+            let wasOn = itemChecked ?? remembered ?? false
+            return MenuPress(pressOff: wasOn, nowOn: !wasOn)
+        }
+        return MenuPress(pressOff: false, nowOn: itemChecked.map { !$0 } ?? true)
+    }
+
+    /// Waits for an entry in the open flyout whose name matches. Used for a
+    /// radio group's "off" entry, which sits in the same popup as the item
+    /// just found, so it is normally there on the first look.
+    private func findItem(named rx: NSRegularExpression, spec: ControlSpec, within timeout: TimeInterval) -> AXNode? {
+        guard let appEl else { return nil }
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            let nodes = Tree.walk(windows: AX.windows(appEl))
+            if let found = nodes.first(where: { spec.matches(rx, text: $0.label) && $0.enabled }) { return found }
+            if Date() >= deadline { return nil }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
     }
 
     /// Pause before re-pressing a menu trigger Teams swallowed the first press
@@ -740,6 +794,12 @@ public final class TeamsClient {
             // screen because the tree carries its name and never its picture.
             if let f = n.frame {
                 row["frame"] = "\(Int(f.origin.x)),\(Int(f.origin.y)),\(Int(f.size.width)),\(Int(f.size.height))"
+            }
+            // Whether an item is ticked, so a dump of the background-effects
+            // menu shows what the blur key decides by. The Windows dump calls
+            // the same thing "toggle".
+            if let checked = AX.checked(n.element) {
+                row["checked"] = checked ? "true" : "false"
             }
             return row
         }
