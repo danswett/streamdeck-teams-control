@@ -43,6 +43,7 @@
 		"",
 		"Captured from Teams 26255.500.5120.7530 on 2026-09-14, PowerPoint Live added",
 		"2026-09-17. After a Teams update, run bin/sidecar/TeamsBridge.exe from a",
+		"German state patterns captured 2026-10-26 (Teams 26260.1717.5229.7049, UI language de-DE).",
 		"terminal and send it {\"id\":1,\"cmd\":\"discover\",\"menu\":\"\"} to dump the live",
 		"UI tree, then correct the ids below and restart the plugin.",
 		"",
@@ -115,13 +116,13 @@
 	"controls": {
 		"mute": {
 			"automationId": "microphone-button",
-			"activePattern": "^\\s*unmute\\b",
-			"inactivePattern": "^\\s*mute\\b"
+			"activePattern": "^\\s*unmute\\b|wieder\\s+aktivieren",
+			"inactivePattern": "^\\s*mute\\b|stumm\\s*schalten"
 		},
 		"camera": {
 			"automationId": "video-button",
-			"activePattern": "camera\\s+off",
-			"inactivePattern": "camera\\s+on"
+			"activePattern": "camera\\s+off|kamera\\s+(aus|deaktivieren)",
+			"inactivePattern": "camera\\s+on|kamera\\s+(ein|aktivieren)"
 		},
 		"camera-select": {
 			"menu": "video-button-configure",
@@ -136,8 +137,8 @@
 		},
 		"share": {
 			"automationId": "share-button",
-			"activePattern": "stop\\s+(sharing|presenting)",
-			"inactivePattern": "^\\s*share\\b"
+			"activePattern": "stop\\s+(sharing|presenting)|teilen\\s+beenden",
+			"inactivePattern": "^\\s*share\\b|^\\s*teilen\\s*$"
 		},
 		"chat": {
 			"automationId": "chat-button"
