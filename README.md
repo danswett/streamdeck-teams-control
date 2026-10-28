@@ -96,7 +96,8 @@ the same accessibility layer screen readers use.
 **High Fidelity Music Mode** toggles the setting in Teams' microphone audio
 options. Its musical-note key is gold when on, white when off or not yet read,
 and gray outside a meeting. Each press reads the actual setting and confirms the
-change. It also passively observes the switch while you have Teams' audio options
+change, updating the key before closing the audio options flyout. It also
+passively observes the switch while you have Teams' audio options
 open, so manual changes there update the key. It never opens the flyout to poll:
 with the flyout closed it retains the last observed state, and before the first
 observation the state is unknown. Changes through other hidden surfaces cannot

@@ -226,6 +226,11 @@ public static class Program
     {
         using var client = new TeamsClient(config, restoreFocus)
             { DebugEvents = debugEvents, UseEvents = useEvents, ProfileSnapshots = profile };
+        client.MusicModeConfirmed += active => Emit(w =>
+        {
+            w.WriteString("type", "music-mode-state");
+            w.WriteBoolean("active", active);
+        });
         var lastFingerprint = "";
         var nextPoll = 0L;
         var wasInMeeting = false;

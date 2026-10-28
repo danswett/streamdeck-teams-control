@@ -476,6 +476,9 @@ public sealed class TeamsClient : IDisposable
     /// </summary>
     public event Action? Hint;
 
+    /// <summary>A freshly confirmed music state, published before flyout cleanup.</summary>
+    public event Action<bool>? MusicModeConfirmed;
+
     /// <summary>When set, every event that fires is logged to stderr.</summary>
     public bool DebugEvents { get; set; }
 
@@ -4226,10 +4229,13 @@ public sealed class TeamsClient : IDisposable
                     item = current;
                     return new MusicMode.Switch(ReadMusicMode(current), SafeEnabled(current), () => PressMusicMode(current));
                 });
+                stages.Mark("confirm");
                 _musicModeObserver?.Dispose();
                 _musicModeObserver = null;
                 if (result.active is bool active) _lastStates[target] = active;
                 else _lastStates.Remove(target);
+                if (result.ok && result.active is bool confirmed)
+                    MusicModeConfirmed?.Invoke(confirmed);
                 return (result.ok, result.error);
             }
 
@@ -4316,6 +4322,14 @@ public sealed class TeamsClient : IDisposable
             var anchor = item;
             DeferCleanup(() =>
             {
+                if (target == "music-mode")
+                {
+                    DismissMusicModeFlyout(win, anchor, host, hostPoint, spec.Menu!);
+                    stages.Mark("dismiss");
+                    stages.ReportIfSlow(target, SlowFlyoutMs);
+                    return;
+                }
+
                 // Two problems, one fix. The flyout does not reliably close on
                 // its own, and after a selection Teams swallows the next click
                 // on that menu button. A click on inert space dismisses the
@@ -4442,6 +4456,70 @@ public sealed class TeamsClient : IDisposable
     private MusicMode.Observer<AutomationElement>? _musicModeObserver;
     private AutomationElement? _musicModeHost;
     private IDisposable? _musicModeHostWatch;
+
+    private void DismissMusicModeFlyout(
+        AutomationElement win, AutomationElement? anchor, AutomationElement host,
+        (int x, int y)? hostPoint, string hostId)
+    {
+        AutomationElement? current = null;
+        bool? IsOpen()
+        {
+            try
+            {
+                current = FindAnywhere(win, hostId);
+                return current?.Patterns.ExpandCollapse.PatternOrDefault?.ExpandCollapseState.Value switch
+                {
+                    ExpandCollapseState.Expanded => true,
+                    ExpandCollapseState.Collapsed => false,
+                    _ => null
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"music-mode dismissal state read failed: {ex.Message}");
+                return null;
+            }
+        }
+
+        bool PostClose() =>
+            !IsPresentingDeck() && !FocusGuard.IsTeamsInFront() && IsOpen() is true &&
+            InputPoster.TryClick(_renderWidget, current!);
+
+        bool Collapse()
+        {
+            try
+            {
+                var pattern = current?.Patterns.ExpandCollapse.PatternOrDefault;
+                if (pattern is null) return false;
+                Guarded(pattern.Collapse);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"music-mode collapse failed: {ex.Message}");
+                return false;
+            }
+        }
+
+        bool WaitForClosed()
+        {
+            var deadline = Environment.TickCount64 + 700;
+            do
+            {
+                if (IsOpen() is false) return true;
+                Thread.Sleep(PollIntervalMs);
+            } while (Environment.TickCount64 < deadline);
+            return false;
+        }
+
+        // A setting switch stays open after a successful change. Unlike a
+        // menu selection, it has no natural dismissal to wait for.
+        MusicMode.Dismiss(IsOpen, PostClose, Collapse, WaitForClosed, () =>
+        {
+            Console.Error.WriteLine("music-mode quick dismissal unconfirmed; using existing flyout cleanup");
+            DismissFlyout(win, anchor, host, hostPoint, hostId);
+        });
+    }
 
     private void ObserveMusicMode(AutomationElement win)
     {

@@ -74,6 +74,21 @@ internal static class MusicMode
 
     internal sealed record Switch(bool? Active, bool Enabled, Func<bool> Press);
 
+    internal static void Dismiss(
+        Func<bool?> isOpen, Func<bool> postClose, Func<bool> collapse,
+        Func<bool> waitForClosed, Action fallback)
+    {
+        var open = isOpen();
+        if (open is false) return;
+        if (open is true)
+        {
+            if (postClose() && waitForClosed()) return;
+            if (isOpen() is false) return;
+            if (collapse() && waitForClosed()) return;
+        }
+        fallback();
+    }
+
     // Re-find for every read: Teams can replace a switch after posting input.
     internal static (bool ok, string? error, bool? active) Toggle(
         Func<Switch?> find, Action? wait = null, Func<long>? now = null)
