@@ -145,22 +145,6 @@
 	],
 	"Actions": [
 		{
-			"Name": "High Fidelity Music Mode",
-			"UUID": "com.bad-duck.teamscontrol.music-mode",
-			"Icon": "imgs/actions/music-mode/icon",
-			"Tooltip": "Turn High fidelity music mode on or off",
-			"PropertyInspectorPath": "ui/music-mode.html",
-			"Controllers": ["Keypad"],
-			"SupportedInMultiActions": true,
-			"UserTitleEnabled": false,
-			"States": [
-				{
-					"Image": "imgs/actions/music-mode/key",
-					"TitleAlignment": "bottom"
-				}
-			]
-		},
-		{
 			"Name": "Mute",
 			"UUID": "com.bad-duck.teamscontrol.mute",
 			"Icon": "imgs/actions/mute/icon",
@@ -414,6 +398,22 @@
 			"States": [
 				{
 					"Image": "imgs/actions/leave/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "High Fidelity Music Mode",
+			"UUID": "com.bad-duck.teamscontrol.music-mode",
+			"Icon": "imgs/actions/music-mode/icon",
+			"Tooltip": "Turn High fidelity music mode on or off",
+			"PropertyInspectorPath": "ui/music-mode.html",
+			"Controllers": ["Keypad"],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"States": [
+				{
+					"Image": "imgs/actions/music-mode/key",
 					"TitleAlignment": "bottom"
 				}
 			]
