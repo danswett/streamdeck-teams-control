@@ -242,9 +242,10 @@ internal sealed class DomActuator
     private CdpTarget? TargetFor(bool slideShowSurface) =>
         slideShowSurface ? _slideShow : _meetingPage;
 
-    internal CameraDom.Result? SelectCamera(ControlSpec spec, string? arg, bool swap)
+    internal CameraDom.Result? SelectCamera(ControlSpec spec, string? arg, bool swap,
+        CameraVideoSettingsSpec? videoSettings = null)
     {
-        var script = CameraDom.BuildScript(spec, arg, swap, _spec.TimeoutMs);
+        var script = CameraDom.BuildScript(spec, arg, swap, _spec.TimeoutMs, videoSettings);
         if (script is null || !IsUsable || _meetingPage is null) return null;
 
         // The minimized mini-meeting passes the generic microphone probe but

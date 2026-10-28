@@ -213,6 +213,8 @@ public sealed class SelectorConfig
     /// </summary>
     public TimerSpec Timer { get; set; } = new();
 
+    public CameraVideoSettingsSpec CameraVideoSettings { get; set; } = new();
+
     /// <summary>
     /// The opt-in JavaScript path. Off by default, and never switched on by the
     /// plugin: it only works when the user has opened a debugging port on Teams
@@ -3562,7 +3564,8 @@ public sealed class TeamsClient : IDisposable
         if (timer || ink) return null;
 
         if (target is "camera-select" or "camera-swap")
-            return TryDirectCamera(() => spec is null ? null : _dom.SelectCamera(spec, arg, target == "camera-swap"));
+            return TryDirectCamera(() => spec is null ? null :
+                _dom.SelectCamera(spec, arg, target == "camera-swap", _config.CameraVideoSettings));
 
         try
         {

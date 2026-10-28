@@ -64,8 +64,13 @@ public class CameraDomTests
     [Theory]
     [InlineData(false, """{"cameras":[{"id":"one","mirror":"on"}]}""")]
     [InlineData(true, """{"cameras":[{"id":"one"},{"id":"two","brightness":"off"}]}""")]
-    public void Preference_envelopes_remain_on_the_preference_aware_UIA_path(bool swap, string arg) =>
-        Assert.Null(CameraDom.BuildScript(Defaults.Config().Controls["camera-select"], arg, swap, 2500));
+    public void Preference_envelopes_are_supported_without_treating_JSON_as_a_device_ID(bool swap, string arg)
+    {
+        var script = CameraDom.BuildScript(Defaults.Config().Controls["camera-select"], arg, swap, 2500);
+        Assert.NotNull(script);
+        Assert.Contains("const preferences =", script);
+        Assert.DoesNotContain(DomActuator.Js(arg), script);
+    }
 
     [Theory]
     [InlineData(null)]
@@ -271,12 +276,17 @@ public class CameraDomTests
             scenario is "missing-second" or "disabled-second" or "fresh-already-desired";
         var script = CameraDom.BuildScript(Defaults.Config().Controls["camera-select"],
             swap ? """["one","two"]""" : "one", swap, 2500)!;
+        await RunScript(script, scenario, "camera-dom-harness.cjs");
+    }
+
+    internal static async Task RunScript(string script, string scenario, string harness)
+    {
         var start = new ProcessStartInfo("node")
         {
             RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
             UseShellExecute = false, CreateNoWindow = true
         };
-        start.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "camera-dom-harness.cjs"));
+        start.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, harness));
         using var process = Process.Start(start)!;
         process.StandardInput.Write(JsonSerializer.Serialize(new { script, scenario }));
         process.StandardInput.Close();

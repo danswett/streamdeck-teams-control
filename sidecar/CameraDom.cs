@@ -57,17 +57,22 @@ internal static class CameraDom
         static Result Invalid() => new(false, false, "Invalid Direct camera result; webcam selection may already have changed");
     }
 
-    internal static string? BuildScript(ControlSpec spec, string? arg, bool swap, int timeoutMs)
+    internal static string? BuildScript(ControlSpec spec, string? arg, bool swap, int timeoutMs,
+        CameraVideoSettingsSpec? videoSettings = null)
     {
-        // Preference envelopes belong to the preference-aware UIA path.
-        // Never treat that JSON as a device ID or select a camera without its settings.
-        if (string.IsNullOrWhiteSpace(arg) || arg.TrimStart().StartsWith('{')) return null;
-        var devices = swap ? Cameras.ParseSwap(arg) : [arg];
-        if (devices is null || string.IsNullOrWhiteSpace(spec.Menu) ||
+        var choices = CameraArguments.Parse(arg, swap);
+        if (choices is null || string.IsNullOrWhiteSpace(spec.Menu) ||
             string.IsNullOrWhiteSpace(spec.MenuItemContainerDataTid) ||
             !string.IsNullOrEmpty(spec.Submenu) || !string.IsNullOrEmpty(spec.MenuItemName) ||
             !string.IsNullOrEmpty(spec.MenuItemOffName) || !string.IsNullOrEmpty(spec.OffAutomationId) ||
             !string.IsNullOrEmpty(spec.OffName)) return null;
+        videoSettings ??= new();
+        if (videoSettings.Validate() is not null) return null;
+        var devices = choices.Select(camera => camera.Id).ToArray();
+        static string Flag(bool? value) => value.HasValue ? (value.Value ? "true" : "false") : "null";
+        var preferences = "[" + string.Join(",", choices.Select(camera =>
+            $"{{mirror:{Flag(camera.Preferences.Mirror)},softFocus:{Flag(camera.Preferences.SoftFocus)},brightness:{Flag(camera.Preferences.Brightness)}}}")) + "]";
+        var hasPreferences = choices.Any(camera => camera.Preferences is not { Mirror: null, SoftFocus: null, Brightness: null });
         var selectors = new List<string[]>();
         foreach (var device in devices)
         {
@@ -85,16 +90,131 @@ internal static class CameraDom
             const tid = {{DomActuator.Js(spec.MenuItemContainerDataTid)}};
             const devices = {{DomActuator.JsArray(devices)}};
             const groups = {{groups}};
+            const preferences = {{preferences}}, hasPreferences = {{(hasPreferences ? "true" : "false")}};
+            const video = {
+                tabs: {{DomActuator.Js(videoSettings.PaneTabsAutomationId)}},
+                paneTid: {{DomActuator.Js(videoSettings.PaneDataTid)}},
+                settings: {{DomActuator.Js(videoSettings.SettingsTabName)}},
+                mirror: {{DomActuator.Js(videoSettings.MirrorName)}},
+                softFocus: {{DomActuator.Js(videoSettings.SoftFocusName)}},
+                brightness: {{DomActuator.Js(videoSettings.BrightnessName)}},
+                more: {{DomActuator.Js(videoSettings.MoreSettingsName)}},
+                close: {{DomActuator.Js(videoSettings.ClosePaneName)}}
+            };
             const key = '__sdtc_camera_operation', styleId = '__sdtc_camera_suppress';
             if (window[key]) return JSON.stringify({ ok: false, error: 'Camera operation still pending' });
             const token = {};
             window[key] = token;
             const out = { ok: false, writeAttempted: false, cleanupOk: false };
-            const deadline = Date.now() + {{Math.Max(50, timeoutMs - 800)}};
+            const deadline = Date.now() + {{Math.Max(50, timeoutMs - (hasPreferences ? 1000 : 800))}};
             let owned = false, navigated = false, initialKnown = false, style = null, watchdog = null;
+            let originalTab = null, paneAttempted = false, paneSeen = false;
             const containers = () => [...document.querySelectorAll('[data-tid]')]
                 .filter(el => el.getAttribute('data-tid') === tid && el.getAttribute('role') === 'listbox');
             const disabled = el => el.disabled || el.getAttribute('aria-disabled') === 'true';
+            const panels = () => [...document.querySelectorAll('[data-tid]')]
+                .filter(el => el.getAttribute('data-tid') === video.paneTid);
+            const pane = () => {
+                const tabs = document.getElementById(video.tabs);
+                const matches = tabs ? panels().filter(el => el.contains(tabs)) : [];
+                return matches.length === 1 ? matches[0] : null;
+            };
+            const nameOf = el => el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent.trim();
+            const named = (scope, selector, name) => {
+                const matches = scope ? [...scope.querySelectorAll(selector)].filter(el => nameOf(el) === name) : [];
+                return matches.length === 1 ? matches[0] : null;
+            };
+            const dialog = () => {
+                const lists = containers();
+                return lists.length === 1 ? lists[0].closest('[role="dialog"]') : null;
+            };
+            const waitFor = async (read, error, until = deadline) => {
+                do {
+                    const value = read();
+                    if (value) return value;
+                    await sleep(20);
+                } while (Date.now() < until);
+                throw new Error(error);
+            };
+            const suppress = css => {
+                if (!style) {
+                    document.getElementById(styleId)?.remove();
+                    style = document.createElement('style');
+                    style.id = styleId;
+                    document.head.appendChild(style);
+                    watchdog = setTimeout(() => style.remove(), {{Math.Max(100, timeoutMs - 50)}});
+                }
+                style.textContent += css;
+            };
+            const optionsCss = '[role="dialog"]:has([data-tid=' + CSS.escape(tid) + ']){opacity:0!important}';
+            const paneCss = '[data-tid=' + CSS.escape(video.paneTid) + ']{opacity:0!important}';
+            const ensureOptions = async (until = deadline) => {
+                const trigger = host();
+                if (!trigger || disabled(trigger)) throw new Error('Video options are unavailable');
+                const expanded = trigger.getAttribute('aria-expanded');
+                if (expanded !== 'true' && expanded !== 'false') throw new Error('Unknown video options state');
+                if (expanded === 'false') {
+                    if (document.querySelectorAll('[role="dialog"],[role="menu"]').length)
+                        throw new Error('Another Teams flyout is open');
+                    if (Date.now() >= until) throw new Error('Camera operation deadline elapsed');
+                    navigated = true;
+                    trigger.click();
+                }
+                await waitFor(dialog, 'Teams did not expose the camera flyout', until);
+            };
+            const tabSnapshot = () => {
+                const tabs = document.getElementById(video.tabs);
+                if (!pane() || !tabs) return null;
+                const items = [...tabs.querySelectorAll('[role="tab"]')];
+                if (!items.length || items.some(el => !['true', 'false'].includes(el.getAttribute('aria-selected'))))
+                    return null;
+                const selected = items.filter(el => el.getAttribute('aria-selected') === 'true');
+                return selected.length === 1 && nameOf(selected[0]) ? { name: nameOf(selected[0]), items } : null;
+            };
+            const selectTab = async (name, until = deadline) => {
+                await waitFor(tabSnapshot, 'Unknown video settings tab', until);
+                const fresh = tabSnapshot();
+                const tab = fresh?.items.filter(el => nameOf(el) === name);
+                if (!fresh || tab.length !== 1 || disabled(tab[0])) throw new Error('Video settings tab is unavailable');
+                if (fresh.name !== name) {
+                    if (Date.now() >= until) throw new Error('Camera operation deadline elapsed');
+                    tab[0].click();
+                }
+                await waitFor(() => tabSnapshot()?.name === name, 'Teams did not confirm the video settings tab', until);
+            };
+            const openPane = async (until = deadline) => {
+                if (pane()) { paneSeen = true; return; }
+                if (panels().length) throw new Error('Another Teams pane is open');
+                if (originalTab === null) suppress(paneCss);
+                await ensureOptions(until);
+                const more = named(dialog(), 'button', video.more);
+                if (!more || disabled(more) || Date.now() >= until) throw new Error('Video settings are unavailable');
+                paneAttempted = true;
+                more.click();
+                await waitFor(pane, 'Teams did not open the video settings pane', until);
+                paneSeen = true;
+            };
+            const toggleSnapshot = (scope, name) => {
+                const el = named(scope(), 'input[type="checkbox"][role="switch"]', name);
+                if (!el || el.isConnected === false || disabled(el) || el.indeterminate ||
+                    typeof el.checked !== 'boolean') return null;
+                const aria = el.getAttribute('aria-checked');
+                if (aria !== null && (aria !== 'true' && aria !== 'false' || (aria === 'true') !== el.checked))
+                    return null;
+                return { el, checked: el.checked };
+            };
+            const setToggle = async (scope, name, wanted) => {
+                await waitFor(() => toggleSnapshot(scope, name), 'Unknown state for ' + name);
+                const fresh = toggleSnapshot(scope, name);
+                if (!fresh) throw new Error('Video preference state changed before writing ' + name);
+                if (fresh.checked !== wanted) {
+                    if (Date.now() >= deadline) throw new Error('Camera operation deadline elapsed');
+                    out.writeAttempted = true;
+                    fresh.el.click();
+                    await sleep(20);
+                }
+                await waitFor(() => toggleSnapshot(scope, name)?.checked === wanted, 'Teams did not confirm ' + name);
+            };
             const read = () => {
                 const trigger = host();
                 if (!trigger || trigger.getAttribute('aria-expanded') !== 'true') return null;
@@ -126,15 +246,15 @@ internal static class CameraDom
                 const expanded = trigger.getAttribute('aria-expanded');
                 if (expanded !== 'true' && expanded !== 'false') throw new Error('Unknown video options state');
                 owned = expanded === 'false';
+                if (hasPreferences && document.getElementById(video.tabs)) {
+                    const original = tabSnapshot();
+                    if (!original) throw new Error('Unknown original video settings tab');
+                    originalTab = original.name;
+                }
                 if (owned) {
                     if (document.querySelectorAll('[role="dialog"],[role="menu"]').length)
                         throw new Error('Another Teams flyout is open');
-                    document.getElementById(styleId)?.remove();
-                    style = document.createElement('style');
-                    style.id = styleId;
-                    style.textContent = '[role="dialog"]:has([data-tid=' + CSS.escape(tid) + ']){opacity:0!important}';
-                    document.head.appendChild(style);
-                    watchdog = setTimeout(() => style.remove(), {{Math.Max(100, timeoutMs - 50)}});
+                    suppress(optionsCss);
                     navigated = true;
                     trigger.click();
                 }
@@ -176,27 +296,87 @@ internal static class CameraDom
                     await sleep(20);
                 } while (Date.now() < deadline);
                 if (!out.ok) throw new Error('Teams did not confirm webcam selection; selection may already have changed');
+                const preference = preferences[desired];
+                if (Object.values(preference).some(value => value !== null)) {
+                    const selectedOptions = () => {
+                        const state = read();
+                        return state?.[desired].selected ? dialog() : null;
+                    };
+                    await ensureOptions();
+                    for (const [name, wanted] of [[video.softFocus, preference.softFocus], [video.brightness, preference.brightness]]) {
+                        if (wanted !== null) await setToggle(selectedOptions, name, wanted);
+                    }
+                    if (preference.mirror !== null) {
+                        if (!read()?.[desired].selected) throw new Error('Webcam selection changed before applying mirror');
+                        await openPane();
+                        await selectTab(video.settings);
+                        await setToggle(pane, video.mirror, preference.mirror);
+                    }
+                    await ensureOptions();
+                    const final = await known();
+                    if (!final[desired].selected) throw new Error('Webcam selection changed while applying video preferences');
+                }
             } catch (error) {
+                out.ok = false;
                 out.error = String(error && error.message || error);
-                if (out.writeAttempted) out.error += '; webcam selection may already have changed';
+                if (out.selectedId !== undefined)
+                    out.error = 'Webcam selected, but video preferences failed: ' + out.error + '; some video preferences may already have changed';
+                else if (out.writeAttempted) out.error += '; webcam selection may already have changed';
             } finally {
                 try {
-                    if (owned && navigated) {
+                    const cleanupErrors = [];
+                    const cleanupDeadline = Date.now() + 600;
+                    const cleanup = async action => {
+                        try { await action(); }
+                        catch (error) { cleanupErrors.push(String(error && error.message || error)); }
+                    };
+                    await cleanup(async () => {
+                        if (!hasPreferences) return;
+                        const until = cleanupDeadline;
+                        if (originalTab !== null) {
+                            await openPane(until);
+                            await selectTab(originalTab, until);
+                        } else if (paneAttempted) {
+                            do {
+                                const current = pane();
+                                if (current) {
+                                    paneSeen = true;
+                                    const close = named(current, 'button', video.close);
+                                    if (!close || disabled(close)) throw new Error('Video settings close button is unavailable');
+                                    close.click();
+                                    await waitFor(() => !document.getElementById(video.tabs),
+                                        'Could not close the video settings pane', until);
+                                    break;
+                                }
+                                if (paneSeen) break;
+                                await sleep(20);
+                            } while (Date.now() < until);
+                        }
+                    });
+                    await cleanup(async () => {
+                        if (hasPreferences && !owned && (navigated || paneAttempted))
+                            await ensureOptions(cleanupDeadline);
+                        if (!owned || !navigated) return;
                         if (host()?.getAttribute('aria-expanded') === 'true') {
                             host().dispatchEvent(new KeyboardEvent('keydown', {
                                 key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true
                             }));
                         }
-                        const until = Date.now() + 600;
+                        const until = cleanupDeadline;
                         while ((host()?.getAttribute('aria-expanded') !== 'false' || containers().length) &&
                             Date.now() < until) await sleep(20);
-                        out.cleanupOk = host()?.getAttribute('aria-expanded') === 'false' && containers().length === 0;
-                    } else out.cleanupOk = true;
-                    if (!out.cleanupOk) throw new Error('Could not confirm camera flyout cleanup');
+                        if (host()?.getAttribute('aria-expanded') !== 'false' || containers().length)
+                            throw new Error('Could not confirm camera flyout cleanup');
+                    });
+                    out.cleanupOk = cleanupErrors.length === 0;
+                    if (originalTab !== null && tabSnapshot()?.name !== originalTab) out.cleanupOk = false;
+                    if (originalTab === null && paneAttempted && document.getElementById(video.tabs)) out.cleanupOk = false;
+                    if (!out.cleanupOk) throw new Error(cleanupErrors.join('; ') || 'Could not restore video settings navigation');
                 } catch (error) {
                     out.ok = false;
                     out.error = [out.error, String(error && error.message || error)].filter(Boolean).join('; ');
-                    if (out.selectedId !== undefined) out.error = 'Webcam selected, but ' + out.error;
+                    if (out.selectedId !== undefined && !out.error.startsWith('Webcam selected, but '))
+                        out.error = 'Webcam selected, but ' + out.error;
                 } finally {
                     if (watchdog !== null) clearTimeout(watchdog);
                     try { style?.remove(); }

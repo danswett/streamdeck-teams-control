@@ -1,3 +1,4 @@
+using System.Text.Json;
 using TeamsBridge;
 using Xunit;
 
@@ -251,6 +252,52 @@ public class SelectorConfigTests : IDisposable
             .Controls["camera-select"].MenuItemContainerDataTid);
         Assert.NotNull(new ControlSpec { MenuItemContainerDataTid = " " }.Validate());
         Assert.Null(new ControlSpec().Validate());
+    }
+
+    private static Dictionary<string, string> CameraPreferenceSelectors(CameraVideoSettingsSpec spec) => new()
+    {
+        ["paneTabsAutomationId"] = spec.PaneTabsAutomationId,
+        ["paneDataTid"] = spec.PaneDataTid,
+        ["settingsTabName"] = spec.SettingsTabName,
+        ["mirrorName"] = spec.MirrorName,
+        ["softFocusName"] = spec.SoftFocusName,
+        ["brightnessName"] = spec.BrightnessName,
+        ["moreSettingsName"] = spec.MoreSettingsName,
+        ["closePaneName"] = spec.ClosePaneName
+    };
+
+    [Fact]
+    public void Camera_preference_selectors_are_shipped_and_match_built_in_defaults()
+    {
+        var path = Path.Combine(FindRepoRoot(), "com.bad-duck.teamscontrol.sdPlugin", "selectors.json");
+        var json = File.ReadAllText(path);
+        using var document = JsonDocument.Parse(json);
+        var shipped = document.RootElement.GetProperty("cameraVideoSettings");
+        var parsed = CameraPreferenceSelectors(Program.ParseConfig(json)!.CameraVideoSettings);
+        foreach (var (name, value) in CameraPreferenceSelectors(Defaults.Config().CameraVideoSettings))
+        {
+            Assert.Equal(value, shipped.GetProperty(name).GetString());
+            Assert.Equal(value, parsed[name]);
+        }
+    }
+
+    [Fact]
+    public void Every_camera_preference_selector_supports_partial_overrides_and_rejects_bad_values()
+    {
+        var defaults = CameraPreferenceSelectors(new());
+        foreach (var name in defaults.Keys)
+        {
+            var good = Program.LoadConfig(WriteTemp($$"""{ "cameraVideoSettings": { "{{name}}": "custom" } }"""));
+            foreach (var (field, value) in CameraPreferenceSelectors(good.CameraVideoSettings))
+                Assert.Equal(field == name ? "custom" : defaults[field], value);
+            foreach (var invalid in new[] { "false", "null", "[]", "\" \"" })
+            {
+                var bad = Program.LoadConfig(WriteTemp($$"""{ "cameraVideoSettings": { "{{name}}": {{invalid}} } }"""));
+                Assert.Equal(defaults[name], CameraPreferenceSelectors(bad.CameraVideoSettings)[name]);
+            }
+        }
+        Assert.Equal(defaults, CameraPreferenceSelectors(Program.LoadConfig(
+            WriteTemp("""{"cameraVideoSettings":false}""")).CameraVideoSettings));
     }
 
     [Fact]
