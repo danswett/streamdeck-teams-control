@@ -81,7 +81,7 @@ the same accessibility layer screen readers use.
 | Action | Shows | Notes |
 |---|---|---|
 | **Mute** | ✅ muted / unmuted | Slashed glyph when muted |
-| **High Fidelity Music Mode** | Last confirmed on / off | Reads and confirms Teams' audio switch on each press |
+| **High Fidelity Music Mode** | Last observed on / off | Follows manual changes while the audio options flyout is open |
 | **Camera** | ✅ on / off | Slashed glyph when off |
 | **Change Camera** | availability only | Choose a specific Windows webcam in each button's settings; does not toggle camera on/off |
 | **Swap Camera** | availability only | Toggle between two configured webcams, using Teams' current selection |
@@ -96,9 +96,11 @@ the same accessibility layer screen readers use.
 **High Fidelity Music Mode** toggles the setting in Teams' microphone audio
 options. Its musical-note key is gold when on, white when off or not yet read,
 and gray outside a meeting. Each press reads the actual setting and confirms the
-change; between presses the key remembers the last confirmed state rather than
-opening the audio flyout to poll it. Changes made directly in Teams are picked up
-on the next press. Missing, disabled or unreadable switches produce an alert
+change. It also passively observes the switch while you have Teams' audio options
+open, so manual changes there update the key. It never opens the flyout to poll:
+with the flyout closed it retains the last observed state, and before the first
+observation the state is unknown. Changes through other hidden surfaces cannot
+be detected until the switch is exposed again. Missing, disabled or unreadable switches produce an alert
 instead of a guessed toggle. Teams recommends this mode for studio environments.
 The switch has a generated ID, so its English accessible name is matched instead;
 translate `music-mode.menuItemName` in `selectors.json` for another Teams language.

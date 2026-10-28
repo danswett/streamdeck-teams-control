@@ -41,6 +41,8 @@ mode enabled. Each press opens the audio flyout, reads the actual toggle state,
 and confirms the result through fresh lookups. Visible switches use posted
 clicks; switches below the scroll viewport use UIA `Toggle` under the existing
 focus guard. Flyout cleanup uses the same guarded path as the camera actions.
+Manual changes are observed passively while the audio flyout is open, without
+opening menus or running page scripts to poll the setting.
 
 ---
 

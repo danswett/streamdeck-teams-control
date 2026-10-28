@@ -2,6 +2,76 @@ namespace TeamsBridge;
 
 internal static class MusicMode
 {
+    internal sealed class Observer<T>(
+        Func<T?> find, Func<T, bool?> read, Func<T, Action<bool?>, IDisposable?> subscribe) : IDisposable where T : class
+    {
+        private T? _element;
+        private IDisposable? _subscription;
+        private Signal? _signal;
+
+        internal bool? LastKnown { get; private set; }
+
+        internal bool? Refresh(bool exposed)
+        {
+            Remember(_signal?.Take());
+            if (!exposed)
+            {
+                Release();
+                return LastKnown;
+            }
+
+            var value = _element is null ? null : read(_element);
+            if (value is null)
+            {
+                Release();
+                _element = find();
+                if (_element is not null)
+                {
+                    var signal = new Signal();
+                    _signal = signal;
+                    _subscription = subscribe(_element, signal.Record);
+                    value = read(_element);
+                }
+            }
+            Remember(value);
+            return LastKnown;
+        }
+
+        private void Remember(bool? value)
+        {
+            if (value.HasValue) LastKnown = value;
+        }
+
+        private void Release()
+        {
+            _subscription?.Dispose();
+            Remember(_signal?.Take());
+            _subscription = null;
+            _signal = null;
+            _element = null;
+        }
+
+        public void Dispose() => Release();
+
+        // Event callbacks only hand off a scalar; all UIA reads and state-map
+        // writes stay on the worker. A detached subscription owns its own
+        // signal, so a late callback cannot overwrite its replacement.
+        private sealed class Signal
+        {
+            private int _value = -1;
+            internal void Record(bool? value)
+            {
+                if (value.HasValue) Interlocked.Exchange(ref _value, value.Value ? 1 : 0);
+            }
+            internal bool? Take() => Interlocked.Exchange(ref _value, -1) switch
+            {
+                0 => false,
+                1 => true,
+                _ => null
+            };
+        }
+    }
+
     internal sealed record Switch(bool? Active, bool Enabled, Func<bool> Press);
 
     // Re-find for every read: Teams can replace a switch after posting input.
