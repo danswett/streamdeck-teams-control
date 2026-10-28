@@ -33,9 +33,9 @@ internal sealed record DomOutcome(bool Handled, bool Ok, string? Error)
 /// 2. It works with the window minimized. A posted click needs on-screen
 ///    bounds, and the UIA fallback for that case activates the Teams window.
 ///
-/// Unavailable controls decline to UI Automation. Camera selection additionally
-/// distinguishes a safe pre-write failure from an uncertain write: a debugger
-/// timeout does not cancel JavaScript, so retrying a swap could switch back.
+/// Everything here is best-effort. Any failure returns and the caller runs the
+/// UI Automation path, so Direct mode can never make a control less reliable
+/// than it was — at worst a press costs one wasted round trip on loopback.
 /// </summary>
 internal sealed class DomActuator
 {
