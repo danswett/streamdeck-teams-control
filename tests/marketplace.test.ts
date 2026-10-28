@@ -327,7 +327,8 @@ describe("action list order", () => {
 	) as { Actions: { Name: string }[] };
 
 	const rank = (name: string): number =>
-		name.startsWith("PPT Live:") ? 1
+		name === "Direct Mode" ? 4
+		: name.startsWith("PPT Live:") ? 1
 		: name.startsWith("PPT Attendee:") ? 2
 		: name.startsWith("PPT Presenter:") ? 3
 		: 0;
@@ -340,6 +341,10 @@ describe("action list order", () => {
 				` sits after a later group`
 			).toBeGreaterThanOrEqual(ranks[i - 1]);
 		}
+	});
+
+	it("places Direct Mode last", () => {
+		expect(manifest.Actions.at(-1)?.Name).toBe("Direct Mode");
 	});
 
 	it("names every PowerPoint Live action with a role prefix", () => {

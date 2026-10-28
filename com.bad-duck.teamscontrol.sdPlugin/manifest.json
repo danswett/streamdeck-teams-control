@@ -145,24 +145,6 @@
 	],
 	"Actions": [
 		{
-			"Name": "Direct Mode",
-			"UUID": "com.bad-duck.teamscontrol.direct-mode",
-			"Icon": "imgs/actions/direct-mode/icon",
-			"Tooltip": "Enable or disable Direct mode for every control in this plugin",
-			"PropertyInspectorPath": "ui/direct-mode.html",
-			"Controllers": [
-				"Keypad"
-			],
-			"SupportedInMultiActions": false,
-			"UserTitleEnabled": false,
-			"States": [
-				{
-					"Image": "imgs/actions/direct-mode/key",
-					"TitleAlignment": "bottom"
-				}
-			]
-		},
-		{
 			"Name": "Mute",
 			"UUID": "com.bad-duck.teamscontrol.mute",
 			"Icon": "imgs/actions/mute/icon",
@@ -905,6 +887,24 @@
 			"States": [
 				{
 					"Image": "imgs/actions/ppt-stop-presenting/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
+			"Name": "Direct Mode",
+			"UUID": "com.bad-duck.teamscontrol.direct-mode",
+			"Icon": "imgs/actions/direct-mode/icon",
+			"Tooltip": "Enable or disable Direct mode for every control in this plugin",
+			"PropertyInspectorPath": "ui/direct-mode.html",
+			"Controllers": [
+				"Keypad"
+			],
+			"SupportedInMultiActions": false,
+			"UserTitleEnabled": false,
+			"States": [
+				{
+					"Image": "imgs/actions/direct-mode/key",
 					"TitleAlignment": "bottom"
 				}
 			]
