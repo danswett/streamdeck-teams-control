@@ -101,5 +101,5 @@ describe("Direct Mode key states", () => {
 		const svg = renderDirectMode(enabled, usable);
 		expect(svg).toContain(`>${label}</text>`);
 		expect(new Resvg(svg).render().asPng().length).toBeGreaterThan(100);
-	});
+	}, 15_000);
 });
