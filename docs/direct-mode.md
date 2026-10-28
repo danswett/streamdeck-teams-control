@@ -73,12 +73,6 @@ perfectly well and belongs to OneNote — the plugin treats that as no port at a
 
 ## Turning it on
 
-These instructions are for Windows. Configure Direct mode using the external
-`direct-mode.json` file described below.
-**Do not edit files inside an installed Marketplace plugin.** Stream Deck can
-checksum-protect them: changing otherwise valid JSON can prevent the entire
-plugin from starting.
-
 ### 1. Open the port
 
 ```powershell
