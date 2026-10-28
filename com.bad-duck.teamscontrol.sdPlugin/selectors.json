@@ -113,6 +113,11 @@
 		"arrowOptionPattern": "^(No arrow|Single arrow|Double arrows)$"
 	},
 	"controls": {
+		"music-mode": {
+			"menu": "audio-button-configure",
+			"menuItemDataTid": "audio-flyout-music-model-setting-v2-toggle",
+			"menuItemName": "^\\s*high\\s+fidelity\\s+music\\s+mode\\s*$"
+		},
 		"mute": {
 			"automationId": "microphone-button",
 			"activePattern": "^\\s*unmute\\b",

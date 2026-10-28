@@ -237,6 +237,19 @@ class Bridge {
 				this.#publish(toState(msg));
 				break;
 
+			case "music-mode-state":
+				if (typeof msg["active"] !== "boolean") {
+					logger.warn("Invalid confirmed music-mode state from sidecar");
+					break;
+				}
+				if (this.#state.inMeeting) {
+					this.#publish({
+						...this.#state,
+						states: { ...this.#state.states, "music-mode": msg["active"] }
+					});
+				}
+				break;
+
 			case "cameras":
 			case "result": {
 				const id = Number(msg["id"]);

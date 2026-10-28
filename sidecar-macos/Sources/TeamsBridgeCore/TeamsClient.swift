@@ -341,6 +341,7 @@ public final class TeamsClient {
      * on the filmstrip, the meeting timer, and selecting cameras.
      */
     static let unimplementedTargets: [String: String] = [
+        "music-mode": "High fidelity music mode",
         "camera-select": "camera selection",
         "camera-swap": "camera swapping",
         "ppt-ink-color": "ink colour",

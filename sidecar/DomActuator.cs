@@ -293,6 +293,25 @@ internal sealed class DomActuator
         return Interpret(res.Json, target, out checkedBefore);
     }
 
+    public MusicModeDom.Result? ToggleMusicMode(ControlSpec spec)
+    {
+        var script = MusicModeDom.BuildScript(spec, _spec.TimeoutMs);
+        if (script is null) return null;
+        if (!IsUsable || _meetingPage is null) return null;
+        var probe = $"JSON.stringify({{found: !!document.getElementById({Js(_probeElementId)}) && " +
+            $"!!document.getElementById({Js(spec.Menu)})}})";
+        var page = MusicModeDom.FindPage(_meetingPage,
+            () => Cdp.ListTargets(_spec.Port, Math.Min(_spec.TimeoutMs, 500)),
+            candidate => Cdp.Evaluate(candidate, probe, Math.Min(_spec.TimeoutMs, 250)),
+            MaxPagesToProbe);
+        if (page is null)
+        {
+            Console.Error.WriteLine("direct music-mode: no full audio toolbar; using UI Automation");
+            return null;
+        }
+        return MusicModeDom.Interpret(Cdp.Evaluate(page, script, _spec.TimeoutMs));
+    }
+
     /// <summary>
     /// Reads the structured result every injected script returns.
     /// </summary>

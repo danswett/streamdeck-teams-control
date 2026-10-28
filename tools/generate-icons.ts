@@ -20,6 +20,7 @@ const IMGS = path.join(ROOT, "com.bad-duck.teamscontrol.sdPlugin", "imgs");
 /** action folder -> glyph used for its list icon and default key image. */
 const ACTIONS: Record<string, { glyph: string; danger?: boolean }> = {
 	mute: { glyph: "mic" },
+	"music-mode": { glyph: "music" },
 	camera: { glyph: "camera" },
 	"camera-select": { glyph: "cameraSelect" },
 	"camera-swap": { glyph: "cameraSwap" },

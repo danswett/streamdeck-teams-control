@@ -49,6 +49,9 @@ public sealed class ControlSpec
 
     public string? MenuItemAutomationId { get; set; }
 
+    /// <summary>Stable DOM data-tid for Direct-mode settings with generated element ids.</summary>
+    public string? MenuItemDataTid { get; set; }
+
     /// <summary>
     /// Id the same menu item takes in its opposite state, for entries Teams
     /// swaps rather than checks. "Hide presenter view" is replaced outright by
@@ -164,6 +167,8 @@ public sealed class ControlSpec
     /// </summary>
     public string? Validate()
     {
+        if (MenuItemDataTid is not null && string.IsNullOrWhiteSpace(MenuItemDataTid))
+            return "menuItemDataTid must not be blank";
         foreach (var (label, pattern) in new[]
                  {
                      ("activePattern", ActivePattern),
@@ -476,6 +481,9 @@ public sealed class TeamsClient : IDisposable
     /// </summary>
     public event Action? Hint;
 
+    /// <summary>A freshly confirmed music state; UIA emits before deferred cleanup.</summary>
+    public event Action<bool>? MusicModeConfirmed;
+
     /// <summary>When set, every event that fires is logged to stderr.</summary>
     public bool DebugEvents { get; set; }
 
@@ -656,6 +664,7 @@ public sealed class TeamsClient : IDisposable
 
     private void ClearControlWatches()
     {
+        ClearMusicModeWatches();
         foreach (var (el, handler) in _propertyHandlers)
         {
             try { el.FrameworkAutomationElement.UnregisterPropertyChangedEventHandler(handler); }
@@ -2582,6 +2591,9 @@ public sealed class TeamsClient : IDisposable
         ReadTimer(win, snap.Context);
         _profile?.Mark("timer");
 
+        ObserveMusicMode(win);
+        _profile?.Mark("musicMode");
+
         if (!IsToolbarVisible(win))
         {
             // A flyout is covering the toolbar. Report the meeting as live with
@@ -3558,6 +3570,23 @@ public sealed class TeamsClient : IDisposable
 
         try
         {
+            if (target == "music-mode" && spec is not null)
+            {
+                var result = _dom.ToggleMusicMode(spec);
+                if (result is null) return null;
+                _musicModeObserver?.Dispose();
+                _musicModeObserver = null;
+                if (result.Active is bool active)
+                {
+                    _lastStates[target] = active;
+                    MusicModeConfirmed?.Invoke(active);
+                }
+                else _lastStates.Remove(target);
+                if (result.Ok) return (true, null);
+                Console.Error.WriteLine($"direct music-mode failed: {result.Error}");
+                return result.SafeToFallback ? null : (false, result.Error);
+            }
+
             if (jump)
             {
                 if (!int.TryParse(arg, out var slide)) return null;
@@ -3575,6 +3604,11 @@ public sealed class TeamsClient : IDisposable
         }
         catch (Exception ex)
         {
+            if (target == "music-mode")
+            {
+                Console.Error.WriteLine($"direct music-mode threw; not retrying an uncertain write: {ex.Message}");
+                return (false, $"Could not confirm Direct music mode: {ex.Message}");
+            }
             // Never let the optional path take a press down with it.
             Console.Error.WriteLine($"direct mode threw for '{target}': {ex.Message}; falling back");
             return null;
@@ -4086,6 +4120,12 @@ public sealed class TeamsClient : IDisposable
         if (!string.IsNullOrEmpty(spec.MenuItemAutomationId) && string.IsNullOrEmpty(itemIds[0]))
             return (false, $"'{target}' needs a value but none was set");
 
+        // Decide music flyout ownership before generic recovery can close it.
+        if (target == "music-mode")
+            return string.IsNullOrEmpty(spec.Menu)
+                ? (false, "Music mode requires an audio options menu")
+                : InvokeMusicMode(win, spec.Menu, itemIds, itemNameRx);
+
         string?[] secondIds = [];
         Regex? secondNameRx = null;
         if (cameraPair is not null && !TryItemSelectors(spec, cameraPair[1], out secondIds, out secondNameRx, out patternError))
@@ -4390,6 +4430,274 @@ public sealed class TeamsClient : IDisposable
         }
         catch { }
         return null;
+    }
+
+    private (bool ok, string? error) InvokeMusicMode(
+        AutomationElement win, string hostId, string?[] itemIds, Regex? itemName)
+    {
+        AutomationElement? host = null;
+        var wasOpen = ReadMusicModeFlyout(win, hostId, ref host);
+        if (wasOpen is null)
+        {
+            Console.Error.WriteLine("music-mode audio options state unavailable; waking accessibility and retrying");
+            EnableAccessibility(force: true);
+            Thread.Sleep(RetrySettleMs);
+            wasOpen = ReadMusicModeFlyout(win, hostId, ref host);
+        }
+
+        var stages = new StageLog();
+        bool Expand()
+        {
+            var open = ReadMusicModeFlyout(win, hostId, ref host);
+            if (open is true) return true;
+            if (open is not false) return false;
+            if (!IsToolbarVisible(win))
+            {
+                RecoverFromOpenFlyout(win);
+                open = ReadMusicModeFlyout(win, hostId, ref host);
+                if (open is true) return true;
+                if (open is not false) return false;
+            }
+            var opened = host is not null && ExpandMenu(host);
+            stages.Mark("open");
+            return opened;
+        }
+
+        return MusicMode.WithFlyout(wasOpen, Expand, () =>
+        {
+            var item = FindInPopup(win, itemIds, itemName, 2500);
+            stages.Mark("find");
+            // Retain the swallowed-opening-click retry, but never toggle a
+            // borrowed or already-expanded flyout just because its item is missing.
+            if (item is null && wasOpen is false && IsToolbarVisible(win) &&
+                ReadMusicModeFlyout(win, hostId, ref host) is false)
+            {
+                Console.Error.WriteLine("music-mode audio options did not open; retrying the opening press");
+                Thread.Sleep(RetrySettleMs);
+                if (Expand())
+                    item = FindInPopup(win, itemIds, itemName, 2000);
+                stages.Mark("retry");
+            }
+            if (item is null) return (false, "High fidelity music mode was not found in Teams audio options");
+
+            var result = MusicMode.Toggle(() =>
+            {
+                var current = FindInPopup(win, itemIds, itemName, 0);
+                return current is null ? null : new MusicMode.Switch(
+                    ReadMusicMode(current), SafeEnabled(current), () => PressMusicMode(current));
+            });
+            stages.Mark("confirm");
+            _musicModeObserver?.Dispose();
+            _musicModeObserver = null;
+            if (result.active is bool active) _lastStates["music-mode"] = active;
+            else _lastStates.Remove("music-mode");
+            if (result.ok && result.active is bool confirmed)
+                MusicModeConfirmed?.Invoke(confirmed);
+            return (result.ok, result.error);
+        }, () => DeferCleanup(() =>
+        {
+            DismissMusicModeFlyout(win, hostId, host);
+            stages.Mark("dismiss");
+            stages.ReportIfSlow("music-mode", SlowFlyoutMs);
+        }));
+    }
+
+    private bool PressMusicMode(AutomationElement el)
+    {
+        try
+        {
+            if (!el.Properties.IsOffscreen.Value) return Press(el);
+
+            // Verified live: the audio flyout exposes this switch below its
+            // scroll viewport, with positive but unclickable bounds. A posted
+            // click changes nothing there; Toggle works without scrolling.
+            Console.Error.WriteLine("music-mode switch is offscreen; using guarded UIA Toggle");
+            var pressed = false;
+            Guarded(() =>
+            {
+                var toggle = el.Patterns.Toggle.PatternOrDefault;
+                if (toggle is null) return;
+                toggle.Toggle();
+                pressed = true;
+            });
+            return pressed;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"music-mode press failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    private MusicMode.Observer<AutomationElement>? _musicModeObserver;
+    private AutomationElement? _musicModeHost;
+    private IDisposable? _musicModeHostWatch;
+
+    private bool? ReadMusicModeFlyout(AutomationElement win, string hostId, ref AutomationElement? host)
+    {
+        try
+        {
+            // Some flyouts hide the host from discovery but leave its live pattern usable.
+            host = FindAnywhere(win, hostId) ?? ResolveMenuHost(win, hostId) ?? host;
+            var pattern = host?.Patterns.ExpandCollapse.PatternOrDefault;
+            if (pattern is null || !pattern.ExpandCollapseState.IsSupported) return null;
+            return pattern.ExpandCollapseState.Value switch
+            {
+                ExpandCollapseState.Expanded => true,
+                ExpandCollapseState.Collapsed => false,
+                _ => null
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"music-mode audio options state read failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    private void DismissMusicModeFlyout(AutomationElement win, string hostId, AutomationElement? host)
+    {
+        bool Collapse()
+        {
+            try
+            {
+                if (ReadMusicModeFlyout(win, hostId, ref host) is false) return true;
+                var pattern = host?.Patterns.ExpandCollapse.PatternOrDefault;
+                if (pattern is null) return false;
+                Guarded(pattern.Collapse);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"music-mode collapse failed: {ex.Message}");
+                return false;
+            }
+        }
+
+        bool WaitForClosed()
+        {
+            var deadline = Environment.TickCount64 + 700;
+            do
+            {
+                if (ReadMusicModeFlyout(win, hostId, ref host) is false) return true;
+                Thread.Sleep(PollIntervalMs);
+            } while (Environment.TickCount64 < deadline);
+            return false;
+        }
+
+        if (!MusicMode.Dismiss(() => ReadMusicModeFlyout(win, hostId, ref host), Collapse, WaitForClosed))
+            Console.Error.WriteLine("warning: could not confirm music-mode audio flyout dismissal; no toggle fallback attempted");
+    }
+
+    private void ObserveMusicMode(AutomationElement win)
+    {
+        if (!_config.Controls.TryGetValue("music-mode", out var spec) || string.IsNullOrEmpty(spec.Menu)) return;
+        var host = ResolveMenuHost(win, spec.Menu);
+        if (!Equals(host, _musicModeHost))
+        {
+            _musicModeHostWatch?.Dispose();
+            _musicModeHostWatch = null;
+            _musicModeHost = host;
+            if (host is not null)
+                _musicModeHostWatch = SubscribeMusicMode(host, false, _ => { });
+        }
+
+        _musicModeObserver ??= new MusicMode.Observer<AutomationElement>(
+            () => TryItemSelectors(spec, null, out var ids, out var name, out _)
+                ? FindInPopup(win, ids, name, 0) : null,
+            ReadMusicMode,
+            (element, changed) => SubscribeMusicMode(element, true, changed));
+
+        // Never open, dismiss or scroll a menu here. Its own expand state is
+        // the cheap gate, so a closed menu costs no extra descendant search.
+        var expanded = false;
+        try
+        {
+            expanded = host?.Patterns.ExpandCollapse.PatternOrDefault?.ExpandCollapseState.Value
+                == ExpandCollapseState.Expanded;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"music-mode menu state read failed: {ex.Message}");
+        }
+        if (_musicModeObserver.Refresh(expanded) is bool active)
+            _lastStates["music-mode"] = active;
+    }
+
+    private IDisposable? SubscribeMusicMode(AutomationElement element, bool toggle, Action<bool?> changed)
+    {
+        if (!UseEvents) return null;
+        try
+        {
+            var property = toggle
+                ? _automation.PropertyLibrary.Toggle.ToggleState
+                : _automation.PropertyLibrary.ExpandCollapse.ExpandCollapseState;
+            var handler = element.RegisterPropertyChangedEvent(TreeScope.Element, (_, _, value) =>
+            {
+                if (DebugEvents)
+                    Console.Error.WriteLine($"music-mode {(toggle ? "toggle" : "menu")} event: {value} ({value?.GetType().Name ?? "null"})");
+                if (toggle)
+                    changed(value switch
+                    {
+                        ToggleState.On => true,
+                        ToggleState.Off => false,
+                        int n when n == (int)ToggleState.On => true,
+                        int n when n == (int)ToggleState.Off => false,
+                        _ => null
+                    });
+                RaiseHint("music-mode-changed");
+            }, property);
+            return new MusicModeWatch(element, handler);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"music-mode event subscription failed, polling exposed controls only: {ex.Message}");
+            return null;
+        }
+    }
+
+    private sealed record MusicModeWatch(
+        AutomationElement Element,
+        FlaUI.Core.EventHandlers.PropertyChangedEventHandlerBase Handler) : IDisposable
+    {
+        public void Dispose()
+        {
+            try { Element.FrameworkAutomationElement.UnregisterPropertyChangedEventHandler(Handler); }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"music-mode event unsubscription failed: {ex.Message}");
+            }
+        }
+    }
+
+    private void ClearMusicModeWatches()
+    {
+        _musicModeHostWatch?.Dispose();
+        _musicModeHostWatch = null;
+        _musicModeHost = null;
+        _musicModeObserver?.Dispose();
+        _musicModeObserver = null;
+    }
+
+    /// <summary>Unknown or indeterminate music-mode state must never mean off.</summary>
+    private static bool? ReadMusicMode(AutomationElement el)
+    {
+        try
+        {
+            var toggle = el.Patterns.Toggle.PatternOrDefault;
+            if (toggle is null || !toggle.ToggleState.IsSupported) return null;
+            return toggle.ToggleState.Value switch
+            {
+                ToggleState.On => true,
+                ToggleState.Off => false,
+                _ => null
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"music-mode state read failed: {ex.Message}");
+            return null;
+        }
     }
 
     /// <summary>Reads a menu item's checked state, where it exposes one.</summary>

@@ -81,6 +81,7 @@ the same accessibility layer screen readers use.
 | Action | Shows | Notes |
 |---|---|---|
 | **Mute** | ✅ muted / unmuted | Slashed glyph when muted |
+| **High Fidelity Music Mode** | ✅ Last observed on / off | Follows manual changes while the audio options flyout is open |
 | **Camera** | ✅ on / off | Slashed glyph when off |
 | **Change Camera** | availability only | Choose a specific Windows webcam in each button's settings; does not toggle camera on/off |
 | **Swap Camera** | availability only | Toggle between two configured webcams, using Teams' current selection |

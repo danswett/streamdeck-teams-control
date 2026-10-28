@@ -28,6 +28,8 @@ const EMOJI = path.join(ROOT, "node_modules", "fluentui-emoji", "icons", "flat")
 const CONTROLS: Record<string, string> = {
 	mic: "mic_28_filled",
 	micOff: "mic_off_28_filled",
+	// Fluent's musical notes stop at the 24px tier.
+	music: "music_note_2_24_filled",
 	camera: "video_28_filled",
 	cameraOff: "video_off_28_filled",
 	// Change Camera picks one webcam and Swap Camera moves between two. Each has

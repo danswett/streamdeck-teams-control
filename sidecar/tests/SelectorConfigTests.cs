@@ -240,6 +240,29 @@ public class SelectorConfigTests : IDisposable
     }
 
     [Fact]
+    public void The_shipped_music_mode_selector_matches_the_defaults_and_can_be_localized()
+    {
+        var path = Path.Combine(FindRepoRoot(), "com.bad-duck.teamscontrol.sdPlugin", "selectors.json");
+        var parsed = Program.ParseConfig(File.ReadAllText(path));
+        Assert.NotNull(parsed);
+        var spec = parsed.Controls["music-mode"];
+        var defaults = Defaults.Config().Controls["music-mode"];
+        Assert.Equal(defaults.Menu, spec.Menu);
+        Assert.Equal(defaults.MenuItemDataTid, spec.MenuItemDataTid);
+        Assert.Equal(defaults.MenuItemName, spec.MenuItemName);
+        Assert.Null(spec.MenuItemAutomationId);
+
+        var localized = Program.LoadConfig(WriteTemp("""
+            { "controls": { "music-mode": { "menu": "audio-options-new", "menuItemDataTid": "music-custom", "menuItemName": "^Musik$" } } }
+            """)).Controls["music-mode"];
+        Assert.Equal("audio-options-new", localized.Menu);
+        Assert.Equal("music-custom", localized.MenuItemDataTid);
+        Assert.NotNull(localized.MenuItemRegex);
+        Assert.Matches(localized.MenuItemRegex, "Musik");
+        Assert.DoesNotMatch(localized.MenuItemRegex, "High fidelity music mode");
+    }
+
+    [Fact]
     public void The_shipped_selectors_file_is_valid()
     {
         // Guards against shipping a selectors.json that the sidecar would reject
