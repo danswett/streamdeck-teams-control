@@ -105,12 +105,6 @@ or the first otherwise, including when a third camera is selected. Both
 configured devices must be available in Teams. Video stays on or off as it was;
 the key does not indicate which webcam is currently selected.
 
-**Direct Mode** is a plugin-wide toggle, available even outside a meeting. Its
-settings pane lets you choose the shared debugging port and links to the
-[Direct-mode guide](docs/direct-mode.md). It shows **OFF**, **WAITING** (enabled
-but unavailable), or **ACTIVE**. Settings persist in Stream Deck and apply
-without restarting it. The toggle never opens or closes Teams' debugging port.
-
 ### Presenting a deck
 
 <img src="marketplace/gallery-3-presenting.png" alt="PowerPoint Live presenter keys" width="600">
@@ -1068,11 +1062,7 @@ That risk is contained rather than hidden:
 
 - All selectors live in
   [`selectors.json`](com.bad-duck.teamscontrol.sdPlugin/selectors.json) beside the
-  manifest. For local builds, edit it and restart the plugin — no rebuild needed.
-  **Do not edit an installed Marketplace package:** Stream Deck's checksum
-  protection can block the whole plugin after a payload change. Direct mode
-  uses a plugin-wide toggle and shared port setting instead; see
-  [Direct-mode setup](docs/direct-mode.md#4-enable-it-in-the-plugin). Patterns are
+  manifest. Edit it and restart the plugin — no rebuild needed. Patterns are
   compiled when the file is read, so a mistake is named and skipped at startup
   and the working default kept. Matching is bounded, so a pattern that backtracks
   badly cannot wedge the sidecar.
@@ -1116,9 +1106,8 @@ with a `discover` dump attached — after reading it, per [Privacy](#privacy).
 
 `AutomationId`s are locale-independent, so **pressing** every control works in any
 Teams language out of the box. Only the **state indicators** read English labels.
-To localize a local build, edit the `activePattern` / `inactivePattern` regexes
-in `selectors.json` before packaging it. Do not edit an installed
-checksum-protected Marketplace package. For example, German:
+To localize, edit the `activePattern` / `inactivePattern` regexes in
+`selectors.json`. For example, German:
 
 ```jsonc
 "mute": {
