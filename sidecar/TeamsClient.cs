@@ -3562,22 +3562,7 @@ public sealed class TeamsClient : IDisposable
         if (timer || ink) return null;
 
         if (target is "camera-select" or "camera-swap")
-        {
-            try
-            {
-                var camera = spec is null ? null : _dom.SelectCamera(spec, arg, target == "camera-swap");
-                if (camera is null) return null;
-                if (camera.Ok) return (true, null);
-                Console.Error.WriteLine($"direct camera selection failed: {camera.Error}");
-                return camera.SafeToFallback ? null : (false, camera.Error);
-            }
-            catch (Exception ex)
-            {
-                // A disconnected debugger does not cancel JavaScript already running.
-                Console.Error.WriteLine($"direct camera selection threw: {ex.Message}");
-                return (false, "Direct camera selection failed; webcam selection may already have changed");
-            }
-        }
+            return TryDirectCamera(() => spec is null ? null : _dom.SelectCamera(spec, arg, target == "camera-swap"));
 
         try
         {
@@ -3611,6 +3596,24 @@ public sealed class TeamsClient : IDisposable
             Console.Error.WriteLine(
                 $"direct mode could not press '{target}': {outcome.Error}; falling back to UI Automation");
             return null;
+        }
+    }
+
+    internal static (bool ok, string? error)? TryDirectCamera(Func<CameraDom.Result?> selectCamera)
+    {
+        try
+        {
+            var camera = selectCamera();
+            if (camera is null) return null;
+            if (camera.Ok) return (true, null);
+            Console.Error.WriteLine($"direct camera selection failed: {camera.Error}");
+            return camera.SafeToFallback ? null : (false, camera.Error);
+        }
+        catch (Exception ex)
+        {
+            // A disconnected debugger does not cancel JavaScript already running.
+            Console.Error.WriteLine($"direct camera selection threw: {ex.Message}");
+            return (false, "Direct camera selection failed; webcam selection may already have changed");
         }
     }
 

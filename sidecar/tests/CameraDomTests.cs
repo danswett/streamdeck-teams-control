@@ -84,6 +84,34 @@ public class CameraDomTests
         Assert.Null(CameraDom.BuildScript(spec, "one", false, 2500));
     }
 
+    [Theory]
+    [InlineData("camera-select", nameof(ControlSpec.Submenu))]
+    [InlineData("camera-select", nameof(ControlSpec.MenuItemOffName))]
+    [InlineData("camera-select", nameof(ControlSpec.OffAutomationId))]
+    [InlineData("camera-select", nameof(ControlSpec.OffName))]
+    [InlineData("camera-swap", nameof(ControlSpec.Submenu))]
+    [InlineData("camera-swap", nameof(ControlSpec.MenuItemOffName))]
+    [InlineData("camera-swap", nameof(ControlSpec.OffAutomationId))]
+    [InlineData("camera-swap", nameof(ControlSpec.OffName))]
+    public void Each_unsupported_camera_selector_independently_declines_Direct(string target, string selector)
+    {
+        var spec = Defaults.Config().Controls[target];
+        var swap = target == "camera-swap";
+        var arg = swap ? """["one","two"]""" : "one";
+        Assert.NotNull(CameraDom.BuildScript(spec, arg, swap, 2500));
+
+        switch (selector)
+        {
+            case nameof(ControlSpec.Submenu): spec.Submenu = "nested-menu"; break;
+            case nameof(ControlSpec.MenuItemOffName): spec.MenuItemOffName = "off-item"; break;
+            case nameof(ControlSpec.OffAutomationId): spec.OffAutomationId = "off-control"; break;
+            case nameof(ControlSpec.OffName): spec.OffName = "off-name"; break;
+            default: throw new ArgumentOutOfRangeException(nameof(selector));
+        }
+
+        Assert.Null(CameraDom.BuildScript(spec, arg, swap, 2500));
+    }
+
     [Fact]
     public void Both_camera_ids_use_the_same_configured_selector_templates_and_are_encoded_as_data()
     {
@@ -147,6 +175,61 @@ public class CameraDomTests
             """{"ok":false,"safeToFallback":true,"cleanupOk":true,"writeAttempted":false,"error":"not found"}""", null));
         Assert.False(result.Ok);
         Assert.True(result.SafeToFallback);
+    }
+
+    [Fact]
+    public void Declined_camera_Direct_routing_allows_UIA() =>
+        Assert.Null(TeamsClient.TryDirectCamera(() => null));
+
+    [Theory]
+    [InlineData("""{"ok":true,"selectedId":"one","cleanupOk":true}""", true, false)]
+    [InlineData("""{"ok":false,"safeToFallback":true,"cleanupOk":true,"writeAttempted":false,"error":"not found"}""", false, true)]
+    [InlineData("""{"ok":false,"safeToFallback":true,"cleanupOk":true,"writeAttempted":true,"error":"unconfirmed"}""", false, false)]
+    [InlineData("""{"ok":false,"safeToFallback":true,"cleanupOk":false,"writeAttempted":false,"error":"cleanup failed"}""", false, false)]
+    [InlineData("""{"ok":false,"selectedId":"one","cleanupOk":false,"error":"cleanup failed"}""", false, false)]
+    [InlineData("""{"ok":false,"writeAttempted":true,"cleanupOk":true,"error":"confirmation failed"}""", false, false)]
+    [InlineData("""{"ok":false,"safeToFallback":true}""", false, false)]
+    [InlineData("""{"ok":true}""", false, false)]
+    [InlineData("broken", false, false)]
+    [InlineData("[]", false, false)]
+    [InlineData(null, false, false)]
+    public void Camera_Direct_routing_only_falls_back_when_explicitly_safe(string? json, bool ok, bool fallback)
+    {
+        var camera = CameraDom.Interpret(new(true, json, null));
+        var calls = 0;
+        var routed = TeamsClient.TryDirectCamera(() => { calls++; return camera; });
+
+        Assert.Equal(1, calls);
+        if (fallback)
+        {
+            Assert.Null(routed);
+        }
+        else
+        {
+            Assert.NotNull(routed);
+            Assert.Equal(ok, routed.Value.ok);
+            Assert.Equal(camera.Error, routed.Value.error);
+        }
+    }
+
+    [Fact]
+    public void Camera_Direct_transport_timeout_is_a_handled_failure_not_UIA_fallback()
+    {
+        var routed = TeamsClient.TryDirectCamera(() => CameraDom.Interpret(CdpResult.Fail("timed out")));
+
+        Assert.NotNull(routed);
+        Assert.False(routed.Value.ok);
+        Assert.Contains("may already have changed", routed.Value.error);
+    }
+
+    [Fact]
+    public void Camera_Direct_exception_is_a_handled_failure_not_UIA_fallback()
+    {
+        var routed = TeamsClient.TryDirectCamera(() => throw new InvalidOperationException("disconnected"));
+
+        Assert.NotNull(routed);
+        Assert.False(routed.Value.ok);
+        Assert.Contains("may already have changed", routed.Value.error);
     }
 
     [Theory]
