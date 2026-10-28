@@ -149,6 +149,7 @@
 			"UUID": "com.bad-duck.teamscontrol.music-mode",
 			"Icon": "imgs/actions/music-mode/icon",
 			"Tooltip": "Turn High fidelity music mode on or off",
+			"PropertyInspectorPath": "ui/music-mode.html",
 			"Controllers": ["Keypad"],
 			"SupportedInMultiActions": true,
 			"UserTitleEnabled": false,

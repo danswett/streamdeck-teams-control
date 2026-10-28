@@ -29,12 +29,30 @@ describe("High fidelity music mode artwork and wiring", () => {
 		const action = manifest.Actions.find((entry: { UUID: string }) =>
 			entry.UUID === "com.bad-duck.teamscontrol.music-mode");
 		expect(action).toMatchObject({
-			Name: "High Fidelity Music Mode", Icon: "imgs/actions/music-mode/icon", Controllers: ["Keypad"]
+			Name: "High Fidelity Music Mode", Icon: "imgs/actions/music-mode/icon", Controllers: ["Keypad"],
+			PropertyInspectorPath: "ui/music-mode.html"
 		});
 		expect(readFileSync(path.join(root, "src", "plugin.ts"), "utf8"))
 			.toContain("registerAction(new MusicModeAction())");
 		expect(selectors.controls["music-mode"]).toEqual({
 			menu: "audio-button-configure", menuItemName: "^\\s*high\\s+fidelity\\s+music\\s+mode\\s*$"
 		});
+	});
+
+	it("keeps music settings concise without removing other actions' shared profile control", () => {
+		const plugin = path.resolve(__dirname, "..", "com.bad-duck.teamscontrol.sdPlugin");
+		const html = readFileSync(path.join(plugin, "ui", "music-mode.html"), "utf8");
+		const descriptionsJs = readFileSync(path.join(plugin, "ui", "action-descriptions.js"), "utf8");
+		const descriptions = JSON.parse(
+			descriptionsJs.slice(descriptionsJs.indexOf("{"), descriptionsJs.lastIndexOf("}") + 1)
+		) as Record<string, string>;
+		const description = descriptions["com.bad-duck.teamscontrol.music-mode"];
+
+		expect(description).toContain("Manual changes update the key while Teams' audio options are open.");
+		expect(description).not.toMatch(/never opens menus|last observed|hidden changes|studio environments|selectors\.json/);
+		expect(html).toContain("action-descriptions.js");
+		expect(html).toContain('id="action-description"');
+		expect(html).not.toMatch(/sdpi-item|sdpi-checkbox|pptAutoProfile|mirrors the matching|Follow the meeting|Moves the deck/);
+		expect(readFileSync(path.join(plugin, "ui", "default.html"), "utf8")).toContain('setting="pptAutoProfile"');
 	});
 });

@@ -10,7 +10,7 @@
  */
 globalThis.ACTION_DESCRIPTIONS = {
 	"com.bad-duck.teamscontrol.music-mode":
-		"Turns High fidelity music mode on or off in Teams' audio options. Gold means on, white means off or not yet read, and gray means unavailable. Each press reads Teams' actual switch and confirms the change. Manual changes update the key while Teams' audio options are open. The plugin never opens menus to poll: with the flyout closed it retains the last observed state, and hidden changes cannot be detected until the switch is exposed again. Teams recommends this mode for studio environments. The English switch label can be translated in selectors.json.",
+		"Turns High fidelity music mode on or off in Teams' audio options. Gold means on, white means off or not yet read, and gray means unavailable. Each press reads Teams' actual switch and confirms the change. Manual changes update the key while Teams' audio options are open.",
 
 	"com.bad-duck.teamscontrol.mute":
 		"Mutes and unmutes your microphone. The key follows the live state, so it stays correct when you mute in Teams itself, from a keyboard shortcut, or on a headset.",
