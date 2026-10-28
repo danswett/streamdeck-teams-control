@@ -73,9 +73,8 @@ perfectly well and belongs to OneNote — the plugin treats that as no port at a
 
 ## Turning it on
 
-These instructions are for Windows and a plugin build that supports the external
-`direct-mode.json` file described below. Older releases only read the bundled
-`selectors.json`; upgrade to a build with external settings support first.
+These instructions are for Windows. Configure Direct mode using the external
+`direct-mode.json` file described below.
 **Do not edit files inside an installed Marketplace plugin.** Stream Deck can
 checksum-protect them: changing otherwise valid JSON can prevent the entire
 plugin from starting.
@@ -206,18 +205,12 @@ Set `"enabled": false` in the external file and restart Stream Deck. Every
 control returns to the normal path. If the problem persists, Direct mode was
 not the cause.
 
-**The whole plugin stopped loading after editing `selectors.json`.**
-This can be Stream Deck's package tamper protection, not a Direct-mode failure.
-Restore the exact original file or reinstall the official package; do not keep
-editing protected payloads or disable verification. Use the external settings
-file with a build that supports it.
-
 **The external setting appears to be ignored.**
-Check that the file is in the directory for the installed plugin's UUID, that it
-is named `direct-mode.json` rather than `direct-mode.json.txt`, and that the
-installed build supports external settings. Restart Stream Deck and check its
-plugin log for the settings-loaded message or an explicit parse error. Direct
-mode can still be unavailable if Teams has no matching debugging port.
+Check that the file is in the directory for the installed plugin's UUID and that it
+is named `direct-mode.json` rather than `direct-mode.json.txt`. Restart Stream
+Deck and check its plugin log for the settings-loaded message or an explicit
+parse error. Direct mode can still be unavailable if Teams has no matching
+debugging port.
 
 ---
 
