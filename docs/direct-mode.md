@@ -111,9 +111,7 @@ settings, set **Debugging port** to the port you opened for Teams (9457 by
 default), then click **Save shared port**. The settings pane also links to this
 guide.
 
-Press the key, or click **Enable Direct mode** in its settings pane. Changes
-apply to the running plugin without restarting Stream Deck or editing any
-files. A control already being processed can finish before the change applies.
+Press the key, or click **Enable Direct mode** in its settings pane.
 
 The key shows:
 
