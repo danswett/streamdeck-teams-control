@@ -32,32 +32,9 @@ styled invisible, so nothing appears on screen at all.
 | Teams minimized | falls back to UIA `Invoke`, which raises the window | works, window stays down |
 | Everything else | unchanged | unchanged |
 
-Unsupported controls and unavailable connections use the normal path. Settings
-with verified-state writes also report uncertain results rather than risk
-repeating a toggle, as described below.
-
-**High Fidelity Music Mode** also supports Direct mode. It uses the switch's
-stable `music-mode.menuItemDataTid` selector and native checkbox state, reads
-again before one click, and confirms the result through fresh DOM lookups.
-Flyouts opened by the action are hidden and closed with Escape; an audio flyout
-already open is left open. The hide style is removed on success and failure.
-No configurable regular expression is evaluated inside Teams.
-Its page selection requires the configured audio-options host as well as the
-meeting probe, excluding the compact mini-meeting toolbar when Teams is minimized.
-
-When Direct mode is unavailable, the existing UIA path remains in use. A failed
-Direct attempt may also fall back if it never established an initial state,
-never attempted a setting write, and confirmed its cleanup. After a known
-initial state or a potentially applied write, an uncertain result is reported
-instead of blindly toggling again. Cleanup failures are explicit even if the
-setting was successfully changed; no rollback is promised.
-
-The UIA path confirms the switch through fresh lookups and updates the key before
-cleanup. Visible switches use posted clicks; offscreen switches use guarded
-UIA `Toggle`. Its music-specific dismissal retains the existing shared fallback
-and focus/presentation safeguards.
-Manual changes are observed passively while the audio flyout is open, without
-opening menus or running page scripts to poll the setting.
+Direct mode is only ever used where it is better. Anything it cannot improve —
+or cannot do at all — silently uses the normal path, so **the worst case is the
+behaviour you already have**.
 
 ---
 
@@ -128,12 +105,6 @@ A version string such as `Edg/153.0.4234.48` means the port is open. An error
 means the setting did not reach Teams — see [Troubleshooting](#troubleshooting).
 
 ### 4. Enable it in the plugin
-
-These file-editing instructions apply to locally built/preview plugins.
-Marketplace-signed plugins can checksum-protect `selectors.json`: editing it
-can block the entire plugin from loading. Leave a signed production installation
-untouched and configure a separately namespaced preview package before packing
-and installing it instead.
 
 Add the block to `selectors.json`, using the same port:
 
