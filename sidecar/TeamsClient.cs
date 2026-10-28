@@ -3550,9 +3550,8 @@ public sealed class TeamsClient : IDisposable
     ///
     /// A declined press is silent, because declining is the normal state of
     /// affairs: Direct mode is off unless the user opened a debugging port. A
-    /// press that was taken and then failed is logged. Camera writes only fall
-    /// back when the script confirms no write and successful cleanup; an
-    /// uncertain selection must not be repeated through UI Automation.
+    /// press that was taken and then failed is logged, because that is a real
+    /// fault worth seeing even though the fallback hides it from the user.
     /// </summary>
     private (bool ok, string? error)? TryDirect(
         string target, ControlSpec? spec, string? arg, bool jump, bool timer, bool ink)
