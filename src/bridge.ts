@@ -349,6 +349,10 @@ class Bridge {
 	 * firing long after it was pressed.
 	 */
 	invoke(target: string, arg?: string): Promise<{ ok: boolean; error?: string }> {
+		// Applying preferences also navigates the video-settings pane and confirms
+		// each toggle; plain camera selection retains the normal press timeout.
+		const timeout = (target === "camera-select" || target === "camera-swap") && arg?.startsWith("{")
+			? 20_000 : INVOKE_TIMEOUT_MS;
 		const id = this.#nextId++;
 		if (!this.#send({ id, cmd: "invoke", target, arg: arg ?? "" })) {
 			return Promise.resolve({ ok: false, error: "sidecar not running" });
@@ -358,7 +362,7 @@ class Bridge {
 			const timer = setTimeout(() => {
 				this.#pending.delete(id);
 				resolve({ ok: false, error: "timed out" });
-			}, INVOKE_TIMEOUT_MS);
+			}, timeout);
 			this.#pending.set(id, { resolve, timer });
 		});
 	}

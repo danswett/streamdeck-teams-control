@@ -714,6 +714,11 @@ public static class Program
             else
                 config.PowerPointLive = overrides.PowerPointLive;
 
+            if (overrides.CameraVideoSettings.Validate() is { } cameraProblem)
+                Console.Error.WriteLine($"ignoring cameraVideoSettings overrides from {path} - {cameraProblem}");
+            else
+                config.CameraVideoSettings = overrides.CameraVideoSettings;
+
             // Opt-in and off by default, so an absent block leaves it off.
             config.DirectMode = overrides.DirectMode;
 
@@ -756,6 +761,31 @@ public static class Program
             cfg.MeetingProbeAutomationId = mps;
         if (root.TryGetProperty("fullToolbarAutomationId", out var ft) && ft.GetString() is { } fts)
             cfg.FullToolbarAutomationId = fts;
+
+        if (root.TryGetProperty("cameraVideoSettings", out var camera))
+        {
+            if (camera.ValueKind != JsonValueKind.Object)
+                Console.Error.WriteLine("ignoring cameraVideoSettings overrides - expected an object");
+            else
+            {
+                string? CameraSelector(string name)
+                {
+                    if (!camera.TryGetProperty(name, out var value)) return null;
+                    if (value.ValueKind == JsonValueKind.String) return value.GetString();
+                    Console.Error.WriteLine($"ignoring cameraVideoSettings.{name} override - expected a string");
+                    return null;
+                }
+
+                var spec = cfg.CameraVideoSettings;
+                if (CameraSelector("paneTabsAutomationId") is { } pt) spec.PaneTabsAutomationId = pt;
+                if (CameraSelector("settingsTabName") is { } st) spec.SettingsTabName = st;
+                if (CameraSelector("mirrorName") is { } mn) spec.MirrorName = mn;
+                if (CameraSelector("softFocusName") is { } sf) spec.SoftFocusName = sf;
+                if (CameraSelector("brightnessName") is { } bn) spec.BrightnessName = bn;
+                if (CameraSelector("moreSettingsName") is { } ms) spec.MoreSettingsName = ms;
+                if (CameraSelector("closePaneName") is { } cp) spec.ClosePaneName = cp;
+            }
+        }
 
         if (root.TryGetProperty("powerPointLive", out var ppt) && ppt.ValueKind == JsonValueKind.Object)
         {

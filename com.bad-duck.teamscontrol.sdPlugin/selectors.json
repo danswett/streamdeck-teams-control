@@ -59,6 +59,21 @@
 		"port": 9457
 	},
 	"meetingProbeAutomationId": "microphone-button",
+	"cameraVideoSettings": {
+		"$comment": [
+			"Used only when a camera button applies Advanced Settings.",
+			"Names are exact, localized accessible names; translate them for Teams",
+			"in another language. The pane tabs id is locale-independent.",
+			"Partial overrides retain the other built-in camera settings selectors."
+		],
+		"paneTabsAutomationId": "video-effects-and-settings-menu",
+		"settingsTabName": "Settings",
+		"mirrorName": "Mirror my video",
+		"softFocusName": "Soft focus",
+		"brightnessName": "Adjust brightness",
+		"moreSettingsName": "More video effects and settings",
+		"closePaneName": "Close video effects and settings pane"
+	},
 	"powerPointLive": {
 		"$comment": [
 			"How a shared deck is recognized.",

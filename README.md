@@ -105,6 +105,27 @@ or the first otherwise, including when a third camera is selected. Both
 configured devices must be available in Teams. Video stays on or off as it was;
 the key does not indicate which webcam is currently selected.
 
+Both camera actions can also apply **Mirror my video**, **Soft focus**, and
+**Adjust brightness** preferences for the destination camera. Swap Camera has
+separate preferences for each of its two cameras. Each preference offers
+**Leave unchanged** (the default), **On**, or **Off**. They apply on each button
+press, even when Change Camera's target is already selected, and only toggle
+settings whose current state differs. Soft focus preserves the strength slider.
+
+These are global Teams settings applied by the button, not persistent device
+defaults: manual camera changes do not automatically apply a button's preferences.
+Mirroring temporarily opens **More video effects and settings > Settings**.
+The plugin closes a pane it opened, or restores the selected tab of an existing
+video-settings pane. Soft focus and brightness use the camera flyout.
+Unavailable controls or unconfirmed changes produce a key alert; the camera
+and some preferences may already have changed when a later preference fails.
+
+The `cameraVideoSettings` section of `selectors.json` overrides the new pane
+selector and exact accessible names, including translations for non-English
+Teams. Partial overrides retain the remaining defaults. The UI Automation
+operations needed for the mirror switch and Settings tab use the existing
+focus guard, but may still briefly bring Teams forward.
+
 ### Presenting a deck
 
 <img src="marketplace/gallery-3-presenting.png" alt="PowerPoint Live presenter keys" width="600">
