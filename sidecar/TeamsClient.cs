@@ -3554,7 +3554,7 @@ public sealed class TeamsClient : IDisposable
         // The timer has no ids to find anything by, and ink colour is read back
         // out of a flyout the UIA path already knows how to drive. Neither is
         // worth a second implementation yet.
-        if (timer || ink || target is "camera-select" or "camera-swap") return null;
+        if (timer || ink || target is "camera-select" or "camera-swap" or "music-mode") return null;
 
         try
         {
@@ -4213,6 +4213,20 @@ public sealed class TeamsClient : IDisposable
                 return (false, $"item for '{target}' not found in menu");
             }
 
+            if (target == "music-mode")
+            {
+                var result = MusicMode.Toggle(() =>
+                {
+                    var current = FindInPopup(win, itemIds, itemNameRx, 0);
+                    if (current is null) return null;
+                    item = current;
+                    return new MusicMode.Switch(ReadMusicMode(current), SafeEnabled(current), () => PressMusicMode(current));
+                });
+                if (result.active is bool active) _lastStates[target] = active;
+                else _lastStates.Remove(target);
+                return (result.ok, result.error);
+            }
+
             if (cameraPair is not null)
             {
                 var second = FindInPopup(win, secondIds, secondNameRx, 1500);
@@ -4390,6 +4404,54 @@ public sealed class TeamsClient : IDisposable
         }
         catch { }
         return null;
+    }
+
+    private bool PressMusicMode(AutomationElement el)
+    {
+        try
+        {
+            if (!el.Properties.IsOffscreen.Value) return Press(el);
+
+            // Verified live: the audio flyout exposes this switch below its
+            // scroll viewport, with positive but unclickable bounds. A posted
+            // click changes nothing there; Toggle works without scrolling.
+            Console.Error.WriteLine("music-mode switch is offscreen; using guarded UIA Toggle");
+            var pressed = false;
+            Guarded(() =>
+            {
+                var toggle = el.Patterns.Toggle.PatternOrDefault;
+                if (toggle is null) return;
+                toggle.Toggle();
+                pressed = true;
+            });
+            return pressed;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"music-mode press failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>Unknown or indeterminate music-mode state must never mean off.</summary>
+    private static bool? ReadMusicMode(AutomationElement el)
+    {
+        try
+        {
+            var toggle = el.Patterns.Toggle.PatternOrDefault;
+            if (toggle is null || !toggle.ToggleState.IsSupported) return null;
+            return toggle.ToggleState.Value switch
+            {
+                ToggleState.On => true,
+                ToggleState.Off => false,
+                _ => null
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"music-mode state read failed: {ex.Message}");
+            return null;
+        }
     }
 
     /// <summary>Reads a menu item's checked state, where it exposes one.</summary>

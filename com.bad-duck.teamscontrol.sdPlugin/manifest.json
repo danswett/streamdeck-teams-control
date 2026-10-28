@@ -145,6 +145,21 @@
 	],
 	"Actions": [
 		{
+			"Name": "High Fidelity Music Mode",
+			"UUID": "com.bad-duck.teamscontrol.music-mode",
+			"Icon": "imgs/actions/music-mode/icon",
+			"Tooltip": "Turn High fidelity music mode on or off",
+			"Controllers": ["Keypad"],
+			"SupportedInMultiActions": true,
+			"UserTitleEnabled": false,
+			"States": [
+				{
+					"Image": "imgs/actions/music-mode/key",
+					"TitleAlignment": "bottom"
+				}
+			]
+		},
+		{
 			"Name": "Mute",
 			"UUID": "com.bad-duck.teamscontrol.mute",
 			"Icon": "imgs/actions/mute/icon",

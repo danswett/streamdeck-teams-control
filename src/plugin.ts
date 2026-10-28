@@ -7,6 +7,7 @@ import {
 	HandAction,
 	LeaveAction,
 	MuteAction,
+	MusicModeAction,
 	PeopleAction,
 	ReactApplauseAction,
 	ReactLaughAction,
@@ -52,6 +53,7 @@ import { profileSwitcher } from "./profiles";
 streamDeck.logger.setLevel("info");
 
 streamDeck.actions.registerAction(new MuteAction());
+streamDeck.actions.registerAction(new MusicModeAction());
 streamDeck.actions.registerAction(new CameraAction());
 streamDeck.actions.registerAction(new SelectCameraAction());
 streamDeck.actions.registerAction(new SwapCameraAction());

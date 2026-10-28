@@ -36,6 +36,12 @@ Direct mode is only ever used where it is better. Anything it cannot improve —
 or cannot do at all — silently uses the normal path, so **the worst case is the
 behaviour you already have**.
 
+**High Fidelity Music Mode** always uses UI Automation, including with Direct
+mode enabled. Each press opens the audio flyout, reads the actual toggle state,
+and confirms the result through fresh lookups. Visible switches use posted
+clicks; switches below the scroll viewport use UIA `Toggle` under the existing
+focus guard. Flyout cleanup uses the same guarded path as the camera actions.
+
 ---
 
 ## What you are agreeing to

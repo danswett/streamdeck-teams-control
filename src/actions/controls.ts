@@ -52,6 +52,24 @@ export class CameraAction extends TeamsAction {
 	}
 }
 
+@action({ UUID: "com.bad-duck.teamscontrol.music-mode" })
+export class MusicModeAction extends TeamsAction {
+	protected override targetFor(): string {
+		return "music-mode";
+	}
+
+	protected override draw(state: TeamsState): string {
+		return renderToggle({
+			onKey: "music",
+			offKey: "music",
+			onTone: "accent",
+			offTone: "on",
+			active: state.states["music-mode"],
+			available: usable(state, "music-mode")
+		});
+	}
+}
+
 type CameraSettings = { cameraId?: string; secondCameraId?: string };
 
 abstract class WebcamAction extends TeamsAction<CameraSettings> {

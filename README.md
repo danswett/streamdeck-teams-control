@@ -81,6 +81,7 @@ the same accessibility layer screen readers use.
 | Action | Shows | Notes |
 |---|---|---|
 | **Mute** | ✅ muted / unmuted | Slashed glyph when muted |
+| **High Fidelity Music Mode** | Last confirmed on / off | Reads and confirms Teams' audio switch on each press |
 | **Camera** | ✅ on / off | Slashed glyph when off |
 | **Change Camera** | availability only | Choose a specific Windows webcam in each button's settings; does not toggle camera on/off |
 | **Swap Camera** | availability only | Toggle between two configured webcams, using Teams' current selection |
@@ -91,6 +92,16 @@ the same accessibility layer screen readers use.
 | **Chat** | availability only | Toggles the meeting chat pane |
 | **People** | availability only | Toggles the participant roster |
 | **Leave** | availability only | Press opens Teams' confirmation; hold to answer it |
+
+**High Fidelity Music Mode** toggles the setting in Teams' microphone audio
+options. Its musical-note key is gold when on, white when off or not yet read,
+and gray outside a meeting. Each press reads the actual setting and confirms the
+change; between presses the key remembers the last confirmed state rather than
+opening the audio flyout to poll it. Changes made directly in Teams are picked up
+on the next press. Missing, disabled or unreadable switches produce an alert
+instead of a guessed toggle. Teams recommends this mode for studio environments.
+The switch has a generated ID, so its English accessible name is matched instead;
+translate `music-mode.menuItemName` in `selectors.json` for another Teams language.
 
 **Change Camera** lists Windows video inputs, including virtual cameras, without
 requiring a meeting. Add one key per webcam and choose its target in the key's

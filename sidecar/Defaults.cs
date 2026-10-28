@@ -36,6 +36,11 @@ public static class Defaults
                 ActivePattern = @"camera\s+off",
                 InactivePattern = @"camera\s+on"
             },
+            ["music-mode"] = new()
+            {
+                Menu = "audio-button-configure",
+                MenuItemName = @"^\s*high\s+fidelity\s+music\s+mode\s*$"
+            },
             ["camera-select"] = new()
             {
                 Menu = "video-button-configure",
