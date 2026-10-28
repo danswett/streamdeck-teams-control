@@ -49,6 +49,9 @@ public sealed class ControlSpec
 
     public string? MenuItemAutomationId { get; set; }
 
+    /// <summary>Stable DOM data-tid for Direct-mode settings with generated element ids.</summary>
+    public string? MenuItemDataTid { get; set; }
+
     /// <summary>
     /// Id the same menu item takes in its opposite state, for entries Teams
     /// swaps rather than checks. "Hide presenter view" is replaced outright by
@@ -164,6 +167,8 @@ public sealed class ControlSpec
     /// </summary>
     public string? Validate()
     {
+        if (MenuItemDataTid is not null && string.IsNullOrWhiteSpace(MenuItemDataTid))
+            return "menuItemDataTid must not be blank";
         foreach (var (label, pattern) in new[]
                  {
                      ("activePattern", ActivePattern),
@@ -476,7 +481,7 @@ public sealed class TeamsClient : IDisposable
     /// </summary>
     public event Action? Hint;
 
-    /// <summary>A freshly confirmed music state, published before flyout cleanup.</summary>
+    /// <summary>A freshly confirmed music state; UIA emits before deferred cleanup.</summary>
     public event Action<bool>? MusicModeConfirmed;
 
     /// <summary>When set, every event that fires is logged to stderr.</summary>
@@ -3561,10 +3566,27 @@ public sealed class TeamsClient : IDisposable
         // The timer has no ids to find anything by, and ink colour is read back
         // out of a flyout the UIA path already knows how to drive. Neither is
         // worth a second implementation yet.
-        if (timer || ink || target is "camera-select" or "camera-swap" or "music-mode") return null;
+        if (timer || ink || target is "camera-select" or "camera-swap") return null;
 
         try
         {
+            if (target == "music-mode" && spec is not null)
+            {
+                var result = _dom.ToggleMusicMode(spec);
+                if (result is null) return null;
+                _musicModeObserver?.Dispose();
+                _musicModeObserver = null;
+                if (result.Active is bool active)
+                {
+                    _lastStates[target] = active;
+                    MusicModeConfirmed?.Invoke(active);
+                }
+                else _lastStates.Remove(target);
+                if (result.Ok) return (true, null);
+                Console.Error.WriteLine($"direct music-mode failed: {result.Error}");
+                return result.SafeToFallback ? null : (false, result.Error);
+            }
+
             if (jump)
             {
                 if (!int.TryParse(arg, out var slide)) return null;
@@ -3582,6 +3604,11 @@ public sealed class TeamsClient : IDisposable
         }
         catch (Exception ex)
         {
+            if (target == "music-mode")
+            {
+                Console.Error.WriteLine($"direct music-mode threw; not retrying an uncertain write: {ex.Message}");
+                return (false, $"Could not confirm Direct music mode: {ex.Message}");
+            }
             // Never let the optional path take a press down with it.
             Console.Error.WriteLine($"direct mode threw for '{target}': {ex.Message}; falling back");
             return null;

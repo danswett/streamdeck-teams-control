@@ -35,7 +35,8 @@ describe("High fidelity music mode artwork and wiring", () => {
 		expect(readFileSync(path.join(root, "src", "plugin.ts"), "utf8"))
 			.toContain("registerAction(new MusicModeAction())");
 		expect(selectors.controls["music-mode"]).toEqual({
-			menu: "audio-button-configure", menuItemName: "^\\s*high\\s+fidelity\\s+music\\s+mode\\s*$"
+			menu: "audio-button-configure", menuItemDataTid: "audio-flyout-music-model-setting-v2-toggle",
+			menuItemName: "^\\s*high\\s+fidelity\\s+music\\s+mode\\s*$"
 		});
 	});
 

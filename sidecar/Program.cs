@@ -809,6 +809,9 @@ public static class Program
         foreach (var prop in controls.EnumerateObject())
         {
             var o = prop.Value;
+            if (o.TryGetProperty("menuItemDataTid", out var tid) &&
+                tid.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
+                Console.Error.WriteLine($"ignoring non-string menuItemDataTid for '{prop.Name}'");
             cfg.Controls[prop.Name] = new ControlSpec
             {
                 AutomationId = Str(o, "automationId") ?? "",
@@ -818,6 +821,7 @@ public static class Program
                 Submenu = Str(o, "submenu"),
                 RequiresRole = Str(o, "requiresRole"),
                 MenuItemAutomationId = Str(o, "menuItemAutomationId"),
+                MenuItemDataTid = Str(o, "menuItemDataTid"),
                 MenuItemToggleAutomationId = Str(o, "menuItemToggleAutomationId"),
                 MenuItemName = Str(o, "menuItemName"),
                 MenuItemOffName = Str(o, "menuItemOffName"),

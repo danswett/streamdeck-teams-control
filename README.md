@@ -96,15 +96,20 @@ the same accessibility layer screen readers use.
 **High Fidelity Music Mode** toggles the setting in Teams' microphone audio
 options. Its musical-note key is gold when on, white when off or not yet read,
 and gray outside a meeting. Each press reads the actual setting and confirms the
-change, updating the key before closing the audio options flyout. It also
+change. The UIA path updates the key before closing an action-opened audio
+flyout; Direct mode reports the confirmed state after its cleanup. It also
 passively observes the switch while you have Teams' audio options
 open, so manual changes there update the key. It never opens the flyout to poll:
 with the flyout closed it retains the last observed state, and before the first
 observation the state is unknown. Changes through other hidden surfaces cannot
 be detected until the switch is exposed again. Missing, disabled or unreadable switches produce an alert
 instead of a guessed toggle. Teams recommends this mode for studio environments.
-The switch has a generated ID, so its English accessible name is matched instead;
-translate `music-mode.menuItemName` in `selectors.json` for another Teams language.
+For UIA the switch has a generated ID, so its English accessible name is matched
+instead; translate `music-mode.menuItemName` in `selectors.json` for another Teams language.
+With Direct mode enabled and connected, it uses the stable
+`music-mode.menuItemDataTid` selector to read and confirm the native checkbox
+without showing an action-opened flyout. An uncertain Direct write is never
+retried as a second toggle through UI Automation.
 
 **Change Camera** lists Windows video inputs, including virtual cameras, without
 requiring a meeting. Add one key per webcam and choose its target in the key's

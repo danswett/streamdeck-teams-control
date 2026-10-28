@@ -39,6 +39,7 @@ public static class Defaults
             ["music-mode"] = new()
             {
                 Menu = "audio-button-configure",
+                MenuItemDataTid = "audio-flyout-music-model-setting-v2-toggle",
                 MenuItemName = @"^\s*high\s+fidelity\s+music\s+mode\s*$"
             },
             ["camera-select"] = new()
