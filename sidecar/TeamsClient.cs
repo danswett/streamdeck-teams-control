@@ -4120,6 +4120,12 @@ public sealed class TeamsClient : IDisposable
         if (!string.IsNullOrEmpty(spec.MenuItemAutomationId) && string.IsNullOrEmpty(itemIds[0]))
             return (false, $"'{target}' needs a value but none was set");
 
+        // Decide music flyout ownership before generic recovery can close it.
+        if (target == "music-mode")
+            return string.IsNullOrEmpty(spec.Menu)
+                ? (false, "Music mode requires an audio options menu")
+                : InvokeMusicMode(win, spec.Menu, itemIds, itemNameRx);
+
         string?[] secondIds = [];
         Regex? secondNameRx = null;
         if (cameraPair is not null && !TryItemSelectors(spec, cameraPair[1], out secondIds, out secondNameRx, out patternError))
@@ -4247,25 +4253,6 @@ public sealed class TeamsClient : IDisposable
                 return (false, $"item for '{target}' not found in menu");
             }
 
-            if (target == "music-mode")
-            {
-                var result = MusicMode.Toggle(() =>
-                {
-                    var current = FindInPopup(win, itemIds, itemNameRx, 0);
-                    if (current is null) return null;
-                    item = current;
-                    return new MusicMode.Switch(ReadMusicMode(current), SafeEnabled(current), () => PressMusicMode(current));
-                });
-                stages.Mark("confirm");
-                _musicModeObserver?.Dispose();
-                _musicModeObserver = null;
-                if (result.active is bool active) _lastStates[target] = active;
-                else _lastStates.Remove(target);
-                if (result.ok && result.active is bool confirmed)
-                    MusicModeConfirmed?.Invoke(confirmed);
-                return (result.ok, result.error);
-            }
-
             if (cameraPair is not null)
             {
                 var second = FindInPopup(win, secondIds, secondNameRx, 1500);
@@ -4349,14 +4336,6 @@ public sealed class TeamsClient : IDisposable
             var anchor = item;
             DeferCleanup(() =>
             {
-                if (target == "music-mode")
-                {
-                    DismissMusicModeFlyout(win, anchor, host, hostPoint, spec.Menu!);
-                    stages.Mark("dismiss");
-                    stages.ReportIfSlow(target, SlowFlyoutMs);
-                    return;
-                }
-
                 // Two problems, one fix. The flyout does not reliably close on
                 // its own, and after a selection Teams swallows the next click
                 // on that menu button. A click on inert space dismisses the
@@ -4453,6 +4432,76 @@ public sealed class TeamsClient : IDisposable
         return null;
     }
 
+    private (bool ok, string? error) InvokeMusicMode(
+        AutomationElement win, string hostId, string?[] itemIds, Regex? itemName)
+    {
+        AutomationElement? host = null;
+        var wasOpen = ReadMusicModeFlyout(win, hostId, ref host);
+        if (wasOpen is null)
+        {
+            Console.Error.WriteLine("music-mode audio options state unavailable; waking accessibility and retrying");
+            EnableAccessibility(force: true);
+            Thread.Sleep(RetrySettleMs);
+            wasOpen = ReadMusicModeFlyout(win, hostId, ref host);
+        }
+
+        var stages = new StageLog();
+        bool Expand()
+        {
+            var open = ReadMusicModeFlyout(win, hostId, ref host);
+            if (open is true) return true;
+            if (open is not false) return false;
+            if (!IsToolbarVisible(win))
+            {
+                RecoverFromOpenFlyout(win);
+                open = ReadMusicModeFlyout(win, hostId, ref host);
+                if (open is true) return true;
+                if (open is not false) return false;
+            }
+            var opened = host is not null && ExpandMenu(host);
+            stages.Mark("open");
+            return opened;
+        }
+
+        return MusicMode.WithFlyout(wasOpen, Expand, () =>
+        {
+            var item = FindInPopup(win, itemIds, itemName, 2500);
+            stages.Mark("find");
+            // Retain the swallowed-opening-click retry, but never toggle a
+            // borrowed or already-expanded flyout just because its item is missing.
+            if (item is null && wasOpen is false && IsToolbarVisible(win) &&
+                ReadMusicModeFlyout(win, hostId, ref host) is false)
+            {
+                Console.Error.WriteLine("music-mode audio options did not open; retrying the opening press");
+                Thread.Sleep(RetrySettleMs);
+                if (Expand())
+                    item = FindInPopup(win, itemIds, itemName, 2000);
+                stages.Mark("retry");
+            }
+            if (item is null) return (false, "High fidelity music mode was not found in Teams audio options");
+
+            var result = MusicMode.Toggle(() =>
+            {
+                var current = FindInPopup(win, itemIds, itemName, 0);
+                return current is null ? null : new MusicMode.Switch(
+                    ReadMusicMode(current), SafeEnabled(current), () => PressMusicMode(current));
+            });
+            stages.Mark("confirm");
+            _musicModeObserver?.Dispose();
+            _musicModeObserver = null;
+            if (result.active is bool active) _lastStates["music-mode"] = active;
+            else _lastStates.Remove("music-mode");
+            if (result.ok && result.active is bool confirmed)
+                MusicModeConfirmed?.Invoke(confirmed);
+            return (result.ok, result.error);
+        }, () => DeferCleanup(() =>
+        {
+            DismissMusicModeFlyout(win, hostId, host);
+            stages.Mark("dismiss");
+            stages.ReportIfSlow("music-mode", SlowFlyoutMs);
+        }));
+    }
+
     private bool PressMusicMode(AutomationElement el)
     {
         try
@@ -4484,39 +4533,36 @@ public sealed class TeamsClient : IDisposable
     private AutomationElement? _musicModeHost;
     private IDisposable? _musicModeHostWatch;
 
-    private void DismissMusicModeFlyout(
-        AutomationElement win, AutomationElement? anchor, AutomationElement host,
-        (int x, int y)? hostPoint, string hostId)
+    private bool? ReadMusicModeFlyout(AutomationElement win, string hostId, ref AutomationElement? host)
     {
-        AutomationElement? current = null;
-        bool? IsOpen()
+        try
         {
-            try
+            // Some flyouts hide the host from discovery but leave its live pattern usable.
+            host = FindAnywhere(win, hostId) ?? ResolveMenuHost(win, hostId) ?? host;
+            var pattern = host?.Patterns.ExpandCollapse.PatternOrDefault;
+            if (pattern is null || !pattern.ExpandCollapseState.IsSupported) return null;
+            return pattern.ExpandCollapseState.Value switch
             {
-                current = FindAnywhere(win, hostId);
-                return current?.Patterns.ExpandCollapse.PatternOrDefault?.ExpandCollapseState.Value switch
-                {
-                    ExpandCollapseState.Expanded => true,
-                    ExpandCollapseState.Collapsed => false,
-                    _ => null
-                };
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"music-mode dismissal state read failed: {ex.Message}");
-                return null;
-            }
+                ExpandCollapseState.Expanded => true,
+                ExpandCollapseState.Collapsed => false,
+                _ => null
+            };
         }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"music-mode audio options state read failed: {ex.Message}");
+            return null;
+        }
+    }
 
-        bool PostClose() =>
-            !IsPresentingDeck() && !FocusGuard.IsTeamsInFront() && IsOpen() is true &&
-            InputPoster.TryClick(_renderWidget, current!);
-
+    private void DismissMusicModeFlyout(AutomationElement win, string hostId, AutomationElement? host)
+    {
         bool Collapse()
         {
             try
             {
-                var pattern = current?.Patterns.ExpandCollapse.PatternOrDefault;
+                if (ReadMusicModeFlyout(win, hostId, ref host) is false) return true;
+                var pattern = host?.Patterns.ExpandCollapse.PatternOrDefault;
                 if (pattern is null) return false;
                 Guarded(pattern.Collapse);
                 return true;
@@ -4533,19 +4579,14 @@ public sealed class TeamsClient : IDisposable
             var deadline = Environment.TickCount64 + 700;
             do
             {
-                if (IsOpen() is false) return true;
+                if (ReadMusicModeFlyout(win, hostId, ref host) is false) return true;
                 Thread.Sleep(PollIntervalMs);
             } while (Environment.TickCount64 < deadline);
             return false;
         }
 
-        // A setting switch stays open after a successful change. Unlike a
-        // menu selection, it has no natural dismissal to wait for.
-        MusicMode.Dismiss(IsOpen, PostClose, Collapse, WaitForClosed, () =>
-        {
-            Console.Error.WriteLine("music-mode quick dismissal unconfirmed; using existing flyout cleanup");
-            DismissFlyout(win, anchor, host, hostPoint, hostId);
-        });
+        if (!MusicMode.Dismiss(() => ReadMusicModeFlyout(win, hostId, ref host), Collapse, WaitForClosed))
+            Console.Error.WriteLine("warning: could not confirm music-mode audio flyout dismissal; no toggle fallback attempted");
     }
 
     private void ObserveMusicMode(AutomationElement win)

@@ -18,6 +18,12 @@ type Options = {
 	disabled?: boolean;
 	indeterminate?: boolean;
 	changeBeforeRecheck?: boolean;
+	changeAfterRecheck?: boolean;
+	replaceAfterRecheck?: boolean;
+	disabledAfterRecheck?: boolean;
+	staleAtFinalRead?: boolean;
+	unknownAfterRecheck?: boolean;
+	expireAtFinalRead?: boolean;
 	staleBefore?: number;
 	staleAfter?: number;
 	unknownAfterInitial?: boolean;
@@ -31,24 +37,31 @@ async function exercise(options: Options = {}) {
 	let now = 0, finds = 0, afterWrite = 0, writes = 0, opens = 0, closes = 0;
 	let active = options.active ?? false;
 	let expanded = options.expanded ?? false;
+	let disabled = options.disabled ?? false;
+	let generation = 0;
+	let disappeared = false;
 	const styles = new Set<object>();
 	const pending = new Set<object>();
 	const window: Record<string, unknown> = options.busy ? { __sdtc_music_operation: {} } : {};
 	const initialLease = window.__sdtc_music_operation;
-	const input = () => ({
-		tagName: "INPUT", type: "checkbox", checked: active,
-		indeterminate: options.indeterminate ?? false, disabled: options.disabled ?? false,
-		getAttribute: (name: string) => name === "data-tid" ? "music" : name === "role" ? "switch" : null,
-		click() {
-			writes++;
-			if (options.clickThrows) throw new Error("provider failed after possible write");
-			if (!options.unconfirmed) active = !active;
-		},
-		dispatchEvent() {
-			closes++;
-			if (!options.cleanupFails) expanded = false;
-		}
-	});
+	const input = () => {
+		const currentGeneration = generation;
+		return {
+			tagName: "INPUT", type: "checkbox", get checked() { return active; },
+			indeterminate: options.indeterminate ?? false, disabled,
+			getAttribute: (name: string) => name === "data-tid" ? "music" : name === "role" ? "switch" : null,
+			click() {
+				writes++;
+				if (currentGeneration !== generation) throw new Error("pressed a replaced control");
+				if (options.clickThrows) throw new Error("provider failed after possible write");
+				if (!options.unconfirmed) active = !active;
+			},
+			dispatchEvent() {
+				closes++;
+				if (!options.cleanupFails) expanded = false;
+			}
+		};
+	};
 	const host = {
 		getAttribute: (name: string) => name === "aria-expanded" ? String(expanded) : null,
 		click() { opens++; expanded = !expanded; },
@@ -58,9 +71,17 @@ async function exercise(options: Options = {}) {
 		getElementById: (id: string) => id === "audio" ? host : null,
 		querySelectorAll() {
 			finds++;
-			if (!expanded || options.missing || finds <= (options.staleBefore ?? 0)) return [];
+			if (!expanded || options.missing || disappeared || finds <= (options.staleBefore ?? 0)) return [];
 			if (options.unknownAfterInitial && finds > 1) return [];
 			if (options.changeBeforeRecheck && finds === 2) active = !active;
+			if (finds === 2) queueMicrotask(() => {
+				if (options.changeAfterRecheck) active = !active;
+				if (options.replaceAfterRecheck) generation++;
+				if (options.disabledAfterRecheck) disabled = true;
+				if (options.unknownAfterRecheck) disappeared = true;
+			});
+			if (options.expireAtFinalRead && finds === 3 && !writes) now = 1700;
+			if (options.staleAtFinalRead && finds === 3) return [];
 			if (writes && ++afterWrite <= (options.staleAfter ?? 0)) return [];
 			return options.duplicate ? [input(), input()] : [input()];
 		},
@@ -113,6 +134,45 @@ describe("the actual Direct music-mode JavaScript", () => {
 	it("does not undo a change already made between the initial read and fresh recheck", async () => {
 		const run = await exercise({ changeBeforeRecheck: true });
 		expect(run.result).toMatchObject({ ok: true, active: true });
+		expect(run.writes).toBe(0);
+	});
+
+	it.each([false, true])("does not undo a queued state update after the awaited recheck from %s", async active => {
+		const run = await exercise({ active, changeAfterRecheck: true });
+		expect(run.result).toMatchObject({ ok: true, active: !active });
+		expect(run.active).toBe(!active);
+		expect(run.writes).toBe(0);
+	});
+
+	it("re-finds a control replaced while the awaited recheck resumes", async () => {
+		const run = await exercise({ replaceAfterRecheck: true });
+		expect(run.result).toMatchObject({ ok: true, active: true });
+		expect(run.writes).toBe(1);
+	});
+
+	it("does not press a control disabled while the awaited recheck resumes", async () => {
+		const run = await exercise({ disabledAfterRecheck: true });
+		expect(run.result).toMatchObject({ ok: false, safeToFallback: false });
+		expect(run.result.error).toMatch(/disabled/);
+		expect(run.writes).toBe(0);
+	});
+
+	it("retries reads when the synchronous final recheck is stale, never the write", async () => {
+		const run = await exercise({ staleAtFinalRead: true });
+		expect(run.result).toMatchObject({ ok: true, active: true });
+		expect(run.writes).toBe(1);
+	});
+
+	it("does not use the awaited value when the final recheck remains unavailable", async () => {
+		const run = await exercise({ unknownAfterRecheck: true });
+		expect(run.result).toMatchObject({ ok: false, safeToFallback: false });
+		expect(run.writes).toBe(0);
+	});
+
+	it("does not write when the final synchronous read reaches the deadline", async () => {
+		const run = await exercise({ expireAtFinalRead: true });
+		expect(run.result).toMatchObject({ ok: false, safeToFallback: false });
+		expect(run.result.error).toMatch(/deadline/);
 		expect(run.writes).toBe(0);
 	});
 

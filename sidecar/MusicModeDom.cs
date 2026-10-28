@@ -109,8 +109,13 @@ internal static class MusicModeDom
                 const initial = await known();
                 initialKnown = true;
                 const desired = !initial.active;
-                const fresh = await known();
-                if (Date.now() >= deadline) throw new Error('Music-mode operation deadline elapsed');
+                let fresh;
+                do {
+                    await known();
+                    // Awaiting even a known value yields; re-find synchronously before the write.
+                    fresh = read();
+                    if (Date.now() >= deadline) throw new Error('Music-mode operation deadline elapsed');
+                } while (!fresh);
                 if (fresh.active !== desired) {
                     writeAttempted = true;
                     fresh.el.click();

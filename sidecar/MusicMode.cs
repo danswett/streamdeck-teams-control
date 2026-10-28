@@ -74,19 +74,25 @@ internal static class MusicMode
 
     internal sealed record Switch(bool? Active, bool Enabled, Func<bool> Press);
 
-    internal static void Dismiss(
-        Func<bool?> isOpen, Func<bool> postClose, Func<bool> collapse,
-        Func<bool> waitForClosed, Action fallback)
+    internal static (bool ok, string? error) WithFlyout(
+        bool? wasOpen, Func<bool> expand, Func<(bool ok, string? error)> invoke, Action deferDismiss)
     {
-        var open = isOpen();
-        if (open is false) return;
-        if (open is true)
+        if (wasOpen is null) return (false, "Teams did not expose the audio options state");
+        if (wasOpen is true) return invoke();
+        try
         {
-            if (postClose() && waitForClosed()) return;
-            if (isOpen() is false) return;
-            if (collapse() && waitForClosed()) return;
+            if (!expand()) return (false, "Could not open Teams audio options");
+            return invoke();
         }
-        fallback();
+        finally { deferDismiss(); }
+    }
+
+    internal static bool Dismiss(Func<bool?> isOpen, Func<bool> collapse, Func<bool> waitForClosed)
+    {
+        if (isOpen() is false) return true;
+        // Collapse is idempotent even if Teams closes between the read and call.
+        // Do not fall back to a host toggle, including through generic cleanup.
+        return collapse() ? waitForClosed() : isOpen() is false;
     }
 
     // Re-find for every read: Teams can replace a switch after posting input.

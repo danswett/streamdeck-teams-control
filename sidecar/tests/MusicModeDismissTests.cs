@@ -6,80 +6,82 @@ public class MusicModeDismissTests
 {
     private readonly List<string> _calls = [];
     private bool? _open = true;
-    private bool _postSucceeds;
     private bool _collapseSucceeds = true;
-    private readonly Queue<bool> _closed = new();
+    private bool _closeOnCollapse = true;
 
-    private void Dismiss(Action? afterPost = null) => MusicMode.Dismiss(
+    private bool Dismiss(Action? beforeCollapse = null) => MusicMode.Dismiss(
         () => { _calls.Add("read"); return _open; },
-        () => { _calls.Add("post"); afterPost?.Invoke(); return _postSucceeds; },
-        () => { _calls.Add("collapse"); return _collapseSucceeds; },
-        () => { _calls.Add("confirm"); return _closed.Dequeue(); },
-        () => _calls.Add("fallback"));
+        () =>
+        {
+            _calls.Add("collapse");
+            beforeCollapse?.Invoke();
+            if (_collapseSucceeds && _closeOnCollapse) _open = false;
+            return _collapseSucceeds;
+        },
+        () => { _calls.Add("confirm"); return _open is false; });
 
     [Fact]
     public void An_already_closed_menu_is_not_toggled_open_again()
     {
         _open = false;
-        Dismiss();
+        Assert.True(Dismiss());
         Assert.Equal(["read"], _calls);
     }
 
     [Fact]
-    public void Unknown_menu_state_uses_existing_cleanup_without_a_guessed_click()
+    public void Unknown_menu_state_can_only_use_idempotent_collapse()
     {
         _open = null;
-        Dismiss();
-        Assert.Equal(["read", "fallback"], _calls);
+        Assert.True(Dismiss());
+        Assert.Equal(["read", "collapse", "confirm"], _calls);
     }
 
     [Fact]
-    public void A_safe_posted_close_is_preferred_and_must_be_confirmed()
+    public void Collapse_must_be_confirmed_before_reporting_dismissal()
     {
-        _postSucceeds = true;
-        _closed.Enqueue(true);
-        Dismiss();
-        Assert.Equal(["read", "post", "confirm"], _calls);
+        Assert.True(Dismiss());
+        Assert.Equal(["read", "collapse", "confirm"], _calls);
     }
 
     [Fact]
-    public void A_disallowed_or_unavailable_post_uses_collapse_without_a_natural_close_wait()
+    public void A_menu_that_closes_between_the_read_and_collapse_is_never_reopened()
     {
-        _closed.Enqueue(true);
-        Dismiss();
-        Assert.Equal(["read", "post", "read", "collapse", "confirm"], _calls);
+        Assert.True(Dismiss(() => _open = false));
+        Assert.False(_open);
+        Assert.Equal(["read", "collapse", "confirm"], _calls);
     }
 
     [Fact]
-    public void A_posted_click_is_not_proof_of_dismissal()
+    public void Unconfirmed_collapse_reports_failure_without_a_toggle_fallback()
     {
-        _postSucceeds = true;
-        _closed.Enqueue(false);
-        _closed.Enqueue(true);
-        Dismiss();
-        Assert.Equal(["read", "post", "confirm", "read", "collapse", "confirm"], _calls);
+        _closeOnCollapse = false;
+        Assert.False(Dismiss());
+        Assert.True(_open);
+        Assert.Equal(["read", "collapse", "confirm"], _calls);
     }
 
     [Fact]
-    public void A_menu_that_closed_during_the_attempt_gets_no_further_input()
-    {
-        Dismiss(() => _open = false);
-        Assert.Equal(["read", "post", "read"], _calls);
-    }
-
-    [Fact]
-    public void Unconfirmed_collapse_retains_the_existing_dismissal_fallback()
-    {
-        _closed.Enqueue(false);
-        Dismiss();
-        Assert.Equal(["read", "post", "read", "collapse", "confirm", "fallback"], _calls);
-    }
-
-    [Fact]
-    public void An_unavailable_collapse_falls_back_without_waiting_for_a_nonexistent_write()
+    public void An_unavailable_collapse_reports_failure_without_other_input()
     {
         _collapseSucceeds = false;
-        Dismiss();
-        Assert.Equal(["read", "post", "read", "collapse", "fallback"], _calls);
+        Assert.False(Dismiss());
+        Assert.Equal(["read", "collapse", "read"], _calls);
+    }
+
+    [Fact]
+    public void A_failed_collapse_that_actually_closed_is_not_a_false_failure()
+    {
+        _collapseSucceeds = false;
+        Assert.True(Dismiss(() => _open = false));
+        Assert.Equal(["read", "collapse", "read"], _calls);
+    }
+
+    [Fact]
+    public void Unknown_state_and_unavailable_collapse_cannot_report_success()
+    {
+        _open = null;
+        _collapseSucceeds = false;
+        Assert.False(Dismiss());
+        Assert.Equal(["read", "collapse", "read"], _calls);
     }
 }
