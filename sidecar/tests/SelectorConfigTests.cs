@@ -235,8 +235,22 @@ public class SelectorConfigTests : IDisposable
             var defaults = Defaults.Config().Controls[target];
             Assert.Equal(defaults.Menu, spec.Menu);
             Assert.Equal(defaults.MenuItemAutomationId, spec.MenuItemAutomationId);
+            Assert.Equal("camera-settings", spec.MenuItemContainerDataTid);
+            Assert.Equal(defaults.MenuItemContainerDataTid, spec.MenuItemContainerDataTid);
             Assert.Null(spec.MenuItemName);
         }
+    }
+
+    [Fact]
+    public void Camera_Direct_container_selector_is_optional_typed_and_overridable()
+    {
+        Assert.Equal("custom-camera-list",
+            Program.ParseConfig("""{"controls":{"camera-select":{"menuItemContainerDataTid":"custom-camera-list"}}}""")!
+                .Controls["camera-select"].MenuItemContainerDataTid);
+        Assert.Null(Program.ParseConfig("""{"controls":{"camera-select":{"menuItemContainerDataTid":false}}}""")!
+            .Controls["camera-select"].MenuItemContainerDataTid);
+        Assert.NotNull(new ControlSpec { MenuItemContainerDataTid = " " }.Validate());
+        Assert.Null(new ControlSpec().Validate());
     }
 
     [Fact]

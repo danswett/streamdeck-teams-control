@@ -48,9 +48,9 @@ public sealed class DirectModeSpec
     public int Port { get; set; } = 9457;
 
     /// <summary>
-    /// How long a Direct mode attempt may take before it is abandoned and the
-    /// UI Automation path runs instead. Short on purpose: a key press that has
-    /// to fall back should still feel like a key press.
+    /// How long a Direct mode attempt may take. Short on purpose: a key press
+    /// that can safely fall back should still feel like a key press. An uncertain
+    /// camera write fails instead of being repeated through UI Automation.
     /// </summary>
     public int TimeoutMs { get; set; } = 2500;
 

@@ -813,6 +813,7 @@ public static class Program
                 Submenu = Str(o, "submenu"),
                 RequiresRole = Str(o, "requiresRole"),
                 MenuItemAutomationId = Str(o, "menuItemAutomationId"),
+                MenuItemContainerDataTid = Str(o, "menuItemContainerDataTid"),
                 MenuItemToggleAutomationId = Str(o, "menuItemToggleAutomationId"),
                 MenuItemName = Str(o, "menuItemName"),
                 MenuItemOffName = Str(o, "menuItemOffName"),

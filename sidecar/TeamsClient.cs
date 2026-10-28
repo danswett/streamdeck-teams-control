@@ -49,6 +49,9 @@ public sealed class ControlSpec
 
     public string? MenuItemAutomationId { get; set; }
 
+    /// <summary>Direct-mode list container's data-tid; scopes camera IDs to the camera picker.</summary>
+    public string? MenuItemContainerDataTid { get; set; }
+
     /// <summary>
     /// Id the same menu item takes in its opposite state, for entries Teams
     /// swaps rather than checks. "Hide presenter view" is replaced outright by
@@ -164,6 +167,8 @@ public sealed class ControlSpec
     /// </summary>
     public string? Validate()
     {
+        if (MenuItemContainerDataTid is not null && string.IsNullOrWhiteSpace(MenuItemContainerDataTid))
+            return "menuItemContainerDataTid must not be blank";
         foreach (var (label, pattern) in new[]
                  {
                      ("activePattern", ActivePattern),
@@ -3545,8 +3550,9 @@ public sealed class TeamsClient : IDisposable
     ///
     /// A declined press is silent, because declining is the normal state of
     /// affairs: Direct mode is off unless the user opened a debugging port. A
-    /// press that was taken and then failed is logged, because that is a real
-    /// fault worth seeing even though the fallback hides it from the user.
+    /// press that was taken and then failed is logged. Camera writes only fall
+    /// back when the script confirms no write and successful cleanup; an
+    /// uncertain selection must not be repeated through UI Automation.
     /// </summary>
     private (bool ok, string? error)? TryDirect(
         string target, ControlSpec? spec, string? arg, bool jump, bool timer, bool ink)
@@ -3554,7 +3560,25 @@ public sealed class TeamsClient : IDisposable
         // The timer has no ids to find anything by, and ink colour is read back
         // out of a flyout the UIA path already knows how to drive. Neither is
         // worth a second implementation yet.
-        if (timer || ink || target is "camera-select" or "camera-swap") return null;
+        if (timer || ink) return null;
+
+        if (target is "camera-select" or "camera-swap")
+        {
+            try
+            {
+                var camera = spec is null ? null : _dom.SelectCamera(spec, arg, target == "camera-swap");
+                if (camera is null) return null;
+                if (camera.Ok) return (true, null);
+                Console.Error.WriteLine($"direct camera selection failed: {camera.Error}");
+                return camera.SafeToFallback ? null : (false, camera.Error);
+            }
+            catch (Exception ex)
+            {
+                // A disconnected debugger does not cancel JavaScript already running.
+                Console.Error.WriteLine($"direct camera selection threw: {ex.Message}");
+                return (false, "Direct camera selection failed; webcam selection may already have changed");
+            }
+        }
 
         try
         {

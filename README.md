@@ -105,6 +105,13 @@ or the first otherwise, including when a third camera is selected. Both
 configured devices must be available in Teams. Video stays on or off as it was;
 the key does not indicate which webcam is currently selected.
 
+Both webcam actions support the optional Windows Direct mode, including while
+Teams is minimized. They use the same device IDs and current Teams selection,
+leave video on/off unchanged, and close only the camera flyout they opened.
+When Direct is unavailable they retain the UI Automation path. An uncertain
+Direct write reports an error instead of retrying a swap through UI Automation,
+which could otherwise switch the camera back.
+
 ### Presenting a deck
 
 <img src="marketplace/gallery-3-presenting.png" alt="PowerPoint Live presenter keys" width="600">
