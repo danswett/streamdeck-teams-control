@@ -23,6 +23,7 @@ const ACTIONS: Record<string, { glyph: string; danger?: boolean }> = {
 	camera: { glyph: "camera" },
 	"camera-select": { glyph: "cameraSelect" },
 	"camera-swap": { glyph: "cameraSwap" },
+	"direct-mode": { glyph: "directMode" },
 	blur: { glyph: "blur" },
 	share: { glyph: "share" },
 	chat: { glyph: "chat" },

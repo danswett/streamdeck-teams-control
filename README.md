@@ -105,6 +105,12 @@ or the first otherwise, including when a third camera is selected. Both
 configured devices must be available in Teams. Video stays on or off as it was;
 the key does not indicate which webcam is currently selected.
 
+**Direct Mode** is a plugin-wide toggle, available even outside a meeting. Its
+settings pane lets you choose the shared debugging port and links to the
+[Direct-mode guide](docs/direct-mode.md). It shows **OFF**, **WAITING** (enabled
+but unavailable), or **ACTIVE**. Settings persist in Stream Deck and apply
+without restarting it. The toggle never opens or closes Teams' debugging port.
+
 ### Presenting a deck
 
 <img src="marketplace/gallery-3-presenting.png" alt="PowerPoint Live presenter keys" width="600">
@@ -1011,7 +1017,7 @@ It speaks line-delimited JSON:
 | flag | effect |
 |---|---|
 | `--selectors <path>` | load a selector override file |
-| `--direct-mode-config <path>` | load Windows Direct-mode user settings without changing bundled selectors |
+| `--direct-mode-managed` | start with Direct mode off until the plugin supplies its saved settings |
 | `--poll <ms>` | override the in-meeting backstop interval |
 | `--no-events` | disable UIA subscriptions and poll only |
 | `--debug-events` | log every subscription and event to stderr |
@@ -1065,7 +1071,7 @@ That risk is contained rather than hidden:
   manifest. For local builds, edit it and restart the plugin — no rebuild needed.
   **Do not edit an installed Marketplace package:** Stream Deck's checksum
   protection can block the whole plugin after a payload change. Direct mode
-  has an external per-user settings file instead; see
+  uses a plugin-wide toggle and shared port setting instead; see
   [Direct-mode setup](docs/direct-mode.md#4-enable-it-in-the-plugin). Patterns are
   compiled when the file is read, so a mistake is named and skipped at startup
   and the working default kept. Matching is bounded, so a pattern that backtracks

@@ -572,6 +572,12 @@ public sealed class TeamsClient : IDisposable
     /// <summary>What Direct mode currently sees, for reporting to the plugin.</summary>
     public DirectModeStatus DirectModeStatus => _dom.Status;
 
+    public bool DirectModeEnabled => _config.DirectMode.Enabled;
+    public int DirectModePort => _config.DirectMode.Port;
+
+    /// <summary>Called on the UIA worker, between presses, never during one.</summary>
+    public void ConfigureDirectMode(bool enabled, int port) => _dom.Configure(enabled, port);
+
     /// <summary>Re-checks the debugging port and reports what it found.</summary>
     public DirectModeStatus ProbeDirectMode()
     {

@@ -155,8 +155,9 @@ public static class Program
         var pollMs = int.TryParse(GetArg(args, "--poll"), out var p) ? Math.Clamp(p, 150, 5000) : 700;
 
         var config = LoadConfig(selectorsPath);
-        if (GetArg(args, "--direct-mode-config") is { } directModePath)
-            LoadDirectModeConfig(config, directModePath);
+        // The plugin sends its saved consent on "ready". Do not use any
+        // bundled opt-in before that handshake has completed.
+        if (HasFlag(args, "--direct-mode-managed")) config.DirectMode.Enabled = false;
         var restoreFocus = !HasFlag(args, "--no-focus-guard");
         var debugEvents = HasFlag(args, "--debug-events");
         var useEvents = !HasFlag(args, "--no-events");
@@ -335,6 +336,10 @@ public static class Program
                         w.WriteString("error", ex.Message);
                     });
                 }
+
+                // Config/status requests do not change Teams' UI and should
+                // not schedule two extra accessibility snapshots.
+                if (item.Cmd == "directmode") continue;
 
                 // Backstop. Handle runs owed cleanup itself on the path that
                 // schedules it, but a throw can leave it owing, and nothing
@@ -588,6 +593,13 @@ public static class Program
 
             case "directmode":
             {
+                if (!string.IsNullOrWhiteSpace(item.Arg))
+                {
+                    if (Environment.TickCount64 - item.QueuedAt > StaleInvokeMs)
+                        throw new InvalidOperationException("Direct mode settings request expired");
+                    var (enabled, port) = ParseDirectModeSettings(item.Arg);
+                    client.ConfigureDirectMode(enabled, port);
+                }
                 // Its own command rather than a field on every snapshot: the
                 // answer changes only when Teams restarts or a deck goes up,
                 // and probing costs a loopback round trip that a state poll
@@ -598,6 +610,8 @@ public static class Program
                     w.WriteString("type", "directmode");
                     w.WriteNumber("id", item.Id);
                     w.WriteBoolean("ok", true);
+                    w.WriteBoolean("enabled", client.DirectModeEnabled);
+                    w.WriteNumber("port", client.DirectModePort);
                     w.WriteBoolean("usable", status.Usable);
                     w.WriteString("reason", status.Reason);
                     w.WriteBoolean("deckShared", status.DeckShared);
@@ -746,43 +760,18 @@ public static class Program
         return config;
     }
 
-    internal static void LoadDirectModeConfig(SelectorConfig config, string path)
+    internal static (bool Enabled, int Port) ParseDirectModeSettings(string json)
     {
-        if (!File.Exists(path)) return;
-
-        // An existing but invalid user file must not inherit consent from a
-        // locally built package whose bundled settings already enable Direct.
-        config.DirectMode = new DirectModeSpec();
-        try
-        {
-            using var doc = JsonDocument.Parse(File.ReadAllText(path));
-            if (doc.RootElement.ValueKind != JsonValueKind.Object ||
-                !doc.RootElement.TryGetProperty("directMode", out var dm) ||
-                dm.ValueKind != JsonValueKind.Object)
-                throw new FormatException("expected a directMode object");
-
-            var spec = new DirectModeSpec();
-            if (dm.TryGetProperty("enabled", out var enabled))
-                spec.Enabled = enabled.GetBoolean();
-            if (dm.TryGetProperty("port", out var port))
-            {
-                spec.Port = port.GetInt32();
-                if (spec.Port is < 1 or > 65535)
-                    throw new FormatException("port must be between 1 and 65535");
-            }
-            if (dm.TryGetProperty("timeoutMs", out var timeout))
-                spec.TimeoutMs = Math.Clamp(timeout.GetInt32(), 250, 10_000);
-            if (dm.TryGetProperty("probeTtlMs", out var ttl))
-                spec.ProbeTtlMs = Math.Clamp(ttl.GetInt32(), 1_000, 120_000);
-
-            config.DirectMode = spec;
-            Console.Error.WriteLine($"loaded Direct mode settings from {path} (enabled: {spec.Enabled}, port: {spec.Port})");
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
-                                   JsonException or FormatException or InvalidOperationException or OverflowException)
-        {
-            Console.Error.WriteLine($"failed to read Direct mode settings from {path}: {ex.Message}; Direct mode disabled");
-        }
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Object ||
+            !root.TryGetProperty("enabled", out var enabled) ||
+            enabled.ValueKind is not (JsonValueKind.True or JsonValueKind.False) ||
+            !root.TryGetProperty("port", out var port) ||
+            port.ValueKind != JsonValueKind.Number || !port.TryGetInt32(out var value) ||
+            value is < 1 or > 65535)
+            throw new FormatException("Direct mode requires an enabled boolean and a port between 1 and 65535");
+        return (enabled.GetBoolean(), value);
     }
 
     /// <summary>Hand-rolled so the sidecar stays trim-safe (no reflection-based binding).</summary>

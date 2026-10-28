@@ -4,10 +4,12 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { EMPTY_STATE, splitLines, type TeamsState, toState } from "./protocol";
+import {
+	DEFAULT_DIRECT_MODE, EMPTY_STATE, splitLines, type TeamsState, toState,
+	type DirectModeSettings, type DirectModeStatus
+} from "./protocol";
 import { ensureExecutable, EXECUTABLE_MODE, octal } from "./sidecar-exec";
 import { sidecarPath } from "./sidecar-path";
-import { directModeConfigPath } from "./direct-mode-config";
 
 const logger = streamDeck.logger.createScope("Bridge");
 
@@ -26,11 +28,12 @@ const INVOKE_TIMEOUT_MS = 10_000;
 export { EMPTY_STATE, type TeamsState };
 
 export type CameraDevice = { id: string; name: string };
-type BridgeResult = { ok: boolean; error?: string; cameras?: CameraDevice[] };
+type BridgeResult = { ok: boolean; error?: string; cameras?: CameraDevice[]; directMode?: DirectModeStatus };
 
 type Pending = {
 	resolve: (v: BridgeResult) => void;
 	timer: NodeJS.Timeout;
+	directVersion?: number;
 };
 
 /** A captured slide, ready to be drawn on the touch strip. */
@@ -75,6 +78,12 @@ class Bridge {
 	#restartDelay = 1000;
 	#restartTimer: NodeJS.Timeout | undefined;
 	#stopped = false;
+	#ready = false;
+	#directSettings = { ...DEFAULT_DIRECT_MODE };
+	#directStatus: DirectModeStatus = { ...DEFAULT_DIRECT_MODE, usable: false, reason: "not enabled" };
+	#directListeners = new Set<(status: DirectModeStatus) => void>();
+	#directVersion = 0;
+	#directApplied = false;
 
 	get state(): TeamsState {
 		return this.#state;
@@ -90,6 +99,10 @@ class Bridge {
 		if (this.#restartTimer) clearTimeout(this.#restartTimer);
 		this.#proc?.kill();
 		this.#proc = undefined;
+		this.#ready = false;
+		this.#directApplied = false;
+		this.#failAllPending("sidecar stopped");
+		this.#directUnavailable("sidecar stopped");
 	}
 
 	/** Subscribes to state changes and immediately replays the current state. */
@@ -101,6 +114,9 @@ class Bridge {
 
 	#spawn(): void {
 		if (this.#stopped) return;
+		this.#ready = false;
+		this.#directApplied = false;
+		this.#directUnavailable("sidecar starting");
 
 		// Whatever the last sidecar was part-way through writing is not the
 		// start of what this one will write. Left behind, it gets glued to the
@@ -127,8 +143,7 @@ class Bridge {
 
 		const args: string[] = [];
 		if (existsSync(SELECTORS)) args.push("--selectors", SELECTORS);
-		const directConfig = directModeConfigPath(path.resolve(HERE, ".."));
-		if (directConfig) args.push("--direct-mode-config", directConfig);
+		if (process.platform === "win32") args.push("--direct-mode-managed");
 
 		logger.info(`Starting sidecar: ${SIDECAR}`);
 		let proc: ChildProcessWithoutNullStreams;
@@ -175,6 +190,8 @@ class Bridge {
 			logger.warn(`Sidecar exited (code=${code}, signal=${signal})`);
 			this.#failAllPending("sidecar exited");
 			this.#proc = undefined;
+			this.#ready = false;
+			this.#directUnavailable("sidecar exited");
 			this.#publish({ ...EMPTY_STATE });
 			this.#scheduleRestart();
 		});
@@ -189,6 +206,8 @@ class Bridge {
 			if (this.#proc !== proc) return;
 			this.#failAllPending(`sidecar error: ${err.message}`);
 			this.#proc = undefined;
+			this.#ready = false;
+			this.#directUnavailable(`sidecar error: ${err.message}`);
 			this.#publish({ ...EMPTY_STATE });
 			this.#scheduleRestart();
 		});
@@ -234,7 +253,38 @@ class Bridge {
 				// The sidecar came up cleanly, so reset the backoff.
 				this.#restartDelay = 1000;
 				logger.info(`Sidecar ready (pid ${String(msg["pid"])})`);
+				this.#ready = true;
+				if (process.platform === "win32")
+					void this.configureDirectMode(this.#directSettings).then((result) => {
+						if (!result.ok) logger.warn(`Direct mode setup failed: ${result.error}`);
+					});
 				break;
+
+			case "directmode": {
+				const id = Number(msg["id"]);
+				const pending = this.#pending.get(id);
+				if (!pending) break;
+				clearTimeout(pending.timer);
+				this.#pending.delete(id);
+				if (msg["ok"] !== true || typeof msg["enabled"] !== "boolean" ||
+					typeof msg["port"] !== "number" || !Number.isInteger(msg["port"]) ||
+					msg["port"] < 1 || msg["port"] > 65535 ||
+					typeof msg["usable"] !== "boolean" || typeof msg["reason"] !== "string") {
+					pending.resolve({ ok: false, error: "invalid Direct mode status from sidecar" });
+					break;
+				}
+				const status: DirectModeStatus = {
+					enabled: msg["enabled"], port: msg["port"],
+					usable: msg["usable"], reason: msg["reason"]
+				};
+				if (pending.directVersion === this.#directVersion &&
+					status.enabled === this.#directSettings.enabled && status.port === this.#directSettings.port) {
+					this.#directApplied = true;
+					this.#publishDirect(status);
+				}
+				pending.resolve({ ok: true, directMode: status });
+				break;
+			}
 
 			case "state":
 				this.#publish(toState(msg));
@@ -299,6 +349,69 @@ class Bridge {
 		}
 	}
 
+	get directModeStatus(): DirectModeStatus {
+		return this.#directStatus;
+	}
+
+	get directModeNeedsSync(): boolean {
+		return this.#ready && !this.#directApplied;
+	}
+
+	subscribeDirectMode(fn: (status: DirectModeStatus) => void): () => void {
+		this.#directListeners.add(fn);
+		fn(this.#directStatus);
+		return () => this.#directListeners.delete(fn);
+	}
+
+	#publishDirect(status: DirectModeStatus): void {
+		this.#directStatus = status;
+		for (const fn of this.#directListeners) {
+			try { fn(status); }
+			catch (err) { logger.error(`Direct mode listener failed: ${String(err)}`); }
+		}
+	}
+
+	#directUnavailable(reason: string): void {
+		this.#publishDirect({
+			...this.#directSettings, usable: false,
+			reason: this.#directSettings.enabled ? reason : "not enabled"
+		});
+	}
+
+	configureDirectMode(settings: DirectModeSettings): Promise<BridgeResult> {
+		this.#directVersion++;
+		this.#directApplied = false;
+		this.#directSettings = { ...settings };
+		this.#directUnavailable("applying settings");
+		return this.#requestDirectMode(JSON.stringify(settings));
+	}
+
+	probeDirectMode(): Promise<BridgeResult> {
+		return this.#requestDirectMode(this.#directApplied ? undefined : JSON.stringify(this.#directSettings));
+	}
+
+	#requestDirectMode(arg?: string): Promise<BridgeResult> {
+		if (process.platform !== "win32")
+			return Promise.resolve({ ok: false, error: "Direct mode is Windows-only" });
+		if (!this.#ready) return Promise.resolve({ ok: false, error: "sidecar not ready" });
+		const id = this.#nextId++;
+		const directVersion = this.#directVersion;
+		return new Promise((resolve) => {
+			const timer = setTimeout(() => {
+				this.#pending.delete(id);
+				if (directVersion === this.#directVersion) this.#directUnavailable("Direct mode request timed out");
+				resolve({ ok: false, error: "Direct mode request timed out" });
+			}, INVOKE_TIMEOUT_MS);
+			this.#pending.set(id, { resolve, timer, directVersion });
+			if (!this.#send({ id, cmd: "directmode", arg })) {
+				clearTimeout(timer);
+				this.#pending.delete(id);
+				this.#directUnavailable("sidecar not running");
+				resolve({ ok: false, error: "sidecar not running" });
+			}
+		});
+	}
+
 	#failAllPending(reason: string): void {
 		for (const [, p] of this.#pending) {
 			clearTimeout(p.timer);
@@ -352,6 +465,9 @@ class Bridge {
 	 * firing long after it was pressed.
 	 */
 	invoke(target: string, arg?: string): Promise<{ ok: boolean; error?: string }> {
+		// Do not run a press with old consent after a settings request failed.
+		if (process.platform === "win32" && this.directModeNeedsSync)
+			return Promise.resolve({ ok: false, error: "Direct mode settings have not been applied yet" });
 		const id = this.#nextId++;
 		if (!this.#send({ id, cmd: "invoke", target, arg: arg ?? "" })) {
 			return Promise.resolve({ ok: false, error: "sidecar not running" });

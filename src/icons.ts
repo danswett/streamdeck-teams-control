@@ -301,6 +301,19 @@ const LABELED_FILL = 0.56;
 /** How far the artwork lifts to make room for the label. */
 const LABELED_LIFT = 16;
 
+export function renderDirectMode(enabled: boolean, usable: boolean, supported = true): string {
+	const tone: Tone = !supported || !enabled ? "unavailable" : usable ? "accent" : "on";
+	const label = !supported ? "N/A" : !enabled ? "OFF" : usable ? "ACTIVE" : "WAITING";
+	const def = CONTROL_GLYPHS["directMode"];
+	if (!def) return wrap("");
+	return wrap(
+		`<g transform="translate(0 -${LABELED_LIFT})"><g transform="${transformFor(def, LABELED_FILL)}" ` +
+		`fill="${COLORS[tone]}">${def.body}</g></g>` +
+		`<text x="72" y="130" text-anchor="middle" font-family="Arial,sans-serif" font-size="21" ` +
+		`font-weight="bold" fill="${COLORS[tone]}">${label}</text>`
+	);
+}
+
 function escapeText(value: string): string {
 	return value
 		.replace(/&/g, "&amp;")
