@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { EMPTY_STATE, splitLines, type TeamsState, toState } from "./protocol";
 import { ensureExecutable, EXECUTABLE_MODE, octal } from "./sidecar-exec";
 import { sidecarPath } from "./sidecar-path";
+import { directModeConfigPath } from "./direct-mode-config";
 
 const logger = streamDeck.logger.createScope("Bridge");
 
@@ -126,6 +127,8 @@ class Bridge {
 
 		const args: string[] = [];
 		if (existsSync(SELECTORS)) args.push("--selectors", SELECTORS);
+		const directConfig = directModeConfigPath(path.resolve(HERE, ".."));
+		if (directConfig) args.push("--direct-mode-config", directConfig);
 
 		logger.info(`Starting sidecar: ${SIDECAR}`);
 		let proc: ChildProcessWithoutNullStreams;

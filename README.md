@@ -1011,6 +1011,7 @@ It speaks line-delimited JSON:
 | flag | effect |
 |---|---|
 | `--selectors <path>` | load a selector override file |
+| `--direct-mode-config <path>` | load Windows Direct-mode user settings without changing bundled selectors |
 | `--poll <ms>` | override the in-meeting backstop interval |
 | `--no-events` | disable UIA subscriptions and poll only |
 | `--debug-events` | log every subscription and event to stderr |
@@ -1061,7 +1062,11 @@ That risk is contained rather than hidden:
 
 - All selectors live in
   [`selectors.json`](com.bad-duck.teamscontrol.sdPlugin/selectors.json) beside the
-  manifest. Edit it and restart the plugin — no rebuild needed. Patterns are
+  manifest. For local builds, edit it and restart the plugin — no rebuild needed.
+  **Do not edit an installed Marketplace package:** Stream Deck's checksum
+  protection can block the whole plugin after a payload change. Direct mode
+  has an external per-user settings file instead; see
+  [Direct-mode setup](docs/direct-mode.md#4-enable-it-in-the-plugin). Patterns are
   compiled when the file is read, so a mistake is named and skipped at startup
   and the working default kept. Matching is bounded, so a pattern that backtracks
   badly cannot wedge the sidecar.
@@ -1105,8 +1110,9 @@ with a `discover` dump attached — after reading it, per [Privacy](#privacy).
 
 `AutomationId`s are locale-independent, so **pressing** every control works in any
 Teams language out of the box. Only the **state indicators** read English labels.
-To localize, edit the `activePattern` / `inactivePattern` regexes in
-`selectors.json`. For example, German:
+To localize a local build, edit the `activePattern` / `inactivePattern` regexes
+in `selectors.json` before packaging it. Do not edit an installed
+checksum-protected Marketplace package. For example, German:
 
 ```jsonc
 "mute": {

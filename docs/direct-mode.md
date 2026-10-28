@@ -73,6 +73,13 @@ perfectly well and belongs to OneNote — the plugin treats that as no port at a
 
 ## Turning it on
 
+These instructions are for Windows and a plugin build that supports the external
+`direct-mode.json` file described below. Older releases only read the bundled
+`selectors.json`; upgrade to a build with external settings support first.
+**Do not edit files inside an installed Marketplace plugin.** Stream Deck can
+checksum-protect them: changing otherwise valid JSON can prevent the entire
+plugin from starting.
+
 ### 1. Open the port
 
 ```powershell
@@ -106,7 +113,8 @@ means the setting did not reach Teams — see [Troubleshooting](#troubleshooting
 
 ### 4. Enable it in the plugin
 
-Add the block to `selectors.json`, using the same port:
+Create `%LOCALAPPDATA%\com.bad-duck.teamscontrol\direct-mode.json`, using
+the same port:
 
 ```json
 {
@@ -117,11 +125,32 @@ Add the block to `selectors.json`, using the same port:
 }
 ```
 
-`selectors.json` sits next to the plugin. Anything you put there is merged over
-the built-in defaults, so this block on its own is a complete file.
+This is a user settings file **outside the installed plugin folder**. Create its
+parent directory if needed. The plugin reads it at startup; it does not create
+or change it. For example, to open the file in Notepad:
 
-Restart the plugin. The sidecar writes one line to its log when the path goes
-live:
+```powershell
+$settingsDir = Join-Path $env:LOCALAPPDATA 'com.bad-duck.teamscontrol'
+New-Item -ItemType Directory -Force $settingsDir | Out-Null
+notepad (Join-Path $settingsDir 'direct-mode.json')
+```
+
+Save the JSON above as UTF-8. Only `directMode` settings are read from this
+file; bundled control selectors remain unchanged. The file takes precedence
+over the bundled `directMode` block. Missing `enabled` means off; invalid
+settings are logged and leave Direct mode off. A missing file leaves the
+bundled defaults in effect (off on port 9457 in production).
+
+Preview plugins have separate settings under their own plugin UUID, for example
+`%LOCALAPPDATA%\com.bad-duck.teamscontrol-webcam-preview\direct-mode.json`.
+Enabling a preview does not opt production in. Updates under the same UUID keep
+using the same external file.
+
+Fully quit Stream Deck from its notification-area menu and reopen it to reload
+the settings. The `streamdeck restart` CLI requires developer mode; its success
+text alone does not establish that the plugin restarted. The plugin log should
+contain `loaded Direct mode settings from ...` with the selected enabled flag
+and port. The sidecar writes another line when the path goes live in a meeting:
 
 ```
 direct mode active on port 9457 (deck shared: true)
@@ -131,8 +160,9 @@ direct mode active on port 9457 (deck shared: true)
 
 ## Turning it off
 
-Either drop `"enabled": false` into `selectors.json` — which stops the plugin
-using the port but **leaves the port open** — or close the port properly:
+Either set `"enabled": false` in the external `direct-mode.json` file and
+restart Stream Deck — which stops the plugin using the port but **leaves the
+port open** — or close the port properly:
 
 ```powershell
 [Environment]::SetEnvironmentVariable('WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS',$null,'User')
@@ -172,8 +202,22 @@ Teams may have been started before that and still hold the old environment. Sign
 out and back in.
 
 **Something looks wrong and I want to rule this out.**
-Set `"enabled": false` and restart the plugin. Every control returns to the
-normal path. If the problem persists, Direct mode was not the cause.
+Set `"enabled": false` in the external file and restart Stream Deck. Every
+control returns to the normal path. If the problem persists, Direct mode was
+not the cause.
+
+**The whole plugin stopped loading after editing `selectors.json`.**
+This can be Stream Deck's package tamper protection, not a Direct-mode failure.
+Restore the exact original file or reinstall the official package; do not keep
+editing protected payloads or disable verification. Use the external settings
+file with a build that supports it.
+
+**The external setting appears to be ignored.**
+Check that the file is in the directory for the installed plugin's UUID, that it
+is named `direct-mode.json` rather than `direct-mode.json.txt`, and that the
+installed build supports external settings. Restart Stream Deck and check its
+plugin log for the settings-loaded message or an explicit parse error. Direct
+mode can still be unavailable if Teams has no matching debugging port.
 
 ---
 

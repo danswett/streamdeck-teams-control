@@ -51,7 +51,8 @@
 		"a local debugging port that YOU open - the plugin never opens one. That port",
 		"is unauthenticated, so read docs/direct-mode.md before enabling it. Anything",
 		"direct mode cannot do falls back to UI Automation, so turning it off is",
-		"always safe."
+		"always safe. For installed plugins use the external direct-mode.json",
+		"described in that guide; do not edit checksum-protected package files."
 	],
 	"version": 2,
 	"directMode": {
