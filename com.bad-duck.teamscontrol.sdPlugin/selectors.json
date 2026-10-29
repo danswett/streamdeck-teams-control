@@ -38,6 +38,8 @@
 		"",
 		"'menuItemToggleAutomationId' is the id the same entry takes in its opposite",
 		"state, for menus Teams swaps rather than checks (Hide/Show presenter view).",
+		"'menuItemContainerDataTid' scopes Direct camera lookups to the camera",
+		"listbox's data-tid; omission leaves webcam actions on the UI Automation path.",
 		"",
 		"NOTE: 'ppt-take-control' changes your ROLE. A successful press turns an",
 		"attendee into the presenter, so that key retires and every 'presenter' key",
@@ -63,6 +65,22 @@
 		"port": 9457
 	},
 	"meetingProbeAutomationId": "microphone-button",
+	"cameraVideoSettings": {
+		"$comment": [
+			"Used only when a camera button applies Advanced Settings.",
+			"Names are exact, localized accessible names; translate them in the user",
+			"override file. The pane tabs id and pane data-tid are locale-independent.",
+			"Partial overrides retain the other built-in camera settings selectors."
+		],
+		"paneTabsAutomationId": "video-effects-and-settings-menu",
+		"paneDataTid": "calling-right-side-panel",
+		"settingsTabName": "Settings",
+		"mirrorName": "Mirror my video",
+		"softFocusName": "Soft focus",
+		"brightnessName": "Adjust brightness",
+		"moreSettingsName": "More video effects and settings",
+		"closePaneName": "Close video effects and settings pane"
+	},
 	"powerPointLive": {
 		"$comment": [
 			"How a shared deck is recognized.",
@@ -129,10 +147,12 @@
 		},
 		"camera-select": {
 			"menu": "video-button-configure",
+			"menuItemContainerDataTid": "camera-settings",
 			"menuItemAutomationId": "{arg}"
 		},
 		"camera-swap": {
 			"menu": "video-button-configure",
+			"menuItemContainerDataTid": "camera-settings",
 			"menuItemAutomationId": "{arg}"
 		},
 		"leave": {

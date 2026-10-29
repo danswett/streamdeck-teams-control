@@ -1,3 +1,4 @@
+using System.Text.Json;
 using TeamsBridge;
 using Xunit;
 
@@ -343,8 +344,182 @@ public class SelectorConfigTests : IDisposable
             var defaults = Defaults.Config().Controls[target];
             Assert.Equal(defaults.Menu, spec.Menu);
             Assert.Equal(defaults.MenuItemAutomationId, spec.MenuItemAutomationId);
+            Assert.Equal("camera-settings", spec.MenuItemContainerDataTid);
+            Assert.Equal(defaults.MenuItemContainerDataTid, spec.MenuItemContainerDataTid);
             Assert.Null(spec.MenuItemName);
         }
+    }
+
+    [Fact]
+    public void Camera_video_selector_overrides_are_optional_and_partial()
+    {
+        var defaults = Defaults.Config().CameraVideoSettings;
+        var config = Program.LoadConfig(WriteTemp("""{"cameraVideoSettings":{"mirrorName":"mirror-custom"}}"""));
+        var spec = config.CameraVideoSettings;
+
+        Assert.Equal("mirror-custom", spec.MirrorName);
+        Assert.Equal(defaults.PaneTabsAutomationId, spec.PaneTabsAutomationId);
+        Assert.Equal(defaults.SettingsTabName, spec.SettingsTabName);
+        Assert.Equal(defaults.SoftFocusName, spec.SoftFocusName);
+        Assert.Equal(defaults.BrightnessName, spec.BrightnessName);
+        Assert.Equal(defaults.MoreSettingsName, spec.MoreSettingsName);
+        Assert.Equal(defaults.ClosePaneName, spec.ClosePaneName);
+        Assert.Equal(Defaults.Config().Controls.Count, config.Controls.Count);
+    }
+
+    [Fact]
+    public void Wrongly_typed_camera_selectors_keep_the_default_and_do_not_discard_valid_overrides()
+    {
+        var config = Program.LoadConfig(WriteTemp("""
+            {"cameraVideoSettings":{"mirrorName":false,"softFocusName":"focus-custom"},
+             "controls":{"mute":{"automationId":"custom-mic"}}}
+            """));
+
+        Assert.Equal(Defaults.Config().CameraVideoSettings.MirrorName, config.CameraVideoSettings.MirrorName);
+        Assert.Equal("focus-custom", config.CameraVideoSettings.SoftFocusName);
+        Assert.Equal("custom-mic", config.Controls["mute"].AutomationId);
+    }
+
+    [Theory]
+    [InlineData("false")]
+    [InlineData("null")]
+    [InlineData("[]")]
+    public void A_wrongly_typed_camera_settings_block_does_not_discard_other_overrides(string value)
+    {
+        var config = Program.LoadConfig(WriteTemp("""
+            {"cameraVideoSettings":VALUE,"controls":{"mute":{"automationId":"custom-mic"}}}
+            """.Replace("VALUE", value)));
+
+        Assert.Null(config.CameraVideoSettings.Validate());
+        Assert.Equal("custom-mic", config.Controls["mute"].AutomationId);
+    }
+
+    [Fact]
+    public void Every_camera_video_selector_can_be_overridden()
+    {
+        var config = Program.LoadConfig(WriteTemp("""
+            {"cameraVideoSettings":{
+                "paneTabsAutomationId":"tabs-custom","settingsTabName":"settings-custom",
+                "mirrorName":"mirror-custom","softFocusName":"focus-custom","brightnessName":"brightness-custom",
+                "moreSettingsName":"more-custom","closePaneName":"close-custom"
+            }}
+            """));
+        var spec = config.CameraVideoSettings;
+
+        Assert.Equal("tabs-custom", spec.PaneTabsAutomationId);
+        Assert.Equal("settings-custom", spec.SettingsTabName);
+        Assert.Equal("mirror-custom", spec.MirrorName);
+        Assert.Equal("focus-custom", spec.SoftFocusName);
+        Assert.Equal("brightness-custom", spec.BrightnessName);
+        Assert.Equal("more-custom", spec.MoreSettingsName);
+        Assert.Equal("close-custom", spec.ClosePaneName);
+    }
+
+    [Theory]
+    [InlineData("paneTabsAutomationId")]
+    [InlineData("settingsTabName")]
+    [InlineData("mirrorName")]
+    [InlineData("softFocusName")]
+    [InlineData("brightnessName")]
+    [InlineData("moreSettingsName")]
+    [InlineData("closePaneName")]
+    public void Empty_camera_selectors_are_rejected_without_discarding_other_overrides(string field)
+    {
+        var config = Program.LoadConfig(WriteTemp("""
+            {"cameraVideoSettings":{"FIELD":" "},"controls":{"mute":{"automationId":"custom-mic"}}}
+            """.Replace("FIELD", field)));
+
+        Assert.Null(config.CameraVideoSettings.Validate());
+        Assert.Equal("custom-mic", config.Controls["mute"].AutomationId);
+        Assert.Equal(Defaults.Config().CameraVideoSettings.MirrorName, config.CameraVideoSettings.MirrorName);
+    }
+
+    [Fact]
+    public void The_shipped_camera_video_selectors_match_all_built_in_defaults()
+    {
+        var path = Path.Combine(FindRepoRoot(), "com.bad-duck.teamscontrol.sdPlugin", "selectors.json");
+        var parsed = Program.ParseConfig(File.ReadAllText(path));
+        Assert.NotNull(parsed);
+        var spec = parsed.CameraVideoSettings;
+        var defaults = Defaults.Config().CameraVideoSettings;
+
+        Assert.Equal(defaults.PaneTabsAutomationId, spec.PaneTabsAutomationId);
+        Assert.Equal(defaults.SettingsTabName, spec.SettingsTabName);
+        Assert.Equal(defaults.MirrorName, spec.MirrorName);
+        Assert.Equal(defaults.SoftFocusName, spec.SoftFocusName);
+        Assert.Equal(defaults.BrightnessName, spec.BrightnessName);
+        Assert.Equal(defaults.MoreSettingsName, spec.MoreSettingsName);
+        Assert.Equal(defaults.ClosePaneName, spec.ClosePaneName);
+    }
+
+    [Fact]
+    public void Camera_Direct_container_selector_is_optional_typed_and_overridable()
+    {
+        Assert.Equal("custom-camera-list",
+            Program.ParseConfig("""{"controls":{"camera-select":{"menuItemContainerDataTid":"custom-camera-list"}}}""")!
+                .Controls["camera-select"].MenuItemContainerDataTid);
+        Assert.Null(Program.ParseConfig("""{"controls":{"camera-select":{"menuItemContainerDataTid":false}}}""")!
+            .Controls["camera-select"].MenuItemContainerDataTid);
+        Assert.NotNull(new ControlSpec { MenuItemContainerDataTid = " " }.Validate());
+        Assert.Null(new ControlSpec().Validate());
+    }
+
+    [Fact]
+    public void Partial_user_camera_overrides_preserve_the_Direct_container_and_menu()
+    {
+        var user = WriteTemp("""{"controls":{"camera-select":{"menuItemAutomationId":"camera-{arg}"}}}""");
+        var config = Program.LoadConfig(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")), user);
+
+        var script = CameraDom.BuildScript(config.Controls["camera-select"], "one", false, 2500);
+
+        Assert.NotNull(script);
+        Assert.Contains(DomActuator.Js("camera-one"), script);
+    }
+
+    private static Dictionary<string, string> CameraPreferenceSelectors(CameraVideoSettingsSpec spec) => new()
+    {
+        ["paneTabsAutomationId"] = spec.PaneTabsAutomationId,
+        ["paneDataTid"] = spec.PaneDataTid,
+        ["settingsTabName"] = spec.SettingsTabName,
+        ["mirrorName"] = spec.MirrorName,
+        ["softFocusName"] = spec.SoftFocusName,
+        ["brightnessName"] = spec.BrightnessName,
+        ["moreSettingsName"] = spec.MoreSettingsName,
+        ["closePaneName"] = spec.ClosePaneName
+    };
+
+    [Fact]
+    public void Camera_preference_selectors_are_shipped_and_match_built_in_defaults()
+    {
+        var path = Path.Combine(FindRepoRoot(), "com.bad-duck.teamscontrol.sdPlugin", "selectors.json");
+        var json = File.ReadAllText(path);
+        using var document = JsonDocument.Parse(json);
+        var shipped = document.RootElement.GetProperty("cameraVideoSettings");
+        var parsed = CameraPreferenceSelectors(Program.ParseConfig(json)!.CameraVideoSettings);
+        foreach (var (name, value) in CameraPreferenceSelectors(Defaults.Config().CameraVideoSettings))
+        {
+            Assert.Equal(value, shipped.GetProperty(name).GetString());
+            Assert.Equal(value, parsed[name]);
+        }
+    }
+
+    [Fact]
+    public void Every_camera_preference_selector_supports_partial_overrides_and_rejects_bad_values()
+    {
+        var defaults = CameraPreferenceSelectors(new());
+        foreach (var name in defaults.Keys)
+        {
+            var good = Program.LoadConfig(WriteTemp($$"""{ "cameraVideoSettings": { "{{name}}": "custom" } }"""));
+            foreach (var (field, value) in CameraPreferenceSelectors(good.CameraVideoSettings))
+                Assert.Equal(field == name ? "custom" : defaults[field], value);
+            foreach (var invalid in new[] { "false", "null", "[]", "\" \"" })
+            {
+                var bad = Program.LoadConfig(WriteTemp($$"""{ "cameraVideoSettings": { "{{name}}": {{invalid}} } }"""));
+                Assert.Equal(defaults[name], CameraPreferenceSelectors(bad.CameraVideoSettings)[name]);
+            }
+        }
+        Assert.Equal(defaults, CameraPreferenceSelectors(Program.LoadConfig(
+            WriteTemp("""{"cameraVideoSettings":false}""")).CameraVideoSettings));
     }
 
     [Fact]
@@ -364,6 +539,7 @@ public class SelectorConfigTests : IDisposable
             Assert.True(spec.Validate() is null, $"{key}: {spec.Validate()}");
 
         Assert.Null(parsed.PowerPointLive.Validate());
+        Assert.Null(parsed.CameraVideoSettings.Validate());
     }
 
     [Fact]

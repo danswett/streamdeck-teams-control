@@ -82,4 +82,17 @@ describe("webcam discovery bridge", () => {
 		proc.emit("exit", 1, null);
 		expect(await pending).toMatchObject({ ok: false, error: "sidecar exited" });
 	});
+
+	it("allows time for video preference navigation without extending ordinary camera presses", async () => {
+		const plain = bridge.invoke("camera-select", "one");
+		const preferences = bridge.invoke("camera-select", '{"cameras":[{"id":"one","mirror":"on"}]}');
+		await vi.advanceTimersByTimeAsync(10_000);
+		expect(await plain).toMatchObject({ ok: false, error: "timed out" });
+		let finished = false;
+		void preferences.then(() => { finished = true; });
+		await vi.advanceTimersByTimeAsync(9999);
+		expect(finished).toBe(false);
+		await vi.advanceTimersByTimeAsync(1);
+		expect(await preferences).toMatchObject({ ok: false, error: "timed out" });
+	});
 });

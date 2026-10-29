@@ -2,6 +2,7 @@ import streamDeck, { action, type KeyDownEvent, type SendToPluginEvent } from "@
 import type { JsonValue } from "@elgato/utils";
 
 import { bridge, type TeamsState } from "../bridge";
+import { cameraArgument, type CameraSettings } from "../camera-settings";
 import {
 	renderEmoji,
 	renderGlyph,
@@ -52,8 +53,6 @@ export class CameraAction extends TeamsAction {
 	}
 }
 
-type CameraSettings = { cameraId?: string; secondCameraId?: string };
-
 abstract class WebcamAction extends TeamsAction<CameraSettings> {
 	protected abstract override targetFor(): string;
 
@@ -91,7 +90,7 @@ export class SelectCameraAction extends WebcamAction {
 	}
 
 	protected override argFor(settings: CameraSettings): string | undefined {
-		return settings.cameraId;
+		return cameraArgument(settings, false);
 	}
 }
 
@@ -105,8 +104,8 @@ export class SwapCameraAction extends WebcamAction {
 		return "cameraSwap";
 	}
 
-	protected override argFor(settings: CameraSettings): string {
-		return JSON.stringify([settings.cameraId ?? "", settings.secondCameraId ?? ""]);
+	protected override argFor(settings: CameraSettings): string | undefined {
+		return cameraArgument(settings, true);
 	}
 }
 
