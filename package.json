@@ -37,6 +37,7 @@
 		"@types/node": "~24.1.0",
 		"adm-zip": "^0.6.1",
 		"fluentui-emoji": "^1.3.0",
+		"parse5": "^8.0.1",
 		"rollup": "^4.0.2",
 		"tslib": "^2.6.2",
 		"typescript": "^5.2.2",
