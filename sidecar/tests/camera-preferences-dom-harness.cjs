@@ -14,7 +14,7 @@ async function main() {
     let expanded = originalFlyout, paneVisible = originalPane, tab = originalTab;
     let cameraWrites = 0, opens = 0, paneOpens = 0, paneCloses = 0, dismisses = 0, tabWrites = 0;
     const values = { 'Mirror my video': desired === 1, 'Soft focus': desired === 0, 'Adjust brightness': desired === 1 };
-    if (scenario === 'preferences-noop') Object.assign(values, {
+    if (scenario.startsWith('preferences-noop')) Object.assign(values, {
         'Mirror my video': true, 'Soft focus': false, 'Adjust brightness': true
     });
     const writes = Object.fromEntries(Object.keys(values).map(name => [name, 0]));
@@ -34,6 +34,7 @@ async function main() {
         return id;
     };
     const attr = (name, values) => values[name] ?? null;
+    const paneMenu = {}, foreignMenu = {};
     const css = () => [...styles.values()].map(style => style.textContent).join('');
     const button = (name, click, title = false) => ({
         textContent: title ? '' : name,
@@ -99,7 +100,7 @@ async function main() {
     }, true);
     const panel = {
         getAttribute: name => attr(name, { 'data-tid': 'calling-right-side-panel', role: 'complementary' }),
-        contains: el => el === tabs,
+        contains: el => el === tabs || el === paneMenu,
         querySelectorAll(selector) {
             if (selector === 'button') return scenario === 'missing-close' ? [] : [close];
             assert.equal(selector, 'input[type="checkbox"][role="switch"]');
@@ -124,7 +125,13 @@ async function main() {
         expanded = false;
         tab = 'Video effects';
     });
+    const dismiss = event => {
+        assert.equal(event.key, 'Escape');
+        dismisses++;
+        expanded = false;
+    };
     const flyout = {
+        dispatchEvent: dismiss,
         querySelectorAll(selector) {
             if (selector === 'button') return [more];
             assert.equal(selector, 'input[type="checkbox"][role="switch"]');
@@ -141,9 +148,7 @@ async function main() {
                 paneVisible = false;
         },
         dispatchEvent(event) {
-            assert.equal(event.key, 'Escape');
-            dismisses++;
-            expanded = false;
+            if (scenario !== 'preferences-noop-escape') dismiss(event);
         }
     };
     const list = {
@@ -168,7 +173,9 @@ async function main() {
             return styles.get(id) ?? null;
         },
         querySelectorAll(selector) {
-            if (selector === '[role="dialog"],[role="menu"]') return [];
+            if (selector === '[role="dialog"],[role="menu"]')
+                return scenario === 'user-pane-menus' && paneVisible ? [paneMenu] :
+                    scenario === 'user-pane-foreign-menu' ? [foreignMenu] : [];
             assert.equal(selector, '[data-tid]');
             const other = { getAttribute: name => attr(name, { 'data-tid': 'calling-right-side-panel' }),
                 contains: () => false };
@@ -190,12 +197,13 @@ async function main() {
         'indeterminate', 'contradictory-state', 'missing-switch', 'ignored-write', 'mirror-ignored-write', 'throw-write',
         'missing-tab', 'unknown-tab', 'ignored-tab', 'pane-open-fails', 'late-pane', 'ignored-close',
         'throw-close', 'missing-close', 'user-flyout-missing-tab', 'user-pane-missing-tab',
-        'user-pane-restore-fails', 'camera-changed', 'camera-changed-after-mirror', 'other-pane'
+        'user-pane-restore-fails', 'user-pane-foreign-menu', 'camera-changed', 'camera-changed-after-mirror', 'other-pane'
     ]);
     assert.equal(result.ok, !failures.has(scenario), JSON.stringify(result));
-    assert.equal(cameraWrites, scenario === 'camera-noop' ? 0 : 1);
-    assert.equal(result.safeToFallback, false, 'no fallback after a confirmed camera selection');
-    assert.equal(result.selectedId, desired === 1 ? 'two' : 'one');
+    const foreign = scenario === 'user-pane-foreign-menu';
+    assert.equal(cameraWrites, scenario === 'camera-noop' || foreign ? 0 : 1);
+    assert.equal(result.safeToFallback, foreign, 'fallback only before a camera selection');
+    assert.equal(result.selectedId, foreign ? undefined : desired === 1 ? 'two' : 'one');
     assert.equal(styles.size, 0, 'always remove hiding styles');
     assert.equal(window.__sdtc_camera_operation, undefined, 'always release the operation lock');
     if (result.ok) {
@@ -209,14 +217,14 @@ async function main() {
             if (!focusOnly && !mirrorOnly) assert.equal(values['Adjust brightness'], desired === 0);
         }
         for (const [name, count] of Object.entries(writes)) {
-            const skip = unchanged || scenario === 'preferences-noop' ||
+            const skip = unchanged || scenario.startsWith('preferences-noop') ||
                 focusOnly && name !== 'Soft focus' || brightnessOnly && name !== 'Adjust brightness' ||
                 mirrorOnly && name !== 'Mirror my video' || scenario === 'fresh-already-desired' && name === 'Soft focus';
             assert.equal(count, skip ? 0 : 1, name);
         }
         if (unchanged || focusOnly || brightnessOnly) assert.equal(paneOpens, 0);
     } else {
-        assert.match(result.error, /Webcam selected, but /);
+        assert.match(result.error, foreign ? /Another Teams flyout is open/ : /Webcam selected, but /);
         if (writes['Soft focus'] && !cleanupFailures.has(scenario)) assert.match(result.error, /may already have changed/);
         if (scenario === 'ignored-write' || scenario === 'throw-write' || scenario === 'unknown-after-write')
             assert.equal(writes['Soft focus'], 1);

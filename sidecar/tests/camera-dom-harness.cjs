@@ -7,12 +7,19 @@ async function main() {
     let clock = 0, reads = 0, generation = 0, writes = 0, opens = 0, closes = 0, removed = 0;
     let expanded = scenario.startsWith('user-open');
     let selected = scenario === 'swap-first' || scenario === 'fresh-already-desired' ||
-        scenario === 'select-noop' || scenario === 'user-open-noop' ? 0 :
+        scenario === 'select-noop' || scenario === 'escape-in-popup' || scenario === 'user-open-noop' ? 0 :
         scenario === 'swap-second' ? 1 : 2;
     const window = scenario === 'lock' ? { __sdtc_camera_operation: {} } : {};
     const styles = new Map(), timers = new Map();
     let timerId = 0;
     const attr = (name, values) => values[name] ?? null;
+    const dismiss = event => {
+        assert.equal(event.key, 'Escape');
+        closes++;
+        if (scenario === 'throw-cleanup') throw Error('cleanup threw');
+        if (scenario !== 'cleanup-fails') expanded = false;
+    };
+    const flyout = { dispatchEvent: dismiss };
     const host = {
         disabled: false,
         getAttribute: name => attr(name, { 'aria-expanded': String(expanded) }),
@@ -22,14 +29,12 @@ async function main() {
             if (scenario !== 'failed-open') expanded = !expanded;
         },
         dispatchEvent(event) {
-            assert.equal(event.key, 'Escape');
-            closes++;
-            if (scenario === 'throw-cleanup') throw Error('cleanup threw');
-            if (scenario !== 'cleanup-fails') expanded = false;
+            if (scenario !== 'escape-in-popup') dismiss(event);
         }
     };
     const list = {
         getAttribute: name => attr(name, { 'data-tid': 'camera-settings', role: 'listbox' }),
+        closest(selector) { assert.equal(selector, '[role="dialog"]'); return flyout; },
         querySelectorAll(selector) {
             assert.equal(selector, '[role="option"]');
             reads++;
@@ -110,7 +115,7 @@ async function main() {
     ]);
     assert.equal(result.ok, !failures.has(scenario), JSON.stringify(result));
     const noWrite = new Set([
-        'select-noop', 'fresh-already-desired', 'user-open-noop', 'unknown-initial', 'unknown-before-write',
+        'select-noop', 'escape-in-popup', 'fresh-already-desired', 'user-open-noop', 'unknown-initial', 'unknown-before-write',
         'disabled-before-write', 'missing-second', 'both-selected', 'disabled-target', 'disabled-second', 'duplicate-container',
         'duplicate-id', 'other-dialog', 'failed-open', 'throw-open', 'lock'
     ]);

@@ -123,6 +123,9 @@ internal static class CameraDom
                 const matches = tabs ? panels().filter(el => el.contains(tabs)) : [];
                 return matches.length === 1 ? matches[0] : null;
             };
+            // The Effects pane contains persistent menus, not competing flyouts.
+            const hasOtherFlyout = () => [...document.querySelectorAll('[role="dialog"],[role="menu"]')]
+                .some(el => !pane()?.contains(el));
             const nameOf = el => el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent.trim();
             const named = (scope, selector, name) => {
                 const matches = scope ? [...scope.querySelectorAll(selector)].filter(el => nameOf(el) === name) : [];
@@ -158,7 +161,7 @@ internal static class CameraDom
                 const expanded = trigger.getAttribute('aria-expanded');
                 if (expanded !== 'true' && expanded !== 'false') throw new Error('Unknown video options state');
                 if (expanded === 'false') {
-                    if (document.querySelectorAll('[role="dialog"],[role="menu"]').length)
+                    if (hasOtherFlyout())
                         throw new Error('Another Teams flyout is open');
                     if (Date.now() >= until) throw new Error('Camera operation deadline elapsed');
                     navigated = true;
@@ -256,7 +259,7 @@ internal static class CameraDom
                     originalTab = original.name;
                 }
                 if (owned) {
-                    if (document.querySelectorAll('[role="dialog"],[role="menu"]').length)
+                    if (hasOtherFlyout())
                         throw new Error('Another Teams flyout is open');
                     suppress(optionsCss);
                     navigated = true;
@@ -362,7 +365,8 @@ internal static class CameraDom
                             await ensureOptions(cleanupDeadline);
                         if (!owned || !navigated) return;
                         if (host()?.getAttribute('aria-expanded') === 'true') {
-                            host().dispatchEvent(new KeyboardEvent('keydown', {
+                            // The trigger is outside the popup's keyboard scope.
+                            (dialog() ?? host()).dispatchEvent(new KeyboardEvent('keydown', {
                                 key: 'Escape', code: 'Escape', keyCode: 27, which: 27, bubbles: true, cancelable: true
                             }));
                         }

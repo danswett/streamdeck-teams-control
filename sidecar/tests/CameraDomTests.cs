@@ -240,6 +240,7 @@ public class CameraDomTests
     [Theory]
     [InlineData("select")]
     [InlineData("select-noop")]
+    [InlineData("escape-in-popup")]
     [InlineData("swap-first")]
     [InlineData("swap-second")]
     [InlineData("swap-third")]
