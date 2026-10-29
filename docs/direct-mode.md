@@ -62,7 +62,8 @@ where you are not the one deciding what runs.**
 The plugin **only ever consumes a port you opened yourself**. Nothing in it —
 not the installer, not an update, not any key — writes an environment variable,
 a registry key, or any other machine setting. If you have not run the command
-below yourself, Direct mode is unavailable and the toggle does nothing.
+below yourself, enabling the toggle leaves it on **WAITING** and controls use
+the normal UI Automation path.
 
 Before using a port, the plugin checks it actually belongs to Teams. That matters:
 the setting below applies to **every** WebView2 application you launch, and only
