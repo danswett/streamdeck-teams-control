@@ -68,8 +68,12 @@ async function main() {
                 assert.equal(generation, generations[name], 'must re-find the checkbox immediately before writing');
                 assert.equal(writes[name]++, 0, 'must never repeat a preference write');
                 assert.ok(clock < (scenario === 'slow-pane' ? 9000 : 1500), 'must not write after the operation deadline');
-                if (!(trouble && scenario === 'ignored-write') &&
+                if (!(trouble && (scenario === 'ignored-write' || scenario === 'preference-auto-close-ignored')) &&
                     !(name === 'Mirror my video' && scenario === 'mirror-ignored-write')) values[name] = !checked;
+                if (scope === 'flyout' && scenario.includes('preference-auto-close')) {
+                    if (scenario.endsWith('-delayed')) schedule(() => { expanded = false; }, 40);
+                    else expanded = false;
+                }
                 if (trouble && scenario === 'throw-write') throw Error('uncertain preference write');
                 if (trouble && scenario === 'camera-changed') selected = 2;
                 if (name === 'Mirror my video' && scenario === 'camera-changed-after-mirror') selected = 2;
@@ -197,7 +201,8 @@ async function main() {
         'indeterminate', 'contradictory-state', 'missing-switch', 'ignored-write', 'mirror-ignored-write', 'throw-write',
         'missing-tab', 'unknown-tab', 'ignored-tab', 'pane-open-fails', 'late-pane', 'ignored-close',
         'throw-close', 'missing-close', 'user-flyout-missing-tab', 'user-pane-missing-tab',
-        'user-pane-restore-fails', 'user-pane-foreign-menu', 'camera-changed', 'camera-changed-after-mirror', 'other-pane'
+        'user-pane-restore-fails', 'user-pane-foreign-menu', 'camera-changed', 'camera-changed-after-mirror', 'other-pane',
+        'preference-auto-close-ignored'
     ]);
     assert.equal(result.ok, !failures.has(scenario), JSON.stringify(result));
     const foreign = scenario === 'user-pane-foreign-menu';
@@ -226,8 +231,10 @@ async function main() {
     } else {
         assert.match(result.error, foreign ? /Another Teams flyout is open/ : /Webcam selected, but /);
         if (writes['Soft focus'] && !cleanupFailures.has(scenario)) assert.match(result.error, /may already have changed/);
-        if (scenario === 'ignored-write' || scenario === 'throw-write' || scenario === 'unknown-after-write')
+        if (scenario === 'ignored-write' || scenario === 'throw-write' || scenario === 'unknown-after-write' ||
+            scenario === 'preference-auto-close-ignored')
             assert.equal(writes['Soft focus'], 1);
+        if (scenario === 'preference-auto-close-ignored') assert.equal(opens, 2, 'reopen once only to observe');
         if (scenario === 'unknown-before-write') assert.equal(writes['Soft focus'], 0);
     }
     if (!cleanupFailures.has(scenario)) {

@@ -210,7 +210,8 @@ internal static class CameraDom
                     return null;
                 return { el, checked: el.checked };
             };
-            const setToggle = async (scope, name, wanted) => {
+            const setToggle = async (scope, name, wanted, reopenOptions = false) => {
+                if (reopenOptions) await ensureOptions();
                 await waitFor(() => toggleSnapshot(scope, name), 'Unknown state for ' + name);
                 const fresh = toggleSnapshot(scope, name);
                 if (!fresh) throw new Error('Video preference state changed before writing ' + name);
@@ -220,7 +221,20 @@ internal static class CameraDom
                     fresh.el.click();
                     await sleep(20);
                 }
-                await waitFor(() => toggleSnapshot(scope, name)?.checked === wanted, 'Teams did not confirm ' + name);
+                let reopened = false;
+                do {
+                    if (toggleSnapshot(scope, name)?.checked === wanted) return;
+                    // A preference write can close the picker. Reopen only to
+                    // observe the result, never to repeat the write.
+                    if (reopenOptions && !reopened && host()?.getAttribute('aria-expanded') === 'false' &&
+                        Date.now() < deadline) {
+                        reopened = true;
+                        await ensureOptions();
+                        continue;
+                    }
+                    await sleep(20);
+                } while (Date.now() < deadline);
+                throw new Error('Teams did not confirm ' + name);
             };
             const read = () => {
                 const trigger = host();
@@ -309,9 +323,8 @@ internal static class CameraDom
                         const state = read();
                         return state?.[desired].selected ? dialog() : null;
                     };
-                    await ensureOptions();
                     for (const [name, wanted] of [[video.softFocus, preference.softFocus], [video.brightness, preference.brightness]]) {
-                        if (wanted !== null) await setToggle(selectedOptions, name, wanted);
+                        if (wanted !== null) await setToggle(selectedOptions, name, wanted, true);
                     }
                     if (preference.mirror !== null) {
                         if (!read()?.[desired].selected) throw new Error('Webcam selection changed before applying mirror');
