@@ -1011,6 +1011,7 @@ It speaks line-delimited JSON:
 | flag | effect |
 |---|---|
 | `--selectors <path>` | load a selector override file |
+| `--user-selectors <path>` | override the Windows per-user selector-file location |
 | `--poll <ms>` | override the in-meeting backstop interval |
 | `--no-events` | disable UIA subscriptions and poll only |
 | `--debug-events` | log every subscription and event to stderr |
@@ -1061,7 +1062,12 @@ That risk is contained rather than hidden:
 
 - All selectors live in
   [`selectors.json`](com.bad-duck.teamscontrol.sdPlugin/selectors.json) beside the
-  manifest. Edit it and restart the plugin — no rebuild needed. Patterns are
+  manifest. **Do not edit or delete that file in an installed plugin**:
+  Marketplace checksum verification can prevent the plugin from starting.
+  On Windows, put changes in
+  `%APPDATA%\com.bad-duck.teamscontrol\selectors.json` instead and restart the
+  plugin — no rebuild needed. This optional file is merged over the bundled
+  selectors, field by field, and survives plugin updates. Patterns are
   compiled when the file is read, so a mistake is named and skipped at startup
   and the working default kept. Matching is bounded, so a pattern that backtracks
   badly cannot wedge the sidecar.
@@ -1103,18 +1109,33 @@ with a `discover` dump attached — after reading it, per [Privacy](#privacy).
 
 ### Other languages
 
-`AutomationId`s are locale-independent, so **pressing** every control works in any
-Teams language out of the box. Only the **state indicators** read English labels.
-To localize, edit the `activePattern` / `inactivePattern` regexes in
-`selectors.json`. For example, German:
+Toolbar `AutomationId`s are locale-independent. The mute, camera, and sharing
+state patterns already cover English and German; controls found by accessible
+name can still require translated selectors.
 
-```jsonc
-"mute": {
-  "automationId": "microphone-button",
-  "activePattern": "^\\s*stumm(schaltung)?\\s*auf",
-  "inactivePattern": "^\\s*stumm\\s*schalten"
+On Windows, create `%APPDATA%\com.bad-duck.teamscontrol\selectors.json` for
+another language or a selector fix after a Teams update. Create the parent
+folder if needed. Include only the fields to change; the bundled IDs and other
+settings are retained. For example, this partial file restates the German mute
+patterns already included in the plugin:
+
+```json
+{
+  "controls": {
+    "mute": {
+      "activePattern": "^\\s*unmute\\b|wieder\\s+aktivieren",
+      "inactivePattern": "^\\s*mute\\b|stumm\\s*schalten"
+    }
+  }
 }
 ```
+
+Restart the plugin after saving. Invalid JSON or patterns are reported in the
+sidecar log and working selectors are retained. Delete the **per-user** file to
+return to the bundled configuration. Never modify the installed package's
+`selectors.json`; even a one-line change can trigger tamper detection.
+
+The per-user file is currently supported by the Windows sidecar only.
 
 PRs adding language packs are very welcome.
 

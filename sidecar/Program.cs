@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace TeamsBridge;
 
@@ -152,9 +153,18 @@ public static class Program
 
         var selectorsPath = GetArg(args, "--selectors")
                             ?? Path.Combine(AppContext.BaseDirectory, "selectors.json");
+        var userSelectorsPath = GetArg(args, "--user-selectors");
+        if (userSelectorsPath is null)
+        {
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            if (!string.IsNullOrEmpty(appData))
+                userSelectorsPath = Path.Combine(appData, "com.bad-duck.teamscontrol", "selectors.json");
+            else
+                Console.Error.WriteLine("could not locate ApplicationData; user selector overrides are unavailable");
+        }
         var pollMs = int.TryParse(GetArg(args, "--poll"), out var p) ? Math.Clamp(p, 150, 5000) : 700;
 
-        var config = LoadConfig(selectorsPath);
+        var config = LoadConfig(selectorsPath, userSelectorsPath);
         var restoreFocus = !HasFlag(args, "--no-focus-guard");
         var debugEvents = HasFlag(args, "--debug-events");
         var useEvents = !HasFlag(args, "--no-events");
@@ -689,17 +699,58 @@ public static class Program
     private static bool HasFlag(string[] args, string name) =>
         args.Any(a => string.Equals(a, name, StringComparison.OrdinalIgnoreCase));
 
-    internal static SelectorConfig LoadConfig(string path)
+    internal static SelectorConfig LoadConfig(string path, string? userSelectorsPath = null)
     {
         var config = Defaults.Config();
-        if (!File.Exists(path)) return config;
+        var bundled = ReadSelectors(path);
+        if (bundled is not null) ApplyConfig(config, bundled, path);
 
+        if (userSelectorsPath is not null && ReadSelectors(userSelectorsPath) is { } user)
+        {
+            var merged = bundled?.DeepClone().AsObject() ?? new JsonObject();
+            MergeSelectors(merged, user, userSelectorsPath);
+            ApplyConfig(config, merged, userSelectorsPath, inheritControls: true);
+        }
+        return config;
+    }
+
+    private static JsonObject? ReadSelectors(string path)
+    {
+        if (!File.Exists(path)) return null;
         try
         {
-            // Overlaid onto the defaults rather than replacing them, so a partial
-            // or outdated selectors.json can only change what it names.
-            var overrides = ParseConfig(File.ReadAllText(path));
-            if (overrides is null) return config;
+            return JsonNode.Parse(File.ReadAllText(path)) as JsonObject
+                ?? throw new JsonException("selector configuration must be an object");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            Console.Error.WriteLine($"failed to read {path}: {ex.Message}; keeping existing selectors");
+            return null;
+        }
+    }
+
+    private static void MergeSelectors(JsonObject target, JsonObject overrides, string path, string prefix = "")
+    {
+        foreach (var (name, value) in overrides)
+        {
+            if (target[name] is JsonObject existing && value is JsonObject child)
+                MergeSelectors(existing, child, path, $"{prefix}{name}.");
+            else if (target[name] is { } previous && value is not null &&
+                     previous.GetValueKind() != value.GetValueKind() &&
+                     !((previous.GetValueKind() is JsonValueKind.True or JsonValueKind.False) &&
+                       (value.GetValueKind() is JsonValueKind.True or JsonValueKind.False)))
+                Console.Error.WriteLine($"ignoring override '{prefix}{name}' from {path} - expected {previous.GetValueKind()}");
+            else
+                target[name] = value?.DeepClone();
+        }
+    }
+
+    private static void ApplyConfig(SelectorConfig config, JsonObject json, string path, bool inheritControls = false)
+    {
+        try
+        {
+            var overrides = ParseConfig(json.ToJsonString(), inheritControls ? config.Controls : null);
+            if (overrides is null) return;
 
             if (!string.IsNullOrWhiteSpace(overrides.MeetingProbeAutomationId))
                 config.MeetingProbeAutomationId = overrides.MeetingProbeAutomationId;
@@ -736,16 +787,14 @@ public static class Program
             if (applied > 0)
                 Console.Error.WriteLine($"applied {applied} selector override(s) from {path}");
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
         {
-            Console.Error.WriteLine($"failed to read {path}: {ex.Message}; using built-in defaults");
+            Console.Error.WriteLine($"failed to apply {path}: {ex.Message}; keeping existing selectors");
         }
-
-        return config;
     }
 
     /// <summary>Hand-rolled so the sidecar stays trim-safe (no reflection-based binding).</summary>
-    internal static SelectorConfig? ParseConfig(string json)
+    internal static SelectorConfig? ParseConfig(string json, IReadOnlyDictionary<string, ControlSpec>? inheritedControls = null)
     {
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
@@ -804,35 +853,46 @@ public static class Program
         foreach (var prop in controls.EnumerateObject())
         {
             var o = prop.Value;
+            var inherited = inheritedControls?.GetValueOrDefault(prop.Name);
             cfg.Controls[prop.Name] = new ControlSpec
             {
-                AutomationId = Str(o, "automationId") ?? "",
-                Name = Str(o, "name"),
-                WithinClass = Str(o, "withinClass"),
-                Menu = Str(o, "menu"),
-                Submenu = Str(o, "submenu"),
-                RequiresRole = Str(o, "requiresRole"),
-                MenuItemAutomationId = Str(o, "menuItemAutomationId"),
-                MenuItemToggleAutomationId = Str(o, "menuItemToggleAutomationId"),
-                MenuItemName = Str(o, "menuItemName"),
-                MenuItemOffName = Str(o, "menuItemOffName"),
-                ActivePattern = Str(o, "activePattern"),
-                InactivePattern = Str(o, "inactivePattern"),
-                ActiveWhenPresentAutomationId = Str(o, "activeWhenPresentAutomationId"),
-                OffAutomationId = Str(o, "offAutomationId"),
-                OffName = Str(o, "offName"),
-                Surface = Str(o, "surface"),
-                ColorFromName = o.TryGetProperty("colorFromName", out var cfn) &&
-                                cfn.ValueKind == JsonValueKind.True,
-                StateFromSelection = o.TryGetProperty("stateFromSelection", out var sfs) &&
-                                     sfs.ValueKind == JsonValueKind.True,
-                StateFromFullDescription = o.TryGetProperty("stateFromFullDescription", out var sfd) &&
-                                           sfd.ValueKind == JsonValueKind.True
+                AutomationId = Str(o, "automationId") ?? inherited?.AutomationId ?? "",
+                Name = Str(o, "name") ?? inherited?.Name,
+                WithinClass = Str(o, "withinClass") ?? inherited?.WithinClass,
+                Menu = Str(o, "menu") ?? inherited?.Menu,
+                Submenu = Str(o, "submenu") ?? inherited?.Submenu,
+                RequiresRole = Str(o, "requiresRole") ?? inherited?.RequiresRole,
+                MenuItemAutomationId = Str(o, "menuItemAutomationId") ?? inherited?.MenuItemAutomationId,
+                MenuItemToggleAutomationId = Str(o, "menuItemToggleAutomationId") ?? inherited?.MenuItemToggleAutomationId,
+                MenuItemName = Str(o, "menuItemName") ?? inherited?.MenuItemName,
+                MenuItemOffName = Str(o, "menuItemOffName") ?? inherited?.MenuItemOffName,
+                ActivePattern = Str(o, "activePattern") ?? inherited?.ActivePattern,
+                InactivePattern = Str(o, "inactivePattern") ?? inherited?.InactivePattern,
+                ActiveWhenPresentAutomationId = Str(o, "activeWhenPresentAutomationId") ?? inherited?.ActiveWhenPresentAutomationId,
+                OffAutomationId = Str(o, "offAutomationId") ?? inherited?.OffAutomationId,
+                OffName = Str(o, "offName") ?? inherited?.OffName,
+                Surface = Str(o, "surface") ?? inherited?.Surface,
+                ColorFromName = Bool(o, "colorFromName", inherited?.ColorFromName ?? false),
+                StateFromSelection = Bool(o, "stateFromSelection", inherited?.StateFromSelection ?? false),
+                StateFromFullDescription = Bool(o, "stateFromFullDescription", inherited?.StateFromFullDescription ?? false)
             };
         }
         return cfg;
 
-        static string? Str(JsonElement e, string name) =>
-            e.TryGetProperty(name, out var x) && x.ValueKind == JsonValueKind.String ? x.GetString() : null;
+        static string? Str(JsonElement e, string name)
+        {
+            if (!e.TryGetProperty(name, out var value) || value.ValueKind == JsonValueKind.Null) return null;
+            if (value.ValueKind == JsonValueKind.String) return value.GetString();
+            Console.Error.WriteLine($"ignoring non-string selector field '{name}'");
+            return null;
+        }
+
+        static bool Bool(JsonElement e, string name, bool fallback)
+        {
+            if (!e.TryGetProperty(name, out var value)) return fallback;
+            if (value.ValueKind is JsonValueKind.True or JsonValueKind.False) return value.GetBoolean();
+            Console.Error.WriteLine($"ignoring non-boolean selector field '{name}'");
+            return fallback;
+        }
     }
 }
