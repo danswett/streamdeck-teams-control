@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import { Resvg } from "@resvg/resvg-js";
+import { parse, type DefaultTreeAdapterTypes } from "parse5";
 import { describe, expect, it, vi } from "vitest";
 import { renderDirectMode } from "../src/icons";
 
@@ -33,7 +34,15 @@ async function inspector(markup = html) {
 			getConnectionInfo: async () => ({ actionInfo: { action: "com.bad-duck.teamscontrol.direct-mode" } })
 		} }
 	};
-	const script = [...markup.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi)].at(-1)?.[1];
+	const scripts: string[] = [];
+	function visit(node: DefaultTreeAdapterTypes.Node): void {
+		if ("tagName" in node && node.tagName === "script" && !node.attrs.some(({ name }) => name === "src")) {
+			scripts.push(node.childNodes.map((child) => "value" in child ? child.value : "").join(""));
+		}
+		if ("childNodes" in node) node.childNodes.forEach(visit);
+	}
+	visit(parse(markup));
+	const script = scripts.at(-1);
 	if (!script) throw new Error("Missing inspector script");
 	vm.runInNewContext(script, sandbox);
 	await Promise.resolve();
@@ -60,7 +69,8 @@ describe("Direct Mode property inspector", () => {
 		["original", html],
 		["mixed-case tags with attributes", html
 			.replaceAll("<script>", '<ScRiPt type="text/javascript">')
-			.replaceAll("</script>", "</sCrIpT >")]
+			.replaceAll("</script>", "</sCrIpT >")],
+		["end-tag attributes", html.replaceAll("</script>", "</script\t\n bar>")]
 	])("saves the shared port and toggles through plugin messages with %s HTML", async (_name, markup) => {
 		const ui = await inspector(markup);
 		ui.edit("12345");
