@@ -93,6 +93,114 @@ public class SelectorConfigTests : IDisposable
     }
 
     [Fact]
+    public void User_overrides_merge_fields_without_editing_the_bundled_file()
+    {
+        const string bundledJson = """
+            {"controls":{"mute":{"automationId":"bundled-mic","activePattern":"^bundled-on$","inactivePattern":"^bundled-off$","stateFromSelection":true}},
+             "powerPointLive":{"rootAutomationId":"bundled-root","toolbarAutomationId":"bundled-toolbar"}}
+            """;
+        var bundled = WriteTemp(bundledJson);
+        var user = WriteTemp("""
+            {"controls":{"mute":{"activePattern":"^user-on$","stateFromSelection":false}},
+             "powerPointLive":{"rootAutomationId":"user-root"}}
+            """);
+
+        var config = Program.LoadConfig(bundled, user);
+
+        Assert.Equal("bundled-mic", config.Controls["mute"].AutomationId);
+        Assert.Equal("^user-on$", config.Controls["mute"].ActivePattern);
+        Assert.Equal("^bundled-off$", config.Controls["mute"].InactivePattern);
+        Assert.False(config.Controls["mute"].StateFromSelection);
+        Assert.Equal(Defaults.Config().Controls["camera"].AutomationId, config.Controls["camera"].AutomationId);
+        Assert.Equal("user-root", config.PowerPointLive.RootAutomationId);
+        Assert.Equal("bundled-toolbar", config.PowerPointLive.ToolbarAutomationId);
+        Assert.Equal(bundledJson, File.ReadAllText(bundled));
+    }
+
+    [Fact]
+    public void A_missing_user_file_keeps_the_bundled_selectors()
+    {
+        var bundled = WriteTemp("""{"controls":{"mute":{"automationId":"bundled-mic"}}}""");
+
+        var config = Program.LoadConfig(bundled, Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
+
+        Assert.Equal("bundled-mic", config.Controls["mute"].AutomationId);
+    }
+
+    [Theory]
+    [InlineData("{broken")]
+    [InlineData("[]")]
+    [InlineData("null")]
+    public void Malformed_user_files_keep_the_bundled_configuration(string json)
+    {
+        var bundled = WriteTemp("""{"controls":{"mute":{"automationId":"bundled-mic","activePattern":"^bundled-on$"}}}""");
+
+        var config = Program.LoadConfig(bundled, WriteTemp(json));
+
+        Assert.Equal("bundled-mic", config.Controls["mute"].AutomationId);
+        Assert.Equal("^bundled-on$", config.Controls["mute"].ActivePattern);
+    }
+
+    [Fact]
+    public void A_broken_user_pattern_keeps_the_bundled_control_and_applies_valid_neighbors()
+    {
+        var bundled = WriteTemp("""{"controls":{"mute":{"automationId":"bundled-mic","activePattern":"^bundled-on$"}}}""");
+        var user = WriteTemp("""{"controls":{"mute":{"activePattern":"["},"camera":{"automationId":"user-camera"}}}""");
+
+        var config = Program.LoadConfig(bundled, user);
+
+        Assert.Equal("bundled-mic", config.Controls["mute"].AutomationId);
+        Assert.Equal("^bundled-on$", config.Controls["mute"].ActivePattern);
+        Assert.Equal("user-camera", config.Controls["camera"].AutomationId);
+    }
+
+    [Fact]
+    public void Wrongly_typed_user_values_keep_working_fields_without_discarding_valid_changes()
+    {
+        var bundled = WriteTemp("""{"controls":{"mute":{"automationId":"bundled-mic","activePattern":"^bundled-on$"}}}""");
+        var user = WriteTemp("""{"controls":{"mute":{"activePattern":false},"camera":{"automationId":"user-camera"}}}""");
+
+        var config = Program.LoadConfig(bundled, user);
+
+        Assert.Equal("^bundled-on$", config.Controls["mute"].ActivePattern);
+        Assert.Equal("user-camera", config.Controls["camera"].AutomationId);
+    }
+
+    [Fact]
+    public void Partial_user_controls_inherit_built_in_fields_when_no_bundled_file_exists()
+    {
+        var user = WriteTemp("""{"controls":{"camera":{"activePattern":"^custom-camera-on$"}}}""");
+
+        var config = Program.LoadConfig(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")), user);
+
+        Assert.Equal(Defaults.Config().Controls["camera"].AutomationId, config.Controls["camera"].AutomationId);
+        Assert.Equal(Defaults.Config().Controls["camera"].InactivePattern, config.Controls["camera"].InactivePattern);
+        Assert.Equal("^custom-camera-on$", config.Controls["camera"].ActivePattern);
+    }
+
+    [Theory]
+    [InlineData("mute", "Unmute mic", true)]
+    [InlineData("mute", "Mute mic", false)]
+    [InlineData("mute", "Mikrofon wieder aktivieren", true)]
+    [InlineData("mute", "Mikrofon stummschalten", false)]
+    [InlineData("camera", "Turn camera off", true)]
+    [InlineData("camera", "Turn camera on", false)]
+    [InlineData("camera", "Kamera ausschalten", true)]
+    [InlineData("camera", "Kamera aktivieren", false)]
+    [InlineData("share", "Stop sharing", true)]
+    [InlineData("share", "Share", false)]
+    [InlineData("share", "Teilen beenden", true)]
+    [InlineData("share", "Teilen", false)]
+    public void English_and_German_state_patterns_match_exactly_one_state(string target, string label, bool active)
+    {
+        var path = Path.Combine(FindRepoRoot(), "com.bad-duck.teamscontrol.sdPlugin", "selectors.json");
+        var spec = Program.LoadConfig(path).Controls[target];
+
+        Assert.Equal(active, spec.ActiveRegex!.IsMatch(label));
+        Assert.Equal(!active, spec.InactiveRegex!.IsMatch(label));
+    }
+
+    [Fact]
     public void The_meeting_probe_and_full_toolbar_ids_can_be_overridden()
     {
         var path = WriteTemp("""
