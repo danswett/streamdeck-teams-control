@@ -35,6 +35,7 @@ const CONTROLS: Record<string, string> = {
 	// over in the action list or on the deck.
 	cameraSelect: "video_usb_28_filled",
 	cameraSwap: "video_multiple_28_filled",
+	directMode: "flash_28_filled",
 	hand: "hand_right_28_filled",
 	// Teams calls this "background effects"; the plain blur glyph reads poorly
 	// at key size.

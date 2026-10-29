@@ -7,6 +7,19 @@
  * or a live Teams meeting.
  */
 
+export type DirectModeSettings = { enabled: boolean; port: number };
+export type DirectModeStatus = DirectModeSettings & { usable: boolean; reason: string };
+export const DEFAULT_DIRECT_MODE: DirectModeSettings = { enabled: false, port: 9457 };
+
+export function readDirectModeSettings(settings: Record<string, unknown>): DirectModeSettings {
+	const enabled = settings["directModeEnabled"] === undefined ? false : settings["directModeEnabled"];
+	const port = settings["directModePort"] === undefined ? 9457 : settings["directModePort"];
+	if (typeof enabled !== "boolean" || typeof port !== "number" ||
+		!Number.isInteger(port) || port < 1 || port > 65535)
+		throw new Error("Direct mode requires an enabled boolean and a port between 1 and 65535");
+	return { enabled, port };
+}
+
 /** Snapshot of Teams as reported by the sidecar. */
 export type TeamsState = {
 	teamsRunning: boolean;

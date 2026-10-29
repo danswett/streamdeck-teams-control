@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Direct Mode settings</title>
+		<link rel="stylesheet" href="inspector.css" />
+		<script src="sdpi-components.js"></script>
+	</head>
+	<body>
+		<p class="hint" id="action-description"></p>
+		<sdpi-item label="Debugging port">
+			<input id="port" type="number" min="1" max="65535" step="1" value="9457" required aria-label="Teams debugging port" />
+		</sdpi-item>
+		<sdpi-item>
+			<sdpi-button id="save">Save shared port</sdpi-button>
+		</sdpi-item>
+		<sdpi-item>
+			<sdpi-button id="toggle">Toggle Direct mode</sdpi-button>
+		</sdpi-item>
+		<sdpi-item>
+			<sdpi-button id="refresh">Refresh status</sdpi-button>
+		</sdpi-item>
+		<p class="hint" id="status" role="status"></p>
+		<p class="hint" id="error" role="alert"></p>
+		<p class="hint">
+			Windows only. Enabled state and port are shared across this plugin and
+			saved by Stream Deck. Changes apply immediately; no Stream Deck restart
+			or file editing is needed. The port must match the one you opened for Teams.
+			Disabling this toggle does not close that port.
+			<a href="https://github.com/danswett/streamdeck-teams-control/blob/main/docs/direct-mode.md" id="guide">Read the Direct mode guide</a>
+			before enabling: the debugging port is unauthenticated and allows local
+			programs to read or control your Teams session.
+		</p>
+		<script src="action-descriptions.js"></script>
+		<script>
+			const client = SDPIComponents.streamDeckClient;
+			const port = document.getElementById("port");
+			let editing = false;
+			async function send(payload) {
+				try {
+					await client.send("sendToPlugin", payload);
+				} catch (error) {
+					document.getElementById("error").textContent = `Could not contact the plugin: ${String(error)}`;
+				}
+			}
+			port.addEventListener("input", () => { editing = true; });
+			document.getElementById("save").addEventListener("click", () => {
+				if (!port.reportValidity() || !port.value.trim()) return;
+				editing = false;
+				send({ event: "direct-mode-port", port: Number(port.value) });
+			});
+			document.getElementById("toggle").addEventListener("click", () => send({ event: "direct-mode-toggle" }));
+			document.getElementById("refresh").addEventListener("click", () => send({ event: "direct-mode-status" }));
+			document.getElementById("guide").addEventListener("click", async (event) => {
+				event.preventDefault();
+				try {
+					await client.send("openUrl", { url: event.currentTarget.href });
+				} catch (error) {
+					document.getElementById("error").textContent = `Could not open the guide: ${String(error)}`;
+				}
+			});
+			client.sendToPropertyInspector.subscribe(({ payload }) => {
+				if (payload?.event !== "direct-mode-status") return;
+				if (!editing) port.value = String(payload.port);
+				const state = !payload.supported ? "Unavailable on this platform" :
+					!payload.enabled ? "Off" : payload.usable ? "Active" : "Enabled but unavailable";
+				document.getElementById("status").textContent = `${state}: ${payload.reason}`;
+				document.getElementById("error").textContent = payload.error || "";
+				document.getElementById("toggle").textContent = payload.enabled ? "Disable Direct mode" : "Enable Direct mode";
+				for (const id of ["save", "toggle", "refresh"])
+					document.getElementById(id).disabled = payload.busy || !payload.supported;
+			});
+			client.getConnectionInfo().then(({ actionInfo }) => {
+				const text = globalThis.ACTION_DESCRIPTIONS?.[actionInfo?.action];
+				if (text) document.getElementById("action-description").textContent = text;
+				send({ event: "direct-mode-status" });
+			});
+		</script>
+	</body>
+</html>

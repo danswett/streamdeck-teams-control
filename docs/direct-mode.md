@@ -106,22 +106,34 @@ means the setting did not reach Teams — see [Troubleshooting](#troubleshooting
 
 ### 4. Enable it in the plugin
 
-Add the block to `selectors.json`, using the same port:
+Drag **Direct Mode** from the plugin's action list onto a key. In that key's
+settings, set **Debugging port** to the port you opened for Teams (9457 by
+default), then click **Save shared port**. The settings pane also links to this
+guide.
 
-```json
-{
-	"directMode": {
-		"enabled": true,
-		"port": 9457
-	}
-}
-```
+Press the key, or click **Enable Direct mode** in its settings pane.
 
-`selectors.json` sits next to the plugin. Anything you put there is merged over
-the built-in defaults, so this block on its own is a complete file.
+The key shows:
 
-Restart the plugin. The sidecar writes one line to its log when the path goes
-live:
+| Label | Meaning |
+|---|---|
+| **OFF** | The plugin will not use Direct mode |
+| **WAITING** | Enabled, but the Teams Direct connection is not usable |
+| **ACTIVE** | Enabled and connected to a usable Teams meeting target |
+
+The settings pane shows the reason for an unavailable connection. Status
+refreshes periodically while enabled; **Refresh status** checks immediately.
+When Direct mode is unavailable, controls use the normal UI Automation path.
+
+Enabled state and port are **plugin-wide**: every Direct Mode key stays in sync.
+Stream Deck saves them in the plugin's global settings and restores them after
+restart or update. Direct mode is off until you enable it. Separately named
+preview plugins have their own settings; enabling a preview does not enable
+production.
+
+The toggle only controls whether the plugin uses an already-open debugging
+port. It never opens or closes that port. The sidecar writes a log line when
+the path goes live in a meeting:
 
 ```
 direct mode active on port 9457 (deck shared: true)
@@ -131,8 +143,11 @@ direct mode active on port 9457 (deck shared: true)
 
 ## Turning it off
 
-Either drop `"enabled": false` into `selectors.json` — which stops the plugin
-using the port but **leaves the port open** — or close the port properly:
+Press an enabled **Direct Mode** key, or click **Disable Direct mode** in its
+settings pane. Subsequent controls use UI Automation without a Stream Deck
+restart. This **leaves the debugging port open**.
+
+To close the port as well:
 
 ```powershell
 [Environment]::SetEnvironmentVariable('WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS',$null,'User')
@@ -172,8 +187,15 @@ Teams may have been started before that and still hold the old environment. Sign
 out and back in.
 
 **Something looks wrong and I want to rule this out.**
-Set `"enabled": false` and restart the plugin. Every control returns to the
-normal path. If the problem persists, Direct mode was not the cause.
+Disable the **Direct Mode** toggle. Subsequent controls use the normal path.
+If the problem persists, Direct mode was not the cause.
+
+**The key stays on WAITING.**
+Read the status in the key's settings pane. Confirm its saved port matches
+Teams, then click **Refresh status**. The toggle can be enabled before Teams
+starts or before joining a meeting; it becomes active when a usable meeting
+target is available. If settings cannot be saved or applied, the pane shows
+the error and a key press shows an alert.
 
 ---
 

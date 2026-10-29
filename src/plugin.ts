@@ -48,6 +48,8 @@ import {
 	TimerDialAction
 } from "./actions/dials";
 import { profileSwitcher } from "./profiles";
+import { DirectModeAction } from "./actions/direct-mode";
+import { directModeControl } from "./direct-mode";
 
 streamDeck.logger.setLevel("info");
 
@@ -66,6 +68,7 @@ streamDeck.actions.registerAction(new ShareAction());
 streamDeck.actions.registerAction(new ChatAction());
 streamDeck.actions.registerAction(new PeopleAction());
 streamDeck.actions.registerAction(new LeaveAction());
+streamDeck.actions.registerAction(new DirectModeAction());
 
 // PowerPoint Live. These dim themselves whenever no deck is being presented.
 streamDeck.actions.registerAction(new PptPrevAction());
@@ -99,8 +102,9 @@ streamDeck.actions.registerAction(new SlideCurrentDialAction());
 streamDeck.actions.registerAction(new SlideNextDialAction());
 streamDeck.actions.registerAction(new TimerDialAction());
 
-bridge.start();
 profileSwitcher.start();
 
 // Connect last, once every action is registered.
 await streamDeck.connect();
+void directModeControl.start();
+bridge.start();
