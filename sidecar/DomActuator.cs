@@ -33,9 +33,8 @@ internal sealed record DomOutcome(bool Handled, bool Ok, string? Error)
 /// 2. It works with the window minimized. A posted click needs on-screen
 ///    bounds, and the UIA fallback for that case activates the Teams window.
 ///
-/// Everything here is best-effort. Any failure returns and the caller runs the
-/// UI Automation path, so Direct mode can never make a control less reliable
-/// than it was — at worst a press costs one wasted round trip on loopback.
+/// Unsupported operations decline to UI Automation. Camera operations only
+/// fall back when no uncertain write could be repeated or undone.
 /// </summary>
 internal sealed class DomActuator
 {
@@ -252,6 +251,24 @@ internal sealed class DomActuator
     /// </summary>
     private CdpTarget? TargetFor(bool slideShowSurface) =>
         slideShowSurface ? _slideShow : _meetingPage;
+
+    internal CameraDom.Result? SelectCamera(ControlSpec spec, string? arg, bool swap,
+        CameraVideoSettingsSpec? videoSettings = null)
+    {
+        var timeoutMs = CameraDom.OperationTimeoutMs(arg, _spec.TimeoutMs);
+        var script = CameraDom.BuildScript(spec, arg, swap, timeoutMs, videoSettings);
+        if (script is null || !IsUsable || _meetingPage is null) return null;
+
+        // The minimized mini-meeting passes the generic microphone probe but
+        // has no camera picker. Keep this search local to the camera action.
+        var probe = $"JSON.stringify({{found: !!document.getElementById({Js(spec.Menu)})}})";
+        var page = CameraDom.FindPage(_meetingPage,
+            () => Cdp.ListTargets(_spec.Port, Math.Min(_spec.TimeoutMs, 1500)),
+            candidate => Cdp.Evaluate(candidate, probe, Math.Min(_spec.TimeoutMs, 1500)),
+            MaxPagesToProbe);
+        if (page is null) return null;
+        return CameraDom.Interpret(Cdp.Evaluate(page, script, timeoutMs));
+    }
 
     /// <summary>
     /// Presses a control without showing its flyout.

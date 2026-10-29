@@ -25,6 +25,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TeamsBridge.csproj" />
+    <None Update="camera-dom-harness.cjs" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="camera-preferences-dom-harness.cjs" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -4,6 +4,59 @@ namespace TeamsBridge.Tests;
 
 public class CameraTests
 {
+    [Fact]
+    public void Existing_camera_arguments_leave_all_preferences_unchanged()
+    {
+        Assert.Equal(new CameraChoice("one", new()), Assert.Single(CameraArguments.Parse("one", false)!));
+        Assert.Equal(new[] { new CameraChoice("one", new()), new CameraChoice("two", new()) },
+            CameraArguments.Parse("[\"one\",\"two\"]", true));
+    }
+
+    [Fact]
+    public void Swap_preferences_stay_with_their_camera()
+    {
+        var choices = CameraArguments.Parse("""
+            {"cameras":[
+                {"id":"one","mirror":"on","softFocus":"off","brightness":"on"},
+                {"id":"two","mirror":"off","softFocus":"on","brightness":"off"}
+            ]}
+            """, true);
+        Assert.Equal(new[] {
+            new CameraChoice("one", new(true, false, true)),
+            new CameraChoice("two", new(false, true, false))
+        }, choices);
+    }
+
+    [Fact]
+    public void Omitted_and_unchanged_preferences_do_not_override_Teams()
+    {
+        var choice = Assert.Single(CameraArguments.Parse("""
+            {"cameras":[{"id":"one","mirror":"unchanged","brightness":"off"}]}
+            """, false)!);
+        Assert.Equal(new CameraPreferences(null, null, false), choice.Preferences);
+    }
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("{", false)]
+    [InlineData("{}", false)]
+    [InlineData("{\"cameras\":null}", false)]
+    [InlineData("{\"cameras\":[]}", false)]
+    [InlineData("{\"cameras\":[{}]}", false)]
+    [InlineData("{\"cameras\":[{\"id\":\" \"}]}", false)]
+    [InlineData("{\"cameras\":[{\"id\":1}]}", false)]
+    [InlineData("{\"cameras\":[{\"id\":\"one\",\"mirror\":true}]}", false)]
+    [InlineData("{\"cameras\":[{\"id\":\"one\",\"softFocus\":null}]}", false)]
+    [InlineData("{\"cameras\":[{\"id\":\"one\",\"brightness\":\"invalid\"}]}", false)]
+    [InlineData("{\"cameras\":[{\"id\":\"one\"}]}", true)]
+    [InlineData("{\"cameras\":[{\"id\":\"one\"},{\"id\":\"two\"}]}", false)]
+    [InlineData("{\"cameras\":[{\"id\":\"one\"},{\"id\":\"ONE\"}]}", true)]
+    public void Invalid_preferences_or_camera_pairs_are_rejected_before_switching(string? arg, bool swap)
+    {
+        Assert.Null(CameraArguments.Parse(arg, swap));
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

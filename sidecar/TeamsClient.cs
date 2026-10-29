@@ -49,6 +49,9 @@ public sealed class ControlSpec
 
     public string? MenuItemAutomationId { get; set; }
 
+    /// <summary>Direct-mode list container's data-tid; scopes camera IDs to the camera picker.</summary>
+    public string? MenuItemContainerDataTid { get; set; }
+
     /// <summary>
     /// Id the same menu item takes in its opposite state, for entries Teams
     /// swaps rather than checks. "Hide presenter view" is replaced outright by
@@ -164,6 +167,8 @@ public sealed class ControlSpec
     /// </summary>
     public string? Validate()
     {
+        if (MenuItemContainerDataTid is not null && string.IsNullOrWhiteSpace(MenuItemContainerDataTid))
+            return "menuItemContainerDataTid must not be blank";
         foreach (var (label, pattern) in new[]
                  {
                      ("activePattern", ActivePattern),
@@ -207,6 +212,8 @@ public sealed class SelectorConfig
     /// published inside an accessible name.
     /// </summary>
     public TimerSpec Timer { get; set; } = new();
+
+    public CameraVideoSettingsSpec CameraVideoSettings { get; set; } = new();
 
     /// <summary>
     /// The opt-in JavaScript path. Off by default, and never switched on by the
@@ -438,7 +445,7 @@ public sealed class PowerPointLiveSpec
 /// UIA invokes the control directly, so Teams does not need focus and no
 /// synthetic keystrokes are sent.
 /// </summary>
-public sealed class TeamsClient : IDisposable
+public sealed partial class TeamsClient : IDisposable
 {
     private const uint WM_GETOBJECT = 0x003D;
     private static readonly IntPtr OBJID_CLIENT = new(-4);
@@ -3560,7 +3567,11 @@ public sealed class TeamsClient : IDisposable
         // The timer has no ids to find anything by, and ink colour is read back
         // out of a flyout the UIA path already knows how to drive. Neither is
         // worth a second implementation yet.
-        if (timer || ink || target is "camera-select" or "camera-swap") return null;
+        if (timer || ink) return null;
+
+        if (target is "camera-select" or "camera-swap")
+            return TryDirectCamera(() => spec is null ? null :
+                _dom.SelectCamera(spec, arg, target == "camera-swap", _config.CameraVideoSettings));
 
         try
         {
@@ -3594,6 +3605,24 @@ public sealed class TeamsClient : IDisposable
             Console.Error.WriteLine(
                 $"direct mode could not press '{target}': {outcome.Error}; falling back to UI Automation");
             return null;
+        }
+    }
+
+    internal static (bool ok, string? error)? TryDirectCamera(Func<CameraDom.Result?> selectCamera)
+    {
+        try
+        {
+            var camera = selectCamera();
+            if (camera is null) return null;
+            if (camera.Ok) return (true, null);
+            Console.Error.WriteLine($"direct camera selection failed: {camera.Error}");
+            return camera.SafeToFallback ? null : (false, camera.Error);
+        }
+        catch (Exception ex)
+        {
+            // A disconnected debugger does not cancel JavaScript already running.
+            Console.Error.WriteLine($"direct camera selection threw: {ex.Message}");
+            return (false, "Direct camera selection failed; webcam selection may already have changed");
         }
     }
 
@@ -4048,10 +4077,12 @@ public sealed class TeamsClient : IDisposable
     private (bool ok, string? error) InvokeCore(string target, ControlSpec spec, string? arg = null)
     {
         var swap = target == "camera-swap";
-        var cameraPair = swap ? Cameras.ParseSwap(arg) : null;
-        if (swap && cameraPair is null)
-            return (false, "choose two different webcams in this button's settings");
-        if (cameraPair is not null) arg = cameraPair[0];
+        var cameraChoices = target is "camera-select" or "camera-swap" ? CameraArguments.Parse(arg, swap) : null;
+        if (target is "camera-select" or "camera-swap" && cameraChoices is null)
+            return (false, "choose valid webcams and video preferences in this button's settings");
+        var cameraPair = swap ? cameraChoices!.Select(camera => camera.Id).ToArray() : null;
+        var cameraChoice = cameraChoices?[0];
+        if (cameraChoice is not null) arg = cameraChoice.Id;
 
         var win = ResolveMeetingWindow();
         if (win is null)
@@ -4069,6 +4100,15 @@ public sealed class TeamsClient : IDisposable
             win = ResolveMeetingWindow();
         }
         if (win is null) return (false, "not in a meeting");
+
+        string? originalVideoTab = null;
+        if (cameraChoices?.Any(camera => camera.Preferences.Mirror.HasValue) == true &&
+            FindById(win, _config.CameraVideoSettings.PaneTabsAutomationId) is { } videoTabs)
+        {
+            originalVideoTab = SelectedVideoSettingsTab(videoTabs);
+            if (originalVideoTab is null)
+                return (false, "Teams did not expose the selected video settings tab");
+        }
 
         // A control that is already on may close from somewhere else entirely —
         // grid view opens from the slide toolbar and closes from a button inside
@@ -4174,6 +4214,7 @@ public sealed class TeamsClient : IDisposable
         stages.Mark("open");
 
         AutomationElement? item = null;
+        var cameraPaneUsed = false;
         try
         {
             // A nested menu has to be opened before its items exist. Opened the
@@ -4230,7 +4271,11 @@ public sealed class TeamsClient : IDisposable
                     return (false, "Teams did not expose webcam selection");
                 // Read Teams, not the previous press: manual changes and other
                 // camera buttons must not put this toggle out of sync.
-                if (firstSelection == true) item = second;
+                if (firstSelection == true)
+                {
+                    item = second;
+                    cameraChoice = cameraChoices![1];
+                }
             }
 
             // A checkbox inside a flyout can only be read while the flyout is
@@ -4265,15 +4310,18 @@ public sealed class TeamsClient : IDisposable
             {
                 var selection = IsSelected(item);
                 if (selection is null) return (false, "Teams did not expose webcam selection");
-                if (selection == true) return (true, null);
-                if (!Press(item)) return (false, "could not select the configured webcam");
-                var deadline = Environment.TickCount64 + 1500;
-                do
+                if (selection != true)
                 {
-                    if (IsSelected(item) == true) return (true, null);
-                    Thread.Sleep(PopupScanIntervalMs);
-                } while (Environment.TickCount64 < deadline);
-                return (false, "Teams did not confirm the webcam selection");
+                    if (!Press(item)) return (false, "could not select the configured webcam");
+                    var deadline = Environment.TickCount64 + 1500;
+                    while (IsSelected(item) != true)
+                    {
+                        if (Environment.TickCount64 >= deadline)
+                            return (false, "Teams did not confirm the webcam selection");
+                        Thread.Sleep(PopupScanIntervalMs);
+                    }
+                }
+                return ApplyCameraPreferences(win, spec.Menu!, cameraChoice!.Preferences, originalVideoTab, out cameraPaneUsed);
             }
 
             if (!Press(item)) return (false, $"could not invoke item for '{target}'");
@@ -4302,6 +4350,9 @@ public sealed class TeamsClient : IDisposable
             var anchor = item;
             DeferCleanup(() =>
             {
+                // Navigating to the settings pane dismisses the flyout. Its
+                // own cleanup must not be followed by a click into the meeting.
+                if (cameraPaneUsed) return;
                 // Two problems, one fix. The flyout does not reliably close on
                 // its own, and after a selection Teams swallows the next click
                 // on that menu button. A click on inert space dismisses the

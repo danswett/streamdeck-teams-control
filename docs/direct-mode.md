@@ -27,14 +27,18 @@ styled invisible, so nothing appears on screen at all.
 | | Normal | Direct mode |
 |---|---|---|
 | Reactions, blur, PPT Live menus | flyout visible, up to a few seconds | nothing visible, ~240 ms |
+| Camera selection/swap and preferences | camera flyout and, for mirror, video-settings pane | hidden navigation with confirmed single writes |
 | Ink colour | palette visible | nothing visible |
 | Jump to a slide | needs grid view open | jumps with nothing on screen |
 | Teams minimized | falls back to UIA `Invoke`, which raises the window | works, window stays down |
 | Everything else | unchanged | unchanged |
 
-Direct mode is only ever used where it is better. Anything it cannot improve —
-or cannot do at all — silently uses the normal path, so **the worst case is the
-behaviour you already have**.
+Unsupported controls and an unavailable Direct connection use the normal path.
+Camera operations fall back only when it is confirmed safe to do so. An
+uncertain device or preference write is reported as an error rather than
+repeated: retrying a swap could silently undo the first switch. A later
+preference or cleanup failure can occur after the camera or earlier preferences
+have already changed.
 
 ---
 
