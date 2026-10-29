@@ -9,6 +9,9 @@
  * tests/marketplace.test.ts fails on either.
  */
 globalThis.ACTION_DESCRIPTIONS = {
+	"com.bad-duck.teamscontrol.direct-mode":
+		"Enables or disables Direct mode for every control in this plugin, without restarting Stream Deck. OFF means disabled; WAITING means enabled but unavailable; ACTIVE means the Teams Direct connection is usable. The port is shared by all Direct Mode keys. This button never opens or closes Teams' debugging port.",
+
 	"com.bad-duck.teamscontrol.mute":
 		"Mutes and unmutes your microphone. The key follows the live state, so it stays correct when you mute in Teams itself, from a keyboard shortcut, or on a headset.",
 

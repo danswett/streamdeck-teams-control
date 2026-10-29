@@ -1012,6 +1012,7 @@ It speaks line-delimited JSON:
 |---|---|
 | `--selectors <path>` | load a selector override file |
 | `--user-selectors <path>` | override the Windows per-user selector-file location |
+| `--direct-mode-managed` | start with Direct mode off until the plugin supplies its saved settings |
 | `--poll <ms>` | override the in-meeting backstop interval |
 | `--no-events` | disable UIA subscriptions and poll only |
 | `--debug-events` | log every subscription and event to stderr |

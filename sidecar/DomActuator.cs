@@ -70,6 +70,17 @@ internal sealed class DomActuator
 
     public DirectModeStatus Status => _status;
 
+    public void Configure(bool enabled, int port)
+    {
+        if (port is < 1 or > 65535) throw new ArgumentOutOfRangeException(nameof(port));
+        _spec.Enabled = enabled;
+        _spec.Port = port;
+        _meetingPage = null;
+        _slideShow = null;
+        _probedUntil = 0;
+        _status = DirectModeStatus.Off(enabled ? "not probed yet" : "not enabled");
+    }
+
     /// <summary>
     /// Whether a press may use the Direct path right now. Re-probes on a short
     /// TTL because Teams recreates its targets on navigation, and the slideshow

@@ -1,7 +1,7 @@
 /**
  * Groups the actions in manifest.json so the Stream Deck action list reads in a
  * sensible order: the meeting controls, then PowerPoint Live keys that work in
- * either role, then attendee-only, then presenter-only.
+ * either role, then attendee-only, then presenter-only, then Direct Mode.
  *
  * Stream Deck lists actions in manifest order, so this is the only lever. Order
  * within each group is preserved, which keeps navigation before tools.
@@ -19,6 +19,7 @@ type Action = { Name: string; UUID: string };
 
 /** Lower sorts first. Anything unrecognized keeps its place ahead of the PPT keys. */
 function group(name: string): number {
+	if (name === "Direct Mode") return 4;
 	if (name.startsWith("PPT Live:")) return 1;
 	if (name.startsWith("PPT Attendee:")) return 2;
 	if (name.startsWith("PPT Presenter:")) return 3;
