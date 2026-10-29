@@ -39,11 +39,13 @@ public static class Defaults
             ["camera-select"] = new()
             {
                 Menu = "video-button-configure",
+                MenuItemContainerDataTid = "camera-settings",
                 MenuItemAutomationId = "{arg}"
             },
             ["camera-swap"] = new()
             {
                 Menu = "video-button-configure",
+                MenuItemContainerDataTid = "camera-settings",
                 MenuItemAutomationId = "{arg}"
             },
             ["leave"] = new() { AutomationId = "hangup-button" },
