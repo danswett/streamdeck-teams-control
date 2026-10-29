@@ -8,7 +8,7 @@ import { renderDirectMode } from "../src/icons";
 const root = path.resolve(__dirname, "..", "com.bad-duck.teamscontrol.sdPlugin");
 const html = readFileSync(path.join(root, "ui", "direct-mode.html"), "utf8");
 
-async function inspector() {
+async function inspector(markup = html) {
 	type Handler = (event: { preventDefault: () => void; currentTarget: { href: string } }) => void | Promise<void>;
 	const elements = new Map<string, {
 		value: string; textContent: string; disabled: boolean; href: string;
@@ -33,7 +33,7 @@ async function inspector() {
 			getConnectionInfo: async () => ({ actionInfo: { action: "com.bad-duck.teamscontrol.direct-mode" } })
 		} }
 	};
-	const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].at(-1)?.[1];
+	const script = [...markup.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi)].at(-1)?.[1];
 	if (!script) throw new Error("Missing inspector script");
 	vm.runInNewContext(script, sandbox);
 	await Promise.resolve();
@@ -56,8 +56,13 @@ async function inspector() {
 }
 
 describe("Direct Mode property inspector", () => {
-	it("saves the specified shared port and toggles through plugin messages", async () => {
-		const ui = await inspector();
+	it.each([
+		["original", html],
+		["mixed-case tags with attributes", html
+			.replaceAll("<script>", '<ScRiPt type="text/javascript">')
+			.replaceAll("</script>", "</sCrIpT >")]
+	])("saves the shared port and toggles through plugin messages with %s HTML", async (_name, markup) => {
+		const ui = await inspector(markup);
 		ui.edit("12345");
 		await ui.click("save");
 		expect(ui.send).toHaveBeenLastCalledWith("sendToPlugin", { event: "direct-mode-port", port: 12345 });
