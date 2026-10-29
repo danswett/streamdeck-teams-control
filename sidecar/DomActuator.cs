@@ -255,7 +255,8 @@ internal sealed class DomActuator
     internal CameraDom.Result? SelectCamera(ControlSpec spec, string? arg, bool swap,
         CameraVideoSettingsSpec? videoSettings = null)
     {
-        var script = CameraDom.BuildScript(spec, arg, swap, _spec.TimeoutMs, videoSettings);
+        var timeoutMs = CameraDom.OperationTimeoutMs(arg, _spec.TimeoutMs);
+        var script = CameraDom.BuildScript(spec, arg, swap, timeoutMs, videoSettings);
         if (script is null || !IsUsable || _meetingPage is null) return null;
 
         // The minimized mini-meeting passes the generic microphone probe but
@@ -266,7 +267,7 @@ internal sealed class DomActuator
             candidate => Cdp.Evaluate(candidate, probe, Math.Min(_spec.TimeoutMs, 1500)),
             MaxPagesToProbe);
         if (page is null) return null;
-        return CameraDom.Interpret(Cdp.Evaluate(page, script, _spec.TimeoutMs));
+        return CameraDom.Interpret(Cdp.Evaluate(page, script, timeoutMs));
     }
 
     /// <summary>

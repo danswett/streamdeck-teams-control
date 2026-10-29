@@ -6,6 +6,10 @@ internal static class CameraDom
 {
     internal sealed record Result(bool Ok, bool SafeToFallback, string? Error);
 
+    // Preference envelopes can navigate a settings pane as well as select a device.
+    internal static int OperationTimeoutMs(string? arg, int configuredTimeoutMs) =>
+        arg?.TrimStart().StartsWith('{') == true ? Math.Max(configuredTimeoutMs, 10_000) : configuredTimeoutMs;
+
     internal static CdpTarget? FindPage(CdpTarget preferred,
         Func<IReadOnlyList<CdpTarget>?> listPages, Func<CdpTarget, CdpResult> probe, int maxPages)
     {

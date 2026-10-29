@@ -4,6 +4,17 @@ namespace TeamsBridge.Tests;
 
 public class CameraDomPreferenceTests
 {
+    [Fact]
+    public async Task Preferences_allow_a_slow_settings_pane_without_exhausting_the_single_click_budget()
+    {
+        const string arg = """{"cameras":[{"id":"one","mirror":"on","softFocus":"off","brightness":"on"}]}""";
+        var timeoutMs = CameraDom.OperationTimeoutMs(arg, 2500);
+        var script = CameraDom.BuildScript(Defaults.Config().Controls["camera-select"],
+            arg, false, timeoutMs);
+        Assert.NotNull(script);
+        await CameraDomTests.RunScript(script, "slow-pane", "camera-preferences-dom-harness.cjs");
+    }
+
     [Theory]
     [InlineData("select")]
     [InlineData("camera-noop")]

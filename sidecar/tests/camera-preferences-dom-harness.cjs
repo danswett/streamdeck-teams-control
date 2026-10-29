@@ -66,7 +66,7 @@ async function main() {
                 assert.equal(selected, desired, 'preferences must apply only to the selected destination');
                 assert.equal(generation, generations[name], 'must re-find the checkbox immediately before writing');
                 assert.equal(writes[name]++, 0, 'must never repeat a preference write');
-                assert.ok(clock < 1500, 'must not write after the operation deadline');
+                assert.ok(clock < (scenario === 'slow-pane' ? 9000 : 1500), 'must not write after the operation deadline');
                 if (!(trouble && scenario === 'ignored-write') &&
                     !(name === 'Mirror my video' && scenario === 'mirror-ignored-write')) values[name] = !checked;
                 if (trouble && scenario === 'throw-write') throw Error('uncertain preference write');
@@ -111,6 +111,10 @@ async function main() {
         if (!originalPane) assert.match(css(), /calling-right-side-panel/, 'hide before opening the pane');
         else assert.doesNotMatch(css(), /calling-right-side-panel/, 'do not hide a user-owned pane');
         if (scenario === 'pane-open-fails') return;
+        if (scenario === 'slow-pane') {
+            schedule(() => { paneVisible = true; expanded = false; tab = 'Video effects'; }, 2600);
+            return;
+        }
         if (scenario === 'late-pane') {
             schedule(() => { paneVisible = true; expanded = false; }, 1600 - clock);
             return;
