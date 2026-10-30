@@ -130,6 +130,23 @@ function showLayout(device: string, profile?: string): void {
 	}
 }
 
+function addExtraControl(): VisibleAction {
+	const placed = [...mocks.visible.values()].filter((action) => action.device.id === "deck");
+	const coordinates = Array.from({ length: 15 }, (_, index) => ({
+		column: index % 5, row: Math.floor(index / 5)
+	})).find((position) => !placed.some((action) =>
+		action.coordinates?.column === position.column && action.coordinates.row === position.row
+	));
+	if (!coordinates) throw new Error("The fixture has no free key position");
+	const action: VisibleAction = {
+		id: `extra-${++mocks.nextId}`, device: { id: "deck" },
+		manifestId: "com.bad-duck.teamscontrol.mute", controllerType: "Keypad", coordinates
+	};
+	mocks.visible.set(action.id, action);
+	for (const fn of [...mocks.appear]) fn({ action });
+	return action;
+}
+
 async function start(): Promise<ProfileSwitcher> {
 	const switcher = new ProfileSwitcher();
 	await switcher.start();
@@ -461,6 +478,98 @@ describe("automatic profile installation policy", () => {
 		await change(presenting);
 		expect(mocks.global.pptProfilePending).toBeUndefined();
 		expect(mocks.switch).toHaveBeenCalledTimes(2);
+	});
+
+	it("does not confirm a transient match before a customized layout's extra key appears", async () => {
+		mocks.switch.mockImplementation(async (device: string, profile: string) => {
+			showLayout(device, profile);
+			setTimeout(addExtraControl, 100);
+		});
+		await start();
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(mocks.global.pptProfilePending).toBeDefined();
+		await change(presenting);
+		await vi.advanceTimersByTimeAsync(10_000);
+		expect(mocks.switch).toHaveBeenCalledOnce();
+	});
+
+	it("revalidates the settled layout after the asynchronous settings read, before clearing the guard", async () => {
+		let release: () => void = () => {};
+		const wait = new Promise<void>((resolve) => { release = resolve; });
+		const get = mocks.get.getMockImplementation()!;
+		let reads = 0;
+		mocks.get.mockImplementation(async () => {
+			if (++reads === 3) await wait;
+			return get();
+		});
+		await start();
+		await vi.advanceTimersByTimeAsync(500);
+		addExtraControl();
+		release();
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(mocks.global.pptProfilePending).toBeDefined();
+		await change(presenting);
+		expect(mocks.switch).toHaveBeenCalledOnce();
+	});
+
+	it("does not clear the guard if the layout changed and rematched during the settings read", async () => {
+		let release: () => void = () => {};
+		const wait = new Promise<void>((resolve) => { release = resolve; });
+		const get = mocks.get.getMockImplementation()!;
+		let reads = 0;
+		mocks.get.mockImplementation(async () => {
+			if (++reads === 3) await wait;
+			return get();
+		});
+		await start();
+		await vi.advanceTimersByTimeAsync(500);
+		const extra = addExtraControl();
+		await vi.advanceTimersByTimeAsync(100);
+		mocks.visible.delete(extra.id);
+		for (const fn of [...mocks.disappear]) fn({ action: extra });
+		release();
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(mocks.global.pptProfilePending).toBeDefined();
+		await change(presenting);
+		expect(mocks.switch).toHaveBeenCalledOnce();
+	});
+
+	it("does not clear an expired confirmation after a delayed settings read and releases its observers", async () => {
+		let release: () => void = () => {};
+		const wait = new Promise<void>((resolve) => { release = resolve; });
+		const get = mocks.get.getMockImplementation()!;
+		let reads = 0;
+		mocks.get.mockImplementation(async () => {
+			if (++reads === 3) await wait;
+			return get();
+		});
+		await start();
+		await vi.advanceTimersByTimeAsync(9200);
+		expect(mocks.appear.size).toBe(0);
+		expect(mocks.disappear.size).toBe(0);
+		release();
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(mocks.global.pptProfilePending).toBeDefined();
+		await change(presenting);
+		expect(mocks.switch).toHaveBeenCalledOnce();
+	});
+
+	it("waits for the layout to stabilize after a temporary extra key disappears", async () => {
+		mocks.switch.mockImplementation(async (device: string, profile: string) => {
+			showLayout(device, profile);
+			setTimeout(() => {
+				const extra = addExtraControl();
+				setTimeout(() => {
+					mocks.visible.delete(extra.id);
+					for (const fn of [...mocks.disappear]) fn({ action: extra });
+				}, 100);
+			}, 100);
+		});
+		await start();
+		await vi.advanceTimersByTimeAsync(500);
+		expect(mocks.global.pptProfilePending).toBeDefined();
+		await vi.advanceTimersByTimeAsync(500);
+		expect(mocks.global.pptProfilePending).toBeUndefined();
 	});
 
 	it.each([0, 1, 2, 7, 9, 13])("recognizes complete layouts on device type %s", async (type) => {

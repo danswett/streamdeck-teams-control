@@ -204,7 +204,7 @@ for installation only when following first needs them, not when you install the
 plugin.
 
 **No automatic retries after an unconfirmed change.** If the requested layout
-does not appear within nine seconds, automatic following pauses across meetings, reconnects
+does not settle within nine seconds, automatic following pauses across meetings, reconnects
 and plugin restarts. The SDK cannot tell whether you cancelled an install,
 deleted a profile, or customized it, so the plugin does not keep retrying.
 Your existing layouts and manual controls are left alone. Close any outstanding
@@ -658,8 +658,10 @@ A few operational notes:
 - **That dialog holds Stream Deck's profile lock until it is answered**, which
   may be hours. A second switch request meanwhile is refused with `Another
   operation is already in progress`. Each named request is saved before it is
-  sent and cleared after the requested layout appears or the user explicitly
-  retries. If the layout is not seen within nine seconds, following pauses
+  sent and cleared after the requested layout has remained matching and quiet
+  for 400 ms, or the user explicitly retries. The layout is checked again after
+  reading settings, immediately before clearing the guard. If the layout does
+  not settle within nine seconds, following pauses
   across meetings and restarts until the
   user explicitly disables and re-enables it. An unrelated key appearing is not
   proof of installation. `AutoInstall: false` also prevents install-time prompts.

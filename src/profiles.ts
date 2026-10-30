@@ -325,8 +325,15 @@ export class ProfileSwitcher {
 		return visible.length === expected.length && visible.every((value, index) => value === expected[index]);
 	}
 
-	async #savePending(pending?: NonNullable<ProfileSettings["pptProfilePending"]>): Promise<void> {
+	async #savePending(
+		pending?: NonNullable<ProfileSettings["pptProfilePending"]>,
+		canConfirm?: () => boolean
+	): Promise<void> {
 		await updateGlobalSettings((settings) => {
+			// Recheck the monitored quiet window after the asynchronous read, before sending the clear.
+			if (canConfirm && !canConfirm()) {
+				throw new Error("Requested layout changed or confirmation expired before saving");
+			}
 			const next = { ...settings };
 			if (pending) next["pptProfilePending"] = pending;
 			else delete next["pptProfilePending"];
@@ -358,9 +365,8 @@ export class ProfileSwitcher {
 					return;
 				}
 				this.#owned.set(id, profile);
-				await this.#savePending();
+				await this.#savePending(undefined, observation.isStable);
 				logger.info(`${id} -> "${profile}" (${took}ms)`);
-				await new Promise<void>((resolve) => setTimeout(resolve, SETTLE_MS));
 			} finally {
 				observation.stop();
 			}
@@ -374,40 +380,70 @@ export class ProfileSwitcher {
 	}
 
 	/**
-	 * Arrival requires the requested layout, not merely any action appearing.
+	 * Arrival requires the requested layout to remain quiet and matching through settlement.
+	 * Keep monitoring through the settings write; its read can outlive that first match.
 	 * Disappearance only paces a restore; the SDK cannot identify the user's previous profile.
 	 */
 	#waitForLayout(deviceId: string, budgetMs: number, profile?: string) {
 		let stop = (): void => {};
+		let isStable = (): boolean => false;
 		const result = new Promise<number | null>((resolve) => {
 			const startedAt = Date.now();
 			let settled = false;
+			let stopped = false;
+			let changedAt = startedAt;
+			let stabilization: NodeJS.Timeout | undefined;
 
+			const dispose = (): void => {
+				if (stopped) return;
+				stopped = true;
+				clearTimeout(timer);
+				if (stabilization) clearTimeout(stabilization);
+				for (const subscription of subscriptions) subscription.dispose();
+			};
 			const finish = (value: number | null): void => {
 				if (settled) return;
 				settled = true;
-				clearTimeout(timer);
-				for (const subscription of subscriptions) subscription.dispose();
+				if (stabilization) clearTimeout(stabilization);
+				if (value === null) dispose();
 				resolve(value);
 			};
+			isStable = () => !stopped && profile !== undefined
+				&& Date.now() - changedAt >= SETTLE_MS && this.#matchesLayout(deviceId, profile);
 
 			const onEvent = (ev: { action: { device: { id: string } } }): void => {
-				if (ev.action.device.id !== deviceId) return;
+				if (stopped || ev.action.device.id !== deviceId) return;
+				changedAt = Date.now();
+				if (settled) return;
 				queueMicrotask(() => {
-					if (!settled && (profile === undefined || this.#matchesLayout(deviceId, profile))) {
+					if (settled || stopped) return;
+					if (profile === undefined) {
 						finish(Date.now() - startedAt);
+						return;
+					}
+					if (stabilization) clearTimeout(stabilization);
+					stabilization = undefined;
+					if (this.#matchesLayout(deviceId, profile)) {
+						stabilization = setTimeout(() => {
+							stabilization = undefined;
+							if (isStable()) finish(Date.now() - startedAt);
+						}, SETTLE_MS);
 					}
 				});
 			};
 
 			const subscriptions = [streamDeck.actions.onWillDisappear(onEvent)];
 			if (profile !== undefined) subscriptions.push(streamDeck.actions.onWillAppear(onEvent));
-			const timer = setTimeout(() => finish(
-				profile !== undefined && this.#matchesLayout(deviceId, profile) ? Date.now() - startedAt : null
-			), budgetMs);
-			stop = () => finish(null);
+			const timer = setTimeout(() => {
+				dispose();
+				finish(null);
+			}, budgetMs);
+			stop = () => {
+				dispose();
+				finish(null);
+			};
 		});
-		return { result, stop: () => stop() };
+		return { result, stop: () => stop(), isStable: () => isStable() };
 	}
 
 	async #restore(id: string): Promise<void> {
