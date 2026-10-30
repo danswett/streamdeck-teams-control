@@ -14,7 +14,8 @@ async function main() {
     const names = ['Black', 'Blue', 'Red'];
     const originalColor = color;
     const errors = new Set(['unknown-color', 'ignored-color', 'ignored-input', 'throw-after-write',
-        'foreign-popup', 'foreign-after-open', 'cleanup-fails', 'lock', 'unsupported-tool']);
+        'foreign-popup', 'foreign-after-open', 'foreign-batched-open', 'foreign-batched-range',
+        'cleanup-fails', 'lock', 'unsupported-tool']);
     const token = {};
     if (scenario === 'lock') window.__sdtc_ink_operation = token;
     const css = () => [...styles.values()].map(style => style.textContent).join('');
@@ -25,7 +26,19 @@ async function main() {
             if (open) assert.ok(markers.has(popup), 'hide only the identified owned popup');
         }
     };
-    const notify = () => { for (const observer of observers) observer.callback(); };
+    let deliveryQueued = false;
+    const notify = () => {
+        if (deliveryQueued) return;
+        deliveryQueued = true;
+        queueMicrotask(() => {
+            deliveryQueued = false;
+            for (const observer of observers) observer.callback();
+            if (open && !originalOpen && styles.size) {
+                assert.ok(markers.has(popup), 'the owned popup must be hidden before paint after batched mutations');
+            }
+            if (foreignOpen) assertForeignVisible();
+        });
+    };
     const assertForeignVisible = () => {
         assert.doesNotMatch(css(), /\[role="dialog"\].*opacity/, 'never hide all dialogs');
         assert.ok(!markers.has(foreign), 'never mark an unrelated user popup for suppression');
@@ -62,8 +75,14 @@ async function main() {
                 opens++;
                 open = true;
                 notify();
-                checkHidden();
                 if (scenario === 'foreign-after-open') {
+                    queueMicrotask(() => {
+                        foreignOpen = true;
+                        notify();
+                        assertForeignVisible();
+                    });
+                }
+                if (scenario === 'foreign-batched-open' || scenario === 'foreign-batched-range') {
                     foreignOpen = true;
                     notify();
                     assertForeignVisible();
@@ -82,7 +101,7 @@ async function main() {
             assert.equal(colorWrites++, 0, 'never repeat a color write');
             if (scenario !== 'ignored-color') {
                 color = index;
-                if (scenario === 'foreign-during-confirmation') {
+                if (scenario === 'foreign-during-confirmation' || scenario === 'user-popup-foreign') {
                     foreignOpen = true;
                     notify();
                     assertForeignVisible();
@@ -131,7 +150,11 @@ async function main() {
             return [slider];
         },
     };
-    const foreign = { querySelector: () => null, contains: element => element === foreign };
+    const foreign = {
+        querySelector: () => scenario === 'foreign-batched-range' ? slider : null,
+        querySelectorAll: () => [],
+        contains: element => element === foreign,
+    };
     const document = {
         documentElement: {},
         getElementById(id) { return hosts.get(id) ?? styles.get(id) ?? null; },
@@ -165,7 +188,8 @@ async function main() {
     if (foreignOpen) assertForeignVisible();
     if (scenario === 'lock') assert.equal(window.__sdtc_ink_operation, token, 'do not clear another operation');
     else assert.equal(window.__sdtc_ink_operation, undefined, 'release the operation guard');
-    if (scenario === 'foreign-popup' || scenario === 'foreign-after-open' ||
+    if (scenario === 'foreign-popup' || scenario === 'foreign-after-open' || scenario === 'foreign-batched-open' ||
+        scenario === 'foreign-batched-range' ||
         scenario === 'unknown-color' || scenario === 'unsupported-tool' || scenario === 'lock') {
         assert.equal(colorWrites + rangeWrites, 0, 'unknown/foreign state must not be written');
     } else if (scenario.startsWith('thickness') || scenario === 'ignored-input') {

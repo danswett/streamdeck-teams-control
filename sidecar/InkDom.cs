@@ -25,6 +25,9 @@ internal static class InkDom
         }
         else if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value) ||
                  !double.IsFinite(value)) return null;
+        var colors = (config.PowerPointLive.InkColorNames ?? []).Where(color => !string.IsNullOrWhiteSpace(color))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        if (colors.Length == 0) return null;
 
         var tools = config.Controls.Where(entry => entry.Value.ColorFromName &&
             !string.IsNullOrWhiteSpace(entry.Value.AutomationId)).Select(entry => new
@@ -40,7 +43,7 @@ internal static class InkDom
             $"{{key:{DomActuator.Js(tool.key)},id:{DomActuator.Js(tool.id)},color:{Flag(tool.color)},thickness:{Flag(tool.thickness)}}}")) + "]";
         var data = "{tools:" + toolData + ",thickness:" + Flag(thickness) + ",relative:" + Flag(relative) +
             ",value:" + value.ToString(CultureInfo.InvariantCulture) +
-            ",colors:" + DomActuator.JsArray(config.PowerPointLive.InkColorNames ?? []) + "}";
+            ",colors:" + DomActuator.JsArray(colors) + "}";
 
         return $$"""
         (async function () {
@@ -57,6 +60,7 @@ internal static class InkDom
             const surfaces = () => [...document.querySelectorAll(surfaceSelector)];
             const disabled = el => el.disabled || el.getAttribute('aria-disabled') === 'true';
             const name = el => (el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '').trim();
+            const knownColors = data.colors.map(color => color.toLowerCase());
             const selected = () => data.tools.filter(tool =>
                 document.getElementById(tool.id)?.getAttribute('aria-selected') === 'true');
             const round = value => {
@@ -73,17 +77,23 @@ internal static class InkDom
             let style = null, watchdog = null, observer = null, operationPopup = null;
             const host = () => tool ? document.getElementById(tool.id) : null;
             const expanded = () => host()?.getAttribute('aria-expanded');
-            const popup = () => {
+            const inkPopup = () => {
                 const candidates = surfaces().filter(el =>
-                    el.querySelector('input[type="range"],[role="radiogroup"]'));
+                    [...el.querySelectorAll('[role="radiogroup"]')].some(group =>
+                        [...group.querySelectorAll('[role="radio"]')].some(item =>
+                            knownColors.includes(name(item).toLowerCase()))));
                 const roots = candidates.filter(el => !candidates.some(other => other !== el && other.contains(el)));
-                if (roots.length !== 1) return null;
-                const root = roots[0];
-                return surfaces().every(el => root.contains(el) || el.contains(root)) ? root : null;
+                return roots.length === 1 ? roots[0] : null;
+            };
+            const popup = () => {
+                const root = inkPopup();
+                return root && surfaces().every(el => root.contains(el) || el.contains(root)) ? root : null;
             };
             const suppressOwnedPopup = () => {
                 if (originalOpen || !openAttempted || operationPopup || expanded() !== 'true') return;
-                const scope = popup();
+                const choices = selected();
+                if (choices.length !== 1 || choices[0].key !== tool.key) return;
+                const scope = inkPopup();
                 if (scope) {
                     operationPopup = scope;
                     scope.setAttribute(ownedAttribute, '');
@@ -99,10 +109,9 @@ internal static class InkDom
                 return scope;
             };
             const palette = scope => {
-                const known = data.colors.map(color => color.toLowerCase());
                 const groups = [...scope.querySelectorAll('[role="radiogroup"]')].map(group =>
                     [...group.querySelectorAll('[role="radio"]')]).filter(items =>
-                        items.some(item => known.includes(name(item).toLowerCase())));
+                        items.some(item => knownColors.includes(name(item).toLowerCase())));
                 if (groups.length !== 1) throw Error('The ink color palette is ambiguous or unavailable');
                 const items = groups[0], names = items.map(name);
                 const flags = items.map(item => item.getAttribute('aria-checked'));
@@ -144,7 +153,7 @@ internal static class InkDom
                     openAttempted = true;
                     host().click();
                     suppressOwnedPopup();
-                    await wait(() => expanded() === 'true' && !!popup() && operationPopup === popup());
+                    await wait(() => expanded() === 'true' && !!operationPopup);
                 }
                 const beforeName = name(host());
                 const scope = live();
@@ -198,10 +207,11 @@ internal static class InkDom
                                 throw Error('Cannot safely restore the drawing-tool popup');
                             host().click();
                             await wait(() => expanded() === String(originalOpen) &&
-                                (originalOpen ? !!popup() : !operationPopup?.isConnected), Date.now() + 700);
+                                (originalOpen ? !!inkPopup() : !operationPopup?.isConnected), Date.now() + 700);
+                            if (originalOpen) operationPopup = inkPopup();
                         }
                         if (expanded() !== String(originalOpen) ||
-                            (originalOpen ? !popup() : !!operationPopup?.isConnected))
+                            (originalOpen ? !operationPopup?.isConnected : !!operationPopup?.isConnected))
                             throw Error('The drawing-tool popup was not restored');
                     }
                     out.cleanupOk = true;

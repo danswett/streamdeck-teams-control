@@ -17,6 +17,7 @@ public class InkDomTests
     [InlineData("thickness-noop", true, "2")]
     [InlineData("user-popup", false, "1")]
     [InlineData("user-popup-auto-close", false, "1")]
+    [InlineData("user-popup-foreign", false, "1")]
     [InlineData("auto-close", false, "1")]
     [InlineData("unknown-color", false, "1")]
     [InlineData("ignored-color", false, "1")]
@@ -25,6 +26,8 @@ public class InkDomTests
     [InlineData("foreign-popup", false, "1")]
     [InlineData("foreign-during-confirmation", false, "1")]
     [InlineData("foreign-after-open", false, "1")]
+    [InlineData("foreign-batched-open", false, "1")]
+    [InlineData("foreign-batched-range", false, "1")]
     [InlineData("cleanup-fails", false, "1")]
     [InlineData("lock", false, "1")]
     [InlineData("unsupported-tool", false, "1")]
@@ -42,6 +45,14 @@ public class InkDomTests
     [InlineData(true, "+1.5")]
     public void Invalid_values_never_generate_a_write(bool thickness, string arg) =>
         Assert.Null(InkDom.BuildScript(Defaults.Config(), thickness, arg, 4000));
+
+    [Fact]
+    public void Missing_palette_identity_declines_before_opening_any_popup()
+    {
+        var config = Defaults.Config();
+        config.PowerPointLive.InkColorNames = [];
+        Assert.Null(InkDom.BuildScript(config, true, "3", 4000));
+    }
 
     [Fact]
     public void Configured_selectors_and_palette_names_are_encoded_as_data_not_executable_patterns()
