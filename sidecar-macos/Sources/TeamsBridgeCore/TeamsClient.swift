@@ -395,7 +395,7 @@ public final class TeamsClient {
         let itemToggleID = fillArg(spec.menuItemToggleAutomationId, arg)
 
         if spec.automationId.isEmpty, let name = spec.name, !name.isEmpty {
-            return Self.invokeTransient(target: target, find: {
+            return Self.invokeTransient(target: target, find: { () -> AXNode? in
                 let windows = AX.windows(appEl)
                 let liveNodes = Tree.walk(windows: windows)
                 let liveIDs = Tree.indexByID(liveNodes)
