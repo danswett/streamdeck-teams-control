@@ -50,16 +50,20 @@ script in a page without one.
 That port is:
 
 - **loopback only** — nothing on the network can reach it
-- **unauthenticated** — any program running under your Windows account can
-  attach to it and read or drive your Teams session: your chats, your meetings,
-  messages sent as you
+- **unauthenticated** — local programs that can reach it can attach and read or
+  drive your Teams session: your chats, your meetings, messages sent as you
 
-It does not grant anything a program running as you could not already reach by
-other means, but it makes it convenient and scriptable, and it is a known
-technique. It stays open for as long as Teams is running.
+It makes that access convenient and scriptable, and it stays open for as long
+as Teams is running.
 
 **Do not enable this on a managed, shared, or kiosk machine, or on any machine
 where you are not the one deciding what runs.**
+
+This is not a supported Teams integration API. Microsoft documents WebView2
+debugging flags for development and diagnostics, and
+[warns against relying on them in production](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/webview-features-flags):
+they can change or disappear. Teams or WebView2 updates can therefore stop
+Direct mode working.
 
 ### What the plugin does and does not do
 
@@ -69,25 +73,51 @@ a registry key, or any other machine setting. If you have not run the command
 below yourself, enabling the toggle leaves it on **WAITING** and controls use
 the normal UI Automation path.
 
-Before using a port, the plugin checks it actually belongs to Teams. That matters:
-the setting below applies to **every** WebView2 application you launch, and only
-one process can hold a given port. If OneNote started first, the port answers
-perfectly well and belongs to OneNote — the plugin treats that as no port at all.
+Before using a port, the plugin checks it actually belongs to Teams. Only one
+process can hold a given port, and an older, global WebView2 debugging setting
+could let another application claim it first. A port belonging to OneNote, for
+example, is not a usable Teams connection.
 
 ---
 
 ## Turning it on
 
-### 1. Open the port
+### 1. Configure a Teams-only port
+
+Prefer Microsoft's
+[per-application registry override](https://learn.microsoft.com/en-us/microsoft-edge/webview2/how-to/debug-visual-studio-code#using-a-registry-value)
+over a user-wide `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` environment variable.
+The value below applies to `ms-teams.exe` only, for the current Windows user.
+It does not configure other WebView2 applications or require a special Teams
+shortcut.
+
+Check for an existing value first. Do not overwrite organization-managed
+settings or discard other browser arguments:
 
 ```powershell
-[Environment]::SetEnvironmentVariable(
-    'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS','--remote-debugging-port=9457','User')
+$path = 'Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments'
+$application = 'ms-teams.exe'
+$key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($path)
+try {
+    if ($key.GetValueNames() -contains $application) {
+        throw 'A Teams override already exists. Review it and preserve unrelated arguments.'
+    }
+    $key.SetValue($application,
+        '--remote-debugging-address=127.0.0.1 --remote-debugging-port=9457',
+        [Microsoft.Win32.RegistryValueKind]::String)
+} finally {
+    $key.Dispose()
+}
 ```
 
 Pick your own port if you like; avoid **9222**, which is the universal default
 and the first one anything scanning would try. Whatever you choose has to match
 the plugin's setting.
+
+If you previously configured a global debugging environment variable or a
+wildcard registry value, remove only its debugging switches, preserving any
+unrelated arguments. Otherwise other WebView2 applications can still open
+debugging ports.
 
 ### 2. Fully quit Teams
 
@@ -152,44 +182,52 @@ Press an enabled **Direct Mode** key, or click **Disable Direct mode** in its
 settings pane. Subsequent controls use UI Automation without a Stream Deck
 restart. This **leaves the debugging port open**.
 
-To close the port as well:
+To close the port as well, remove the Teams-only value created above:
 
 ```powershell
-[Environment]::SetEnvironmentVariable('WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS',$null,'User')
+$key = 'HKCU:\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments'
+Remove-ItemProperty -LiteralPath $key -Name 'ms-teams.exe'
 ```
 
-then quit and relaunch Teams.
+Then quit and relaunch Teams. If you have since added unrelated arguments to
+that value, preserve them and remove only the two remote-debugging switches
+instead. Do not remove the whole registry key or other applications' values.
 
-**Removing the variable on its own does nothing to a running Teams.** The flag
-was read at launch, so the port stays open until Teams restarts.
+**Removing the value on its own does nothing to a running Teams.** The flag was
+read at launch, so the port stays open until Teams restarts.
 
 ### It stays on until you turn it off
 
-Every later Teams launch reopens the port, including after a Teams update. There
-is no expiry. If you only want it for presentations, treat it as something you
-switch on before one and off afterwards — restarting Teams costs nothing when you
-are not in a meeting.
+The Teams-specific value has no expiry and is read on later launches, including
+normal startup and relaunches after updates while Teams still honors the flags.
+This is separate from the plugin's saved enabled state. If you only want Direct
+mode for presentations, remove the override and restart Teams afterwards.
 
 ---
 
 ## Troubleshooting
 
 **`directmode` reports "no debugging port on 9457".**
-Teams was not restarted after the variable was set, or it is on a different port.
-Check the variable with `[Environment]::GetEnvironmentVariable('WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS','User')`.
+Teams was not fully restarted after the override was set, or it is on a
+different port.
+Check the `ms-teams.exe` value under
+`HKCU:\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments`
+and confirm it matches the plugin's saved port.
 
 **It reports "port is open but belongs to another application".**
-Another WebView2 application claimed the port first. Quit it and restart Teams,
-or pick a different port for both.
+Another application claimed the port first. Check for an older global debugging
+environment variable or wildcard registry override, or choose an unused port
+for both Teams and the plugin.
 
 **It reports "connected, but no meeting window".**
 The port is Teams' and the plugin can reach it, but no meeting window is open
 yet. This resolves itself when you join one.
 
 **The setting will not take at all.**
-The variable is written to your user environment, but the process that launches
-Teams may have been started before that and still hold the old environment. Sign
-out and back in.
+The registry override is read when a new WebView2 environment starts. Fully
+quit Teams from the notification area, check the exact `ms-teams.exe` value,
+and launch it again. Device policy can restrict these settings; do not bypass
+organization policy to enable debugging.
 
 **Something looks wrong and I want to rule this out.**
 Disable the **Direct Mode** toggle. Subsequent controls use the normal path.
