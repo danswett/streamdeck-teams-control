@@ -310,6 +310,10 @@ Stream Deck will ask whether to install the bundled profiles. Accept if you want
 [automatic profile switching](#profiles-that-follow-the-meeting); decline and
 everything else still works.
 
+For optional Windows Direct mode, follow the
+[persistent Teams-only setup](#direct-mode-optional-off-by-default) below.
+Installing the plugin alone does not open a debugging port or enable Direct mode.
+
 ### From source
 
 Requires **Node 24+**, **.NET 10 SDK** and **Stream Deck 7.1+**.
@@ -470,36 +474,69 @@ nothing appears on screen, and a reaction completes in ~240 ms rather than
 seconds. It also works with Teams minimized, and can jump straight to a slide
 without opening grid view.
 
-It needs a local debugging port on Teams, which is **unauthenticated**, so the
-plugin never opens one: it only uses a port the user opened deliberately, and
-verifies the port belongs to Teams before touching it. Anything Direct mode
-cannot improve falls back to the normal path, so the worst case is the behaviour
-above.
+**Security tradeoff:** this is a Windows-only, unofficial Teams integration.
+The debugging port is **unauthenticated**: local programs that can reach it can
+read or drive your Teams session. Do not enable it on a managed, shared, or kiosk
+machine, or bypass device policy to configure it. Microsoft treats these as
+debugging flags, not a supported production Teams interface; an update can change
+their behavior. The plugin never opens a port itself and verifies that a port
+belongs to Teams before using it.
 
-See **[docs/direct-mode.md](docs/direct-mode.md)** for the tradeoff and the
-steps.
+#### Persistent setup (Windows)
 
-### Direct mode (optional, off by default)
+Configure a value for **Teams only**, under the current Windows user:
 
-One cost is visible: a control that lives inside a flyout needs that flyout
-**open on screen**, because Chromium only builds menu items into the
-accessibility tree once the popup is genuinely showing. Reactions, background
-blur, the PowerPoint Live menus and the ink palette all work this way.
+| Registry field | Value |
+|---|---|
+| Key | `HKEY_CURRENT_USER\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments` |
+| Value name | `ms-teams.exe` |
+| Value type | `REG_SZ` (String) |
+| Value data | `--remote-debugging-address=127.0.0.1 --remote-debugging-port=9457` |
 
-**Direct mode** drives those same controls by running JavaScript inside Teams'
-own page, where the menu can be opened, used and closed while styled invisible —
-nothing appears on screen, and a reaction completes in ~240 ms rather than
-seconds. It also works with Teams minimized, and can jump straight to a slide
-without opening grid view.
+Use the [preservation-safe PowerShell setup](docs/direct-mode.md#1-configure-a-teams-only-port)
+to create missing keys without replacing existing values. Review and preserve
+any existing Teams arguments. Do **not** use `New-Item -Force` on an existing
+registry key. Avoid wildcard application values and global
+`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` settings affecting other WebView2 apps.
 
-It needs a local debugging port on Teams, which is **unauthenticated**, so the
-plugin never opens one: it only uses a port the user opened deliberately, and
-verifies the port belongs to Teams before touching it. Anything Direct mode
-cannot improve falls back to the normal path, so the worst case is the behaviour
-above.
+1. Apply that Teams-only registry setting, after reading the security warning.
+2. **Fully quit Teams from the notification area**, then launch it normally.
+   Closing its window is not enough. Confirm the listener is loopback-only
+   (`127.0.0.1` or `::1`); the plugin also checks that Teams owns it.
+3. Add a **Direct Mode** key from the official plugin's action list. Set its
+   **Debugging port** to `9457` (or your chosen matching port), click
+   **Save shared port**, then **Enable Direct mode**.
+4. Join a Teams meeting and check for **ACTIVE**. Use **Refresh status** in the
+   key's settings to see the connection reason.
 
-See **[docs/direct-mode.md](docs/direct-mode.md)** for the tradeoff and the
-steps.
+| Key label | Meaning |
+|---|---|
+| **OFF** | The plugin is not using Direct mode. |
+| **WAITING** | Still enabled, but no usable Teams meeting connection is available. This can be normal before joining a meeting. |
+| **ACTIVE** | Enabled and connected to a usable Teams meeting target. |
+
+**Two independent settings persist.** The registry value is read on later normal
+Teams launches, including after Windows reboots and ordinary updates while Teams
+still honors the flags. Separately, Stream Deck saves the plugin's enabled state
+and shared port in its global settings and restores them across plugin/app
+restarts, reboots, and normal plugin updates. You do not need a special shortcut,
+scheduled launcher, or per-launch toggle. Resetting or deleting those settings
+can clear them; they are not automatically shared across Windows accounts or
+machines. A separately named preview plugin has its own consent and does not
+enable the official plugin.
+
+If Direct is unavailable or a control has no Direct path, the normal UI
+Automation path may raise Teams. An uncertain camera or preference write is
+reported as an error rather than repeated, because retrying a swap could undo
+the first switch.
+
+**To turn it off:** disable the Direct Mode key to stop the plugin using the
+connection. This leaves the port open. Follow the
+[targeted registry rollback](docs/direct-mode.md#turning-it-off) and fully restart
+Teams to close it as well. Remove only the created Teams value, or just its
+debugging switches if it contains other arguments; do not delete the whole key
+or other applications' values. The [full guide](docs/direct-mode.md) also covers
+verification and troubleshooting.
 
 ---
 
