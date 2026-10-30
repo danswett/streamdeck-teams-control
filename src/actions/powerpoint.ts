@@ -42,9 +42,6 @@ const logger = streamDeck.logger.createScope("PptStop");
 /** How long "Stop sharing" must be held before the confirmation is answered. */
 const CONFIRM_HOLD_MS = 700;
 
-/** Gap before the single retry, for a dialog that has not rendered yet. */
-const CONFIRM_RETRY_MS = 300;
-
 /** True while a deck is actually being presented, in either role. */
 export function pptLive(state: TeamsState): boolean {
 	return state.inMeeting && (state.states["ppt-live"] ?? false);
@@ -465,18 +462,12 @@ export class PptStopPresentingAction extends TeamsAction {
 	}
 
 	async #confirm(ev: KeyDownEvent<JsonObject>): Promise<void> {
-		// The dialog is rendered after the press returns, so the first attempt
-		// can arrive before its buttons exist. One retry covers that without
-		// making a genuinely missing dialog wait.
-		for (let attempt = 0; attempt < 2; attempt++) {
-			const result = await bridge.invoke("ppt-stop-presenting-confirm");
-			if (result.ok) {
-				await ev.action.showOk();
-				return;
-			}
-			if (attempt === 0) await new Promise((r) => setTimeout(r, CONFIRM_RETRY_MS));
-			else logger.warn(`confirming stop-presenting failed: ${result.error ?? "unknown"}`);
+		const result = await bridge.invoke("ppt-stop-presenting-confirm");
+		if (result.ok) {
+			await ev.action.showOk();
+			return;
 		}
+		logger.warn(`confirming stop-presenting failed: ${result.error ?? "unknown"}`);
 		await ev.action.showAlert();
 	}
 

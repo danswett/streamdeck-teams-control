@@ -283,6 +283,63 @@ internal sealed class DomActuator
         return InkDom.Interpret(Cdp.Evaluate(decks[0], script, timeoutMs), config, thickness);
     }
 
+    internal GuardedDom.Result? InvokeGuarded(SelectorConfig config, string target, long? invocationDeadline = null)
+    {
+        var kind = target switch
+        {
+            "blur" => GuardedDom.Kind.Blur,
+            "ppt-grid" => GuardedDom.Kind.Grid,
+            TeamsClient.TimerToggleTarget => GuardedDom.Kind.TimerToggle,
+            TeamsClient.TimerResetTarget => GuardedDom.Kind.TimerReset,
+            "ppt-stop-presenting-confirm" => GuardedDom.Kind.ConfirmPresentation,
+            _ => (GuardedDom.Kind?)null
+        };
+        if (kind is null) return null;
+        var timeoutMs = Math.Clamp(_spec.TimeoutMs, 5000, 8000);
+        if (invocationDeadline.HasValue)
+            timeoutMs = (int)Math.Min(timeoutMs, Math.Max(0, invocationDeadline.Value - Environment.TickCount64));
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        int Remaining() => Math.Max(1, timeoutMs - (int)clock.ElapsedMilliseconds);
+        GuardedDom.Result? Unavailable() => Remaining() > 800
+            ? null : new(false, "Direct discovery exceeded the invocation deadline");
+        if (Remaining() <= 800) return Unavailable();
+        if (!IsUsable || _meetingPage is null) return Unavailable();
+        if (Remaining() <= 800) return Unavailable();
+        CdpTarget? page;
+        if (kind == GuardedDom.Kind.Grid)
+        {
+            var pages = Cdp.ListTargets(_spec.Port, Math.Min(Remaining(), 1500));
+            if (pages is null) return Unavailable();
+            var decks = pages.Where(candidate => (candidate.Type is "page" or "iframe") &&
+                IsSlideShowTarget(candidate.Url)).ToArray();
+            if (decks.Length != 1) return new(false, "No unique PowerPoint Live document is available for grid view");
+            page = decks[0];
+        }
+        else
+        {
+            string probe;
+            if (kind == GuardedDom.Kind.Blur)
+                probe = $"!!document.getElementById({Js(config.Controls["blur"].Menu)})";
+            else if (kind == GuardedDom.Kind.ConfirmPresentation)
+                probe = $"!!document.getElementById({Js(config.PowerPointLive.PresenterMarkerAutomationId)})";
+            else
+                probe = "[" + string.Join(",", new[] { "share", "people", "chat" }
+                    .Select(key => Js(config.Controls[key].AutomationId))) +
+                    "].some(id=>!!document.getElementById(id))";
+            probe = $"JSON.stringify({{found:!!document.getElementById({Js(config.MeetingProbeAutomationId)})&&({probe})}})";
+            page = CameraDom.FindPage(_meetingPage,
+                () => Remaining() > 800 ? Cdp.ListTargets(_spec.Port, Math.Min(Remaining(), 1500)) : null,
+                candidate => Remaining() > 800
+                    ? Cdp.Evaluate(candidate, probe, Math.Min(Remaining(), 1500))
+                    : CdpResult.Fail("Direct discovery deadline elapsed"),
+                MaxPagesToProbe);
+            if (page is null) return Unavailable();
+        }
+        if (Remaining() <= 800) return new(false, "Direct discovery exceeded the operation deadline");
+        return GuardedDom.Run(config, kind.Value,
+            (script, remaining) => Cdp.Evaluate(page, script, remaining), Remaining());
+    }
+
     /// <summary>
     /// Presses a control without showing its flyout.
     ///

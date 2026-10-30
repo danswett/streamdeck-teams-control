@@ -29,6 +29,9 @@ styled invisible, so nothing appears on screen at all.
 | Reactions, blur, PPT Live menus | flyout visible, up to a few seconds | nothing visible, ~240 ms |
 | Camera selection/swap and preferences | camera flyout and, for mirror, video-settings pane | hidden navigation with confirmed single writes |
 | Ink colour and thickness dials | palette visible | hidden palette with confirmed single writes |
+| Grid View, including pressing the Current Slide dial | UI Automation opens/closes the grid | confirmed Direct open/close; the requested grid remains visible |
+| Meeting timer pause/resume/reset | UI Automation invokes the controls | scoped Direct control with confirmed state |
+| Stop Presenting hold-to-confirm | UI Automation invokes the dialog button | one Direct confirmation after the existing hold |
 | Jump to a slide | needs grid view open | jumps with nothing on screen |
 | Teams minimized | falls back to UIA `Invoke`, which raises the window | works, window stays down |
 | Everything else | unchanged | unchanged |
@@ -45,6 +48,14 @@ operation starts. Once a Direct ink operation starts, a timeout, unconfirmed
 write, or cleanup failure is reported rather than retried through UI Automation:
 repeating a relative colour step could apply it twice. A palette the user
 already opened is not hidden and is left open.
+
+Blur, grid view, timer controls, and the final Stop Presenting confirmation also
+report failures rather than retrying through UI Automation once their guarded
+Direct operation starts. A disconnected debugger does not cancel JavaScript
+already running. Check Teams before manually retrying an unconfirmed operation.
+The grid and the normal confirmation dialog are intentional UI, not temporary
+flyouts to hide. Stop Presenting still requires the existing hold; an ordinary
+press does not silently accept the dialog.
 
 ---
 
@@ -287,6 +298,22 @@ Ownership is checked through read-only logical-tree metadata, bounded by the
 neighboring slide-toolbar controls; no private event handlers are called.
 Missing or ambiguous ownership is reported before navigation rather than hiding
 an unrelated popup.
+
+**Controls without stable IDs** use a two-phase operation. The page returns a
+bounded list of control names from the intended scope. Configured patterns are
+matched in C# with the existing regex timeout, never compiled inside Teams.
+Before the single write, the page rechecks the chosen element, its scope and
+state. Blur uses the camera popup's logical ownership and hides only a popup
+opened by the plugin; a user-open popup stays visible and open.
+
+Grid view confirms that its overlay appeared or disappeared and, when closing,
+that the slide toolbar returned. Timer toggles confirm Pause/Resume changed;
+reset requires an increased remaining-time reading, not just a successful click.
+An unchanged or ambiguous reading is reported as unconfirmed rather than
+repeated. Cancel timer is never a substitute for pause or reset. Presentation
+confirmation requires the scoped dialog and presenter control to disappear.
+Dialog discovery may wait for rendering, but an attempted confirmation is never
+automatically retried.
 
 Direct mode never activates the Teams window, so unlike the UI Automation path it
 needs no focus guard at all.
