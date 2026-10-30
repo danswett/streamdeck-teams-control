@@ -526,9 +526,9 @@ machines. A separately named preview plugin has its own consent and does not
 enable the official plugin.
 
 If Direct is unavailable or a control has no Direct path, the normal UI
-Automation path may raise Teams. An uncertain camera or preference write is
-reported as an error rather than repeated, because retrying a swap could undo
-the first switch.
+Automation path may raise Teams. An uncertain camera, preference, or ink write is
+reported as an error rather than repeated: retrying a swap could undo the first
+switch, and retrying a relative color step could apply it twice.
 
 **To turn it off:** disable the Direct Mode key to stop the plugin using the
 connection. This leaves the port open. Follow the
@@ -666,11 +666,18 @@ the dial goes still. A whole gesture collapses into one command.
 
 ### Ink
 
-Ink color and thickness are UI Automation patterns rather than menu items —
+On the normal UI Automation path, ink color and thickness are patterns rather than menu items —
 thickness is a slider carrying `RangeValue` over 1..6, and every color is a
 radio button carrying `SelectionItem` — so neither needs a posted click, and a
 change measures around 375 ms against the ~4.5 s a flyout walk costs.
 `sidecar/probe-ink-flyout.ps1` re-establishes this when Teams moves something.
+
+With Direct mode available, both dials instead use the PowerPoint Live document.
+A plugin-opened palette stays invisible, the actual tool-specific colors and
+slider range are read fresh, and Teams' updated tool name confirms the change.
+A user-opened palette stays open and is not hidden. Failed or uncertain Direct
+adjustments report an error rather than repeating a relative color step through
+UI Automation.
 
 Three things about that flyout:
 
@@ -678,12 +685,13 @@ Three things about that flyout:
   Dark red where the highlighter offers Pink, Faded green, Faded blue and Faded
   red. `inkColorNames` in `selectors.json` is a union of both and matches
   neither, so the open flyout is the authority.
-- **Expanding a tool is not reliable once.** Teams hides the slide-show toolbar
+- **UIA expansion is not reliable once.** Teams hides the slide-show toolbar
   when the pointer is away and rebuilds it on demand, and an expand landing
   mid-rebuild does nothing. The sidecar asks twice.
 - **An open flyout unmounts the whole slide-show subtree**, so a deck still being
-  presented looks exactly like one that has stopped. The flyout is always closed
-  again, and the close is confirmed by watching the subtree return.
+  presented looks exactly like one that has stopped. A plugin-opened flyout is
+  closed again; UIA confirms that by watching the subtree return, while Direct
+  confirms the popup state and removes its temporary hiding style.
 
 ### Moving through the deck
 

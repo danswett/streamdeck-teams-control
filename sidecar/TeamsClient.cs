@@ -3564,10 +3564,22 @@ public sealed partial class TeamsClient : IDisposable
     private (bool ok, string? error)? TryDirect(
         string target, ControlSpec? spec, string? arg, bool jump, bool timer, bool ink)
     {
-        // The timer has no ids to find anything by, and ink colour is read back
-        // out of a flyout the UIA path already knows how to drive. Neither is
-        // worth a second implementation yet.
-        if (timer || ink) return null;
+        // The timer has no ids to find anything by.
+        if (timer) return null;
+
+        if (ink) return TryDirectInk(() =>
+        {
+            var result = _dom.AdjustInk(_config, target == InkThicknessTarget, arg);
+            if (result is { Ok: true, Tool: not null })
+            {
+                foreach (var (key, control) in _config.Controls)
+                    if (control.ColorFromName) _lastStates[key] = key == result.Tool;
+                if (result.Color is not null) _lastToolColors[result.Tool] = result.Color;
+                if (result.Thickness is not null) _lastToolThickness[result.Tool] = result.Thickness;
+                if (result.Palette is not null) _lastPalette[result.Tool] = result.Palette.ToList();
+            }
+            return result;
+        });
 
         if (target is "camera-select" or "camera-swap")
             return TryDirectCamera(() => spec is null ? null :
@@ -3623,6 +3635,23 @@ public sealed partial class TeamsClient : IDisposable
             // A disconnected debugger does not cancel JavaScript already running.
             Console.Error.WriteLine($"direct camera selection threw: {ex.Message}");
             return (false, "Direct camera selection failed; webcam selection may already have changed");
+        }
+    }
+
+    internal static (bool ok, string? error)? TryDirectInk(Func<InkDom.Result?> adjustInk)
+    {
+        try
+        {
+            var result = adjustInk();
+            if (result is null) return null;
+            if (result.Ok) return (true, null);
+            Console.Error.WriteLine($"direct ink adjustment failed: {result.Error}");
+            return (false, result.Error);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"direct ink adjustment threw: {ex.Message}");
+            return (false, "Direct ink adjustment failed; ink settings may already have changed");
         }
     }
 

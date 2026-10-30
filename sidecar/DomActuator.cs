@@ -270,6 +270,19 @@ internal sealed class DomActuator
         return CameraDom.Interpret(Cdp.Evaluate(page, script, timeoutMs));
     }
 
+    internal InkDom.Result? AdjustInk(SelectorConfig config, bool thickness, string? arg)
+    {
+        if (!IsUsable || _slideShow is null) return null;
+        var pages = Cdp.ListTargets(_spec.Port, Math.Min(_spec.TimeoutMs, 1500));
+        if (pages is null) return null;
+        var decks = pages.Where(page => (page.Type is "page" or "iframe") && IsSlideShowTarget(page.Url)).ToArray();
+        if (decks.Length != 1) return new(false, "No unique PowerPoint Live document is available for ink adjustment");
+        var timeoutMs = Math.Max(_spec.TimeoutMs, 4000);
+        var script = InkDom.BuildScript(config, thickness, arg, timeoutMs);
+        if (script is null) return new(false, "Invalid ink value or unsupported drawing-tool selectors");
+        return InkDom.Interpret(Cdp.Evaluate(decks[0], script, timeoutMs), config, thickness);
+    }
+
     /// <summary>
     /// Presses a control without showing its flyout.
     ///
