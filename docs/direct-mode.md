@@ -95,15 +95,19 @@ Check for an existing value first. Do not overwrite organization-managed
 settings or discard other browser arguments:
 
 ```powershell
-$key = 'HKCU:\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments'
+$path = 'Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments'
 $application = 'ms-teams.exe'
-if ((Test-Path -LiteralPath $key) -and
-    ((Get-Item -LiteralPath $key).GetValueNames() -contains $application)) {
-    throw 'A Teams override already exists. Review it and preserve unrelated arguments.'
+$key = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($path)
+try {
+    if ($key.GetValueNames() -contains $application) {
+        throw 'A Teams override already exists. Review it and preserve unrelated arguments.'
+    }
+    $key.SetValue($application,
+        '--remote-debugging-address=127.0.0.1 --remote-debugging-port=9457',
+        [Microsoft.Win32.RegistryValueKind]::String)
+} finally {
+    $key.Dispose()
 }
-New-Item -Path $key -Force | Out-Null
-New-ItemProperty -LiteralPath $key -Name $application -PropertyType String `
-    -Value '--remote-debugging-address=127.0.0.1 --remote-debugging-port=9457'
 ```
 
 Pick your own port if you like; avoid **9222**, which is the universal default
