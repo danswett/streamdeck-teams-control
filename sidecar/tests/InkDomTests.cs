@@ -23,6 +23,8 @@ public class InkDomTests
     [InlineData("ignored-input", true, "5")]
     [InlineData("throw-after-write", false, "1")]
     [InlineData("foreign-popup", false, "1")]
+    [InlineData("foreign-during-confirmation", false, "1")]
+    [InlineData("foreign-after-open", false, "1")]
     [InlineData("cleanup-fails", false, "1")]
     [InlineData("lock", false, "1")]
     [InlineData("unsupported-tool", false, "1")]

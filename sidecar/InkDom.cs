@@ -46,6 +46,7 @@ internal static class InkDom
         (async function () {
             const data = {{data}};
             const key = '__sdtc_ink_operation', styleId = '__sdtc_ink_suppress';
+            const ownedAttribute = 'data-sdtc-ink-owned';
             if (window[key]) return JSON.stringify({ ok: false, error: 'Ink operation still pending' });
             const token = {};
             window[key] = token;
@@ -69,7 +70,7 @@ internal static class InkDom
                 }
             };
             let tool = null, originalOpen = false, initialKnown = false, openAttempted = false;
-            let style = null, watchdog = null;
+            let style = null, watchdog = null, observer = null, operationPopup = null;
             const host = () => tool ? document.getElementById(tool.id) : null;
             const expanded = () => host()?.getAttribute('aria-expanded');
             const popup = () => {
@@ -80,12 +81,21 @@ internal static class InkDom
                 const root = roots[0];
                 return surfaces().every(el => root.contains(el) || el.contains(root)) ? root : null;
             };
+            const suppressOwnedPopup = () => {
+                if (originalOpen || !openAttempted || operationPopup || expanded() !== 'true') return;
+                const scope = popup();
+                if (scope) {
+                    operationPopup = scope;
+                    scope.setAttribute(ownedAttribute, '');
+                }
+            };
             const live = () => {
                 const choices = selected();
                 if (choices.length !== 1 || choices[0].key !== tool.key || !host()?.isConnected || disabled(host()))
                     throw Error('The selected drawing tool changed');
                 const scope = popup();
                 if (expanded() !== 'true' || !scope) throw Error('The drawing-tool popup is not uniquely available');
+                if (!originalOpen && scope !== operationPopup) throw Error('The owned ink popup was replaced');
                 return scope;
             };
             const palette = scope => {
@@ -106,6 +116,8 @@ internal static class InkDom
             try {
                 const stale = document.getElementById(styleId);
                 if (stale) stale.remove();
+                for (const element of document.querySelectorAll('[' + ownedAttribute + ']'))
+                    element.removeAttribute(ownedAttribute);
                 const choices = selected();
                 if (choices.length !== 1) throw Error('No unique drawing tool is selected');
                 tool = choices[0];
@@ -119,15 +131,20 @@ internal static class InkDom
                 if (originalOpen ? !popup() : surfaces().length !== 0)
                     throw Error('Another popup is already open');
                 initialKnown = true;
+                if (originalOpen) operationPopup = popup();
                 if (!originalOpen) {
                     style = document.createElement('style');
                     style.id = styleId;
-                    style.textContent = surfaceSelector + '{opacity:0!important}';
+                    style.textContent = '[' + ownedAttribute + ']{opacity:0!important}';
                     document.head.appendChild(style);
                     watchdog = setTimeout(() => style.remove(), {{Math.Max(100, timeoutMs - 100)}});
+                    // Tag the owned popup before paint, without hiding menus opened concurrently.
+                    observer = new MutationObserver(suppressOwnedPopup);
+                    observer.observe(document.documentElement, { childList: true, subtree: true });
                     openAttempted = true;
                     host().click();
-                    await wait(() => expanded() === 'true' && !!popup());
+                    suppressOwnedPopup();
+                    await wait(() => expanded() === 'true' && !!popup() && operationPopup === popup());
                 }
                 const beforeName = name(host());
                 const scope = live();
@@ -176,14 +193,15 @@ internal static class InkDom
                         if ((state === 'true') !== originalOpen) {
                             const choices = selected();
                             if (choices.length !== 1 || choices[0].key !== tool.key || !host()?.isConnected ||
-                                disabled(host()) || state === 'true' && !popup() ||
+                                disabled(host()) || state === 'true' && !operationPopup?.isConnected ||
                                 state === 'false' && surfaces().length)
                                 throw Error('Cannot safely restore the drawing-tool popup');
                             host().click();
                             await wait(() => expanded() === String(originalOpen) &&
-                                (originalOpen ? !!popup() : surfaces().length === 0), Date.now() + 700);
+                                (originalOpen ? !!popup() : !operationPopup?.isConnected), Date.now() + 700);
                         }
-                        if (expanded() !== String(originalOpen) || !originalOpen && surfaces().length)
+                        if (expanded() !== String(originalOpen) ||
+                            (originalOpen ? !popup() : !!operationPopup?.isConnected))
                             throw Error('The drawing-tool popup was not restored');
                     }
                     out.cleanupOk = true;
@@ -192,6 +210,8 @@ internal static class InkDom
                     out.error = [out.error, String(error && error.message || error)].filter(Boolean).join('; ');
                 } finally {
                     if (watchdog !== null) clearTimeout(watchdog);
+                    if (observer) observer.disconnect();
+                    if (operationPopup) operationPopup.removeAttribute(ownedAttribute);
                     if (style) style.remove();
                     if (window[key] === token) delete window[key];
                 }
