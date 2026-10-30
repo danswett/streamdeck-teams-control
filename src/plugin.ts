@@ -102,7 +102,7 @@ streamDeck.actions.registerAction(new SlideCurrentDialAction());
 streamDeck.actions.registerAction(new SlideNextDialAction());
 streamDeck.actions.registerAction(new TimerDialAction());
 
-profileSwitcher.start();
+void profileSwitcher.start();
 
 // Connect last, once every action is registered.
 await streamDeck.connect();

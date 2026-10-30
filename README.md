@@ -199,7 +199,26 @@ Each PowerPoint Live layout keeps mute within reach on every deck, so being
 moved onto a presentation layout never costs you the meeting basics.
 
 **It is off by default.** Turn it on in any PowerPoint Live key's settings; the
-setting is shared by all of them.
+setting is shared by all of them. Bundled profiles are optional and are offered
+for installation only when following first needs them, not when you install the
+plugin.
+
+**No automatic retries after an unconfirmed change.** If the requested layout
+does not appear within nine seconds, automatic following pauses across meetings, reconnects
+and plugin restarts. The SDK cannot tell whether you cancelled an install,
+deleted a profile, or customized it, so the plugin does not keep retrying.
+Your existing layouts and manual controls are left alone. Close any outstanding
+install prompt, then turn **Follow the meeting between profiles** off and on
+when you want to retry.
+
+Stream Deck can still show one prompt when a switch targets a missing or
+unrecognized bundled profile; the SDK provides no quiet existence check.
+An unconfirmed request does not trigger further automatic install attempts.
+
+Following recognizes the bundled layout by its action types and positions, not
+its icons or key settings. Rearranging or removing controls can therefore pause
+following even after a successful switch; leave following off to use a custom
+layout manually.
 
 ### Every deck, and what it gets
 
@@ -306,9 +325,10 @@ Download the `.streamDeckPlugin` file from
 [Releases](https://github.com/danswett/streamdeck-teams-control/releases) and
 double-click it.
 
-Stream Deck will ask whether to install the bundled profiles. Accept if you want
-[automatic profile switching](#profiles-that-follow-the-meeting); decline and
-everything else still works.
+Bundled profiles are optional. If you enable
+[automatic profile switching](#profiles-that-follow-the-meeting), Stream Deck
+will offer to install each needed layout on demand. Decline and everything else
+still works; automatic following pauses rather than repeatedly asking.
 
 For optional Windows Direct mode, follow the
 [persistent Teams-only setup](#direct-mode-optional-off-by-default) below.
@@ -332,7 +352,8 @@ start-up.
 Linking copies files into place and skips Stream Deck's installer, which has one
 consequence: **bundled profiles are only registered when Stream Deck installs a
 packaged plugin itself.** To exercise the profiles, open the packed
-`dist/*.streamDeckPlugin` instead and accept the prompt.
+`dist/*.streamDeckPlugin` instead, enable following, and accept the on-demand
+install prompt.
 
 ---
 
@@ -636,9 +657,12 @@ A few operational notes:
   front of the user, and they can decline.
 - **That dialog holds Stream Deck's profile lock until it is answered**, which
   may be hours. A second switch request meanwhile is refused with `Another
-  operation is already in progress`. Repeat asks for the same path are therefore
-  suppressed for 30 s and given up after three, while a genuine change of target
-  still switches immediately.
+  operation is already in progress`. Each named request is saved before it is
+  sent and cleared after the requested layout appears or the user explicitly
+  retries. If the layout is not seen within nine seconds, following pauses
+  across meetings and restarts until the
+  user explicitly disables and re-enables it. An unrelated key appearing is not
+  proof of installation. `AutoInstall: false` also prevents install-time prompts.
 - **Stream Deck re-reads the manifest when the app starts**, not when plugin
   files change, so a newly declared profile needs an app restart to be noticed.
 

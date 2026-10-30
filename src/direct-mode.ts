@@ -2,6 +2,7 @@ import streamDeck from "@elgato/streamdeck";
 import type { JsonObject } from "@elgato/utils";
 import { bridge } from "./bridge";
 import { DEFAULT_DIRECT_MODE, readDirectModeSettings, type DirectModeSettings, type DirectModeStatus } from "./protocol";
+import { getGlobalSettings, updateGlobalSettings } from "./settings";
 
 const logger = streamDeck.logger.createScope("DirectMode");
 type Result = { ok: boolean; error?: string };
@@ -27,7 +28,7 @@ export class DirectModeControl {
 		bridge.subscribeDirectMode(() => this.#publish());
 		streamDeck.settings.onDidReceiveGlobalSettings((ev) => this.#receive(ev.settings));
 		try {
-			this.#receive(await this.#getSettings());
+			this.#receive(await getGlobalSettings());
 		} catch (err) {
 			this.#fail(`Could not load Direct mode settings: ${String(err)}`);
 		}
@@ -54,20 +55,6 @@ export class DirectModeControl {
 		logger.warn(error);
 		this.#publish();
 		return { ok: false, error };
-	}
-
-	async #getSettings(): Promise<JsonObject> {
-		let timer: NodeJS.Timeout | undefined;
-		try {
-			return await Promise.race([
-				streamDeck.settings.getGlobalSettings(),
-				new Promise<never>((_, reject) => {
-					timer = setTimeout(() => reject(new Error("Stream Deck settings request timed out")), 10_000);
-				})
-			]);
-		} finally {
-			if (timer) clearTimeout(timer);
-		}
 	}
 
 	#receive(settings: JsonObject): void {
@@ -114,11 +101,11 @@ export class DirectModeControl {
 		this.#error = undefined;
 		this.#publish();
 		try {
-			const global = await this.#getSettings();
-			const next = change(global);
-			await streamDeck.settings.setGlobalSettings({
-				...global, directModeEnabled: next.enabled, directModePort: next.port
+			const saved = await updateGlobalSettings((global) => {
+				const next = change(global);
+				return { ...global, directModeEnabled: next.enabled, directModePort: next.port };
 			});
+			const next = readDirectModeSettings(saved);
 			this.#settings = next;
 			this.#loaded = true;
 			const result = await bridge.configureDirectMode(next);

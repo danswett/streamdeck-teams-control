@@ -66,7 +66,7 @@ describe("the bundled profiles", () => {
 	const PLUGIN = "com.bad-duck.teamscontrol.sdPlugin";
 	const manifest = JSON.parse(readFileSync(path.join(PLUGIN, "manifest.json"), "utf8")) as {
 		Actions: { UUID: string }[];
-		Profiles: { Name: string; DeviceType: number }[];
+		Profiles: { Name: string; DeviceType: number; AutoInstall?: boolean }[];
 	};
 
 	/**
@@ -134,6 +134,26 @@ describe("the bundled profiles", () => {
 		) as { profiles: unknown[] };
 
 		expect(embedded.profiles).toEqual(manifest.Profiles);
+	});
+
+	it("does not ask to install optional layouts when the plugin is installed", () => {
+		for (const profile of manifest.Profiles) {
+			expect(profile.AutoInstall, profile.Name).toBe(false);
+		}
+	});
+
+	it("recognizes each shipped layout from its actual plugin controls", () => {
+		const embedded = JSON.parse(
+			readFileSync(path.resolve(__dirname, "..", "src", "profiles.generated.json"), "utf8")
+		) as { layouts: Record<string, string[]> };
+		for (const { name } of bundled) {
+			const controls = keyPage(name).Controllers.flatMap((controller) =>
+				Object.entries(controller.Actions ?? {})
+					.filter(([, action]) => action.UUID.startsWith("com.bad-duck.teamscontrol."))
+					.map(([position, action]) => `${controller.Type} ${position} ${action.UUID}`)
+			).sort();
+			expect(embedded.layouts[name], name).toEqual(controls);
+		}
 	});
 
 	it.each(bundled.map((b) => [b.name, b] as const))("%s ships a profile laid out for its deck", (_label, b) => {
