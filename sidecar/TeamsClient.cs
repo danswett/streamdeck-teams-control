@@ -2616,8 +2616,7 @@ public sealed partial class TeamsClient : IDisposable
             foreach (var (key, spec) in _config.Controls)
             {
                 if (!spec.ColorFromName) continue;
-                if (key == inkKey) continue;
-                PublishToolColor(snap, key, spec, ResolveControl(key, spec));
+                PublishToolColor(snap, key, spec, key == inkKey ? null : ResolveControl(key, spec));
             }
 
             return snap;
@@ -2670,8 +2669,7 @@ public sealed partial class TeamsClient : IDisposable
 
                 // Covers the tool whose palette is open too: its color was just
                 // published from that palette, so the remembered value is it.
-                if (_lastToolColors.TryGetValue(key, out var heldColor))
-                    snap.Context[$"ppt.color.{key}"] = heldColor;
+                PublishToolColor(snap, key, spec, null);
                 continue;
             }
 
@@ -2752,6 +2750,7 @@ public sealed partial class TeamsClient : IDisposable
                 _lastAvailable[key] = false;
                 // Presence already decided this one; do not overwrite it.
                 if (!presenceState && _lastStates.TryGetValue(key, out var carried)) snap.States[key] = carried;
+                PublishToolColor(snap, key, spec, null);
                 continue;
             }
 

@@ -6,20 +6,43 @@ async function main() {
     const { script, scenario } = JSON.parse(fs.readFileSync(0, 'utf8'));
     const originalOpen = scenario.startsWith('user-popup');
     let open = originalOpen, color = scenario === 'color-wrap' ? 0 : 1, thickness = 2;
+    let expanded = originalOpen;
+    let titleColor = color, foreignOpen = scenario === 'foreign-popup';
     let currentTool = scenario === 'laser' ? 'ink-tool-3' : scenario === 'unsupported-tool' ? 'ink-tool-4' : 'ink-tool-0';
     let colorWrites = 0, rangeWrites = 0, inputEvents = 0, opens = 0, closes = 0, clock = 0, timerId = 0;
     let domValue = '2';
-    const styles = new Map(), timers = new Map(), window = {};
+    const styles = new Map(), timers = new Map(), window = {}, markers = new Set(), observers = new Set();
     const names = ['Black', 'Blue', 'Red'];
     const originalColor = color;
     const errors = new Set(['unknown-color', 'ignored-color', 'ignored-input', 'throw-after-write',
-        'foreign-popup', 'cleanup-fails', 'lock', 'unsupported-tool']);
+        'foreign-popup', 'foreign-after-open', 'foreign-batched-open', 'foreign-batched-range',
+        'known-color-before-ink', 'missing-owner', 'cleanup-fails', 'lock', 'unsupported-tool']);
     const token = {};
     if (scenario === 'lock') window.__sdtc_ink_operation = token;
     const css = () => [...styles.values()].map(style => style.textContent).join('');
     const checkHidden = () => {
         if (originalOpen) assert.equal(styles.size, 0, 'never hide a user-owned popup');
-        else assert.match(css(), /role="dialog"/, 'hide before opening or writing through an owned popup');
+        else {
+            assert.match(css(), /data-sdtc-ink-owned/, 'install scoped suppression before opening an owned popup');
+            if (open) assert.ok(markers.has(popup), 'hide only the identified owned popup');
+        }
+    };
+    let deliveryQueued = false;
+    const notify = () => {
+        if (deliveryQueued) return;
+        deliveryQueued = true;
+        queueMicrotask(() => {
+            deliveryQueued = false;
+            for (const observer of observers) observer.callback();
+            if (open && !originalOpen && styles.size) {
+                assert.ok(markers.has(popup), 'the owned popup must be hidden before paint after batched mutations');
+            }
+            if (foreignOpen) assertForeignVisible();
+        });
+    };
+    const assertForeignVisible = () => {
+        assert.doesNotMatch(css(), /\[role="dialog"\].*opacity/, 'never hide all dialogs');
+        assert.ok(!markers.has(foreign), 'never mark an unrelated user popup for suppression');
     };
     const schedule = (callback, ms) => {
         const id = ++timerId;
@@ -38,20 +61,42 @@ async function main() {
         getAttribute(attribute) {
             return attr(attribute, {
                 'aria-selected': String(currentTool === id),
-                'aria-expanded': String(open),
-                title: `${id === 'ink-tool-3' ? 'Laser pointer' : 'Pen'}: ${names[color]}${id === 'ink-tool-3' ? '' : ', Thickness ' + thickness}`,
+                'aria-expanded': String(expanded),
+                title: `${id === 'ink-tool-3' ? 'Laser pointer' : 'Pen'}: ${names[titleColor]}${id === 'ink-tool-3' ? '' : ', Thickness ' + thickness}`,
             });
         },
         click() {
             assert.equal(currentTool, id, 'never change the selected drawing tool to drive its options');
-            if (open) {
+            if (open || expanded) {
                 closes++;
                 if (scenario === 'cleanup-fails') return;
-                open = false;
+                open = expanded = false;
             } else {
                 checkHidden();
                 opens++;
-                open = true;
+                if (scenario === 'known-color-before-ink') {
+                    expanded = true;
+                    foreignOpen = true;
+                    notify();
+                    schedule(() => { open = true; notify(); }, 40);
+                } else {
+                    open = true;
+                    expanded = scenario !== 'delayed-expanded';
+                    notify();
+                    if (scenario === 'delayed-expanded') schedule(() => { expanded = true; notify(); }, 40);
+                }
+                if (scenario === 'foreign-after-open') {
+                    queueMicrotask(() => {
+                        foreignOpen = true;
+                        notify();
+                        assertForeignVisible();
+                    });
+                }
+                if (scenario === 'foreign-batched-open' || scenario === 'foreign-batched-range') {
+                    foreignOpen = true;
+                    notify();
+                    assertForeignVisible();
+                }
             }
         },
     }]));
@@ -64,8 +109,16 @@ async function main() {
         click() {
             checkHidden();
             assert.equal(colorWrites++, 0, 'never repeat a color write');
-            if (scenario !== 'ignored-color') color = index;
-            if (scenario === 'auto-close' || scenario === 'user-popup-auto-close') open = false;
+            if (scenario !== 'ignored-color') {
+                color = index;
+                if (scenario === 'foreign-during-confirmation' || scenario === 'user-popup-foreign') {
+                    foreignOpen = true;
+                    notify();
+                    assertForeignVisible();
+                    schedule(() => { titleColor = index; }, 40);
+                } else titleColor = index;
+            }
+            if (scenario === 'auto-close' || scenario === 'user-popup-auto-close') open = expanded = false;
             if (scenario === 'throw-after-write') throw Error('uncertain color click');
         },
     }));
@@ -96,6 +149,9 @@ async function main() {
         },
     });
     const popup = {
+        get isConnected() { return open; },
+        setAttribute(attribute) { assert.equal(attribute, 'data-sdtc-ink-owned'); markers.add(popup); },
+        removeAttribute(attribute) { assert.equal(attribute, 'data-sdtc-ink-owned'); markers.delete(popup); },
         contains(element) { return element === popup || groups.includes(element) || radios.includes(element) || element === slider; },
         querySelector() { return groups[0]; },
         querySelectorAll(selector) {
@@ -104,12 +160,30 @@ async function main() {
             return [slider];
         },
     };
-    const foreign = { querySelector: () => null, contains: element => element === foreign };
+    const foreign = {
+        querySelector: () => scenario === 'foreign-batched-range' ? slider : null,
+        querySelectorAll: () => scenario === 'known-color-before-ink' ? [groups[0]] : [],
+        contains: element => element === foreign,
+    };
+    const appFiber = { return: null };
+    const toolbarFiber = { return: appFiber };
+    const inkFiber = { return: toolbarFiber };
+    const alternateInkFiber = { return: toolbarFiber, alternate: inkFiber };
+    inkFiber.alternate = alternateInkFiber;
+    for (const [id, host] of hosts) {
+        if (scenario !== 'missing-owner' || id !== currentTool)
+            host.__reactFiber$test = { return: { return: inkFiber } };
+    }
+    popup.__reactFiber$test = { return: scenario === 'alternate-owner' ? alternateInkFiber : inkFiber };
+    foreign.__reactFiber$test = { return: toolbarFiber };
+    const outside = { __reactFiber$test: toolbarFiber };
     const document = {
-        getElementById(id) { return hosts.get(id) ?? styles.get(id) ?? null; },
+        documentElement: {},
+        getElementById(id) { return hosts.get(id) ?? styles.get(id) ?? (id === 'slideShowToolbarId' ? outside : null); },
         querySelectorAll(selector) {
+            if (selector === '[data-sdtc-ink-owned]') return [...markers];
             assert.equal(selector, '[role="dialog"],[role="menu"],.fui-PopoverSurface');
-            return [...open ? [popup] : [], ...scenario === 'foreign-popup' ? [foreign] : []];
+            return [...open ? [popup] : [], ...foreignOpen ? [foreign] : []];
         },
         createElement(tag) {
             assert.equal(tag, 'style');
@@ -123,12 +197,24 @@ async function main() {
         Date: { now: () => clock },
         setTimeout: schedule,
         clearTimeout: id => timers.delete(id),
+        MutationObserver: class {
+            constructor(callback) { this.callback = callback; }
+            observe() { observers.add(this); }
+            disconnect() { observers.delete(this); }
+        },
     }, { timeout: 1000 }));
     assert.equal(result.ok, !errors.has(scenario), `${scenario}: ${JSON.stringify(result)}`);
     assert.equal(styles.size, 0, 'temporary hiding styles must always come down');
+    assert.equal(markers.size, 0, 'remove the popup ownership marker');
+    assert.equal(observers.size, 0, 'disconnect the popup-suppression observer');
+    if (foreignOpen) assertForeignVisible();
     if (scenario === 'lock') assert.equal(window.__sdtc_ink_operation, token, 'do not clear another operation');
     else assert.equal(window.__sdtc_ink_operation, undefined, 'release the operation guard');
-    if (scenario === 'foreign-popup' || scenario === 'unknown-color' || scenario === 'unsupported-tool' || scenario === 'lock') {
+    if (scenario === 'missing-owner') assert.equal(opens + closes, 0, 'missing ownership must fail before navigation');
+    if (scenario === 'foreign-popup' || scenario === 'foreign-after-open' || scenario === 'foreign-batched-open' ||
+        scenario === 'foreign-batched-range' ||
+        scenario === 'known-color-before-ink' || scenario === 'missing-owner' ||
+        scenario === 'unknown-color' || scenario === 'unsupported-tool' || scenario === 'lock') {
         assert.equal(colorWrites + rangeWrites, 0, 'unknown/foreign state must not be written');
     } else if (scenario.startsWith('thickness') || scenario === 'ignored-input') {
         const expected = scenario === 'thickness-relative' ? 3 : scenario === 'thickness-clamp' ? 6 :

@@ -282,5 +282,11 @@ until the tool's application-updated name confirms the requested value. Popup
 ownership, temporary styles, and an operation lock bound the navigation and
 prevent uncertain relative writes from being repeated.
 
+The ink palette is a shared React portal without an `aria-controls` owner link.
+Ownership is checked through read-only logical-tree metadata, bounded by the
+neighboring slide-toolbar controls; no private event handlers are called.
+Missing or ambiguous ownership is reported before navigation rather than hiding
+an unrelated popup.
+
 Direct mode never activates the Teams window, so unlike the UI Automation path it
 needs no focus guard at all.
