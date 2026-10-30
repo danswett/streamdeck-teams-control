@@ -6,6 +6,7 @@ async function main() {
     const { script, scenario } = JSON.parse(fs.readFileSync(0, 'utf8'));
     const originalOpen = scenario.startsWith('user-popup');
     let open = originalOpen, color = scenario === 'color-wrap' ? 0 : 1, thickness = 2;
+    let expanded = originalOpen;
     let titleColor = color, foreignOpen = scenario === 'foreign-popup';
     let currentTool = scenario === 'laser' ? 'ink-tool-3' : scenario === 'unsupported-tool' ? 'ink-tool-4' : 'ink-tool-0';
     let colorWrites = 0, rangeWrites = 0, inputEvents = 0, opens = 0, closes = 0, clock = 0, timerId = 0;
@@ -15,7 +16,7 @@ async function main() {
     const originalColor = color;
     const errors = new Set(['unknown-color', 'ignored-color', 'ignored-input', 'throw-after-write',
         'foreign-popup', 'foreign-after-open', 'foreign-batched-open', 'foreign-batched-range',
-        'cleanup-fails', 'lock', 'unsupported-tool']);
+        'known-color-before-ink', 'missing-owner', 'cleanup-fails', 'lock', 'unsupported-tool']);
     const token = {};
     if (scenario === 'lock') window.__sdtc_ink_operation = token;
     const css = () => [...styles.values()].map(style => style.textContent).join('');
@@ -60,21 +61,30 @@ async function main() {
         getAttribute(attribute) {
             return attr(attribute, {
                 'aria-selected': String(currentTool === id),
-                'aria-expanded': String(open),
+                'aria-expanded': String(expanded),
                 title: `${id === 'ink-tool-3' ? 'Laser pointer' : 'Pen'}: ${names[titleColor]}${id === 'ink-tool-3' ? '' : ', Thickness ' + thickness}`,
             });
         },
         click() {
             assert.equal(currentTool, id, 'never change the selected drawing tool to drive its options');
-            if (open) {
+            if (open || expanded) {
                 closes++;
                 if (scenario === 'cleanup-fails') return;
-                open = false;
+                open = expanded = false;
             } else {
                 checkHidden();
                 opens++;
-                open = true;
-                notify();
+                if (scenario === 'known-color-before-ink') {
+                    expanded = true;
+                    foreignOpen = true;
+                    notify();
+                    schedule(() => { open = true; notify(); }, 40);
+                } else {
+                    open = true;
+                    expanded = scenario !== 'delayed-expanded';
+                    notify();
+                    if (scenario === 'delayed-expanded') schedule(() => { expanded = true; notify(); }, 40);
+                }
                 if (scenario === 'foreign-after-open') {
                     queueMicrotask(() => {
                         foreignOpen = true;
@@ -108,7 +118,7 @@ async function main() {
                     schedule(() => { titleColor = index; }, 40);
                 } else titleColor = index;
             }
-            if (scenario === 'auto-close' || scenario === 'user-popup-auto-close') open = false;
+            if (scenario === 'auto-close' || scenario === 'user-popup-auto-close') open = expanded = false;
             if (scenario === 'throw-after-write') throw Error('uncertain color click');
         },
     }));
@@ -152,12 +162,24 @@ async function main() {
     };
     const foreign = {
         querySelector: () => scenario === 'foreign-batched-range' ? slider : null,
-        querySelectorAll: () => [],
+        querySelectorAll: () => scenario === 'known-color-before-ink' ? [groups[0]] : [],
         contains: element => element === foreign,
     };
+    const appFiber = { return: null };
+    const toolbarFiber = { return: appFiber };
+    const inkFiber = { return: toolbarFiber };
+    const alternateInkFiber = { return: toolbarFiber, alternate: inkFiber };
+    inkFiber.alternate = alternateInkFiber;
+    for (const [id, host] of hosts) {
+        if (scenario !== 'missing-owner' || id !== currentTool)
+            host.__reactFiber$test = { return: { return: inkFiber } };
+    }
+    popup.__reactFiber$test = { return: scenario === 'alternate-owner' ? alternateInkFiber : inkFiber };
+    foreign.__reactFiber$test = { return: toolbarFiber };
+    const outside = { __reactFiber$test: toolbarFiber };
     const document = {
         documentElement: {},
-        getElementById(id) { return hosts.get(id) ?? styles.get(id) ?? null; },
+        getElementById(id) { return hosts.get(id) ?? styles.get(id) ?? (id === 'slideShowToolbarId' ? outside : null); },
         querySelectorAll(selector) {
             if (selector === '[data-sdtc-ink-owned]') return [...markers];
             assert.equal(selector, '[role="dialog"],[role="menu"],.fui-PopoverSurface');
@@ -188,8 +210,10 @@ async function main() {
     if (foreignOpen) assertForeignVisible();
     if (scenario === 'lock') assert.equal(window.__sdtc_ink_operation, token, 'do not clear another operation');
     else assert.equal(window.__sdtc_ink_operation, undefined, 'release the operation guard');
+    if (scenario === 'missing-owner') assert.equal(opens + closes, 0, 'missing ownership must fail before navigation');
     if (scenario === 'foreign-popup' || scenario === 'foreign-after-open' || scenario === 'foreign-batched-open' ||
         scenario === 'foreign-batched-range' ||
+        scenario === 'known-color-before-ink' || scenario === 'missing-owner' ||
         scenario === 'unknown-color' || scenario === 'unsupported-tool' || scenario === 'lock') {
         assert.equal(colorWrites + rangeWrites, 0, 'unknown/foreign state must not be written');
     } else if (scenario.startsWith('thickness') || scenario === 'ignored-input') {

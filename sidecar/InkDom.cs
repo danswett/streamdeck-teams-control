@@ -43,6 +43,9 @@ internal static class InkDom
             $"{{key:{DomActuator.Js(tool.key)},id:{DomActuator.Js(tool.id)},color:{Flag(tool.color)},thickness:{Flag(tool.thickness)}}}")) + "]";
         var data = "{tools:" + toolData + ",thickness:" + Flag(thickness) + ",relative:" + Flag(relative) +
             ",value:" + value.ToString(CultureInfo.InvariantCulture) +
+            ",outside:" + DomActuator.JsArray(config.Controls.Values.Where(spec => !spec.ColorFromName &&
+                string.Equals(spec.Surface, config.PowerPointLive.SlideShowSurface, StringComparison.OrdinalIgnoreCase))
+                .Select(spec => spec.AutomationId).Append(config.PowerPointLive.ToolbarAutomationId)) +
             ",colors:" + DomActuator.JsArray(colors) + "}";
 
         return $$"""
@@ -74,14 +77,38 @@ internal static class InkDom
                 }
             };
             let tool = null, originalOpen = false, initialKnown = false, openAttempted = false;
-            let style = null, watchdog = null, observer = null, operationPopup = null;
+            let style = null, watchdog = null, observer = null, operationPopup = null, owner = null;
             const host = () => tool ? document.getElementById(tool.id) : null;
             const expanded = () => host()?.getAttribute('aria-expanded');
+            const fiber = element => {
+                const key = element && Object.keys(element).find(key => key.startsWith('__reactFiber'));
+                return key ? element[key] : null;
+            };
+            const ancestry = node => {
+                const nodes = [];
+                while (node && typeof node === 'object' && nodes.length < 96 && !nodes.includes(node)) {
+                    nodes.push(node);
+                    node = node.return;
+                }
+                return nodes;
+            };
+            const same = (left, right) => !!left && !!right &&
+                (left === right || left.alternate === right || right.alternate === left);
+            const popupOwner = () => {
+                const outside = data.outside.map(id => ancestry(fiber(document.getElementById(id))))
+                    .filter(nodes => nodes.length);
+                let branch = null;
+                for (const node of ancestry(fiber(host()))) {
+                    if (outside.some(nodes => nodes.some(other => same(node, other)))) return branch;
+                    branch = node;
+                }
+                return null;
+            };
             const inkPopup = () => {
+                // The shared ink portal has no aria-controls link. Read its logical
+                // subtree, bounded by neighboring controls; never invoke React handlers.
                 const candidates = surfaces().filter(el =>
-                    [...el.querySelectorAll('[role="radiogroup"]')].some(group =>
-                        [...group.querySelectorAll('[role="radio"]')].some(item =>
-                            knownColors.includes(name(item).toLowerCase()))));
+                    ancestry(fiber(el)).some(node => same(node, owner)));
                 const roots = candidates.filter(el => !candidates.some(other => other !== el && other.contains(el)));
                 return roots.length === 1 ? roots[0] : null;
             };
@@ -90,7 +117,7 @@ internal static class InkDom
                 return root && surfaces().every(el => root.contains(el) || el.contains(root)) ? root : null;
             };
             const suppressOwnedPopup = () => {
-                if (originalOpen || !openAttempted || operationPopup || expanded() !== 'true') return;
+                if (originalOpen || !openAttempted || operationPopup) return;
                 const choices = selected();
                 if (choices.length !== 1 || choices[0].key !== tool.key) return;
                 const scope = inkPopup();
@@ -134,6 +161,8 @@ internal static class InkDom
                 if (!(data.thickness ? tool.thickness : tool.color))
                     throw Error(data.thickness ? 'This tool has no thickness' : 'This tool has no colors');
                 if (disabled(host())) throw Error('The drawing tool is disabled');
+                owner = popupOwner();
+                if (!owner) throw Error('Drawing-tool popup ownership is unavailable');
                 const state = expanded();
                 if (state !== 'true' && state !== 'false') throw Error('The drawing-tool popup state is unknown');
                 originalOpen = state === 'true';
@@ -149,7 +178,10 @@ internal static class InkDom
                     watchdog = setTimeout(() => style.remove(), {{Math.Max(100, timeoutMs - 100)}});
                     // Tag the owned popup before paint, without hiding menus opened concurrently.
                     observer = new MutationObserver(suppressOwnedPopup);
-                    observer.observe(document.documentElement, { childList: true, subtree: true });
+                    observer.observe(document.documentElement, {
+                        childList: true, subtree: true, attributes: true,
+                        attributeFilter: ['aria-expanded', 'aria-selected']
+                    });
                     openAttempted = true;
                     host().click();
                     suppressOwnedPopup();
