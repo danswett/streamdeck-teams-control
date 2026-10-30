@@ -307,7 +307,12 @@ state. Blur uses the camera popup's logical ownership and hides only a popup
 opened by the plugin; a user-open popup stays visible and open.
 
 Grid view confirms that its overlay appeared or disappeared and, when closing,
-that the slide toolbar returned. Timer toggles confirm Pause/Resume changed;
+that the slide toolbar returned. Current Teams can retain the slide root while
+putting a visible grid in a sibling drawer marked `aria-hidden`; bounded Direct
+observation keeps the key's state and availability correct when accessibility
+cannot see that drawer. Timer controls use the smallest shared DOM scope bounded
+away from meeting-toolbar controls, with logical ownership as a portal fallback.
+Timer toggles confirm Pause/Resume changed;
 reset requires an increased remaining-time reading, not just a successful click.
 An unchanged or ambiguous reading is reported as unconfirmed rather than
 repeated. Cancel timer is never a substitute for pause or reset. Presentation

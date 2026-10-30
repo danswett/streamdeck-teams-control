@@ -152,14 +152,20 @@ async function main() {
         }
     };
     let grid = null;
+    const retainedRoot = scenario.startsWith('retained-root');
+    if (retainedRoot) body.appendChild(new Element('div', { id: 'ppt-previewer-root' }));
     const gridButton = button(body, 'Grid view', 'gridViewToolbarButton');
     const openGrid = () => {
-        gridButton.remove();
-        grid = body.appendChild(new Element('div', { id: 'fluent-grid-view' }));
-        button(grid, 'Close grid view').onClick = () => write(() => { grid.remove(); body.appendChild(gridButton); });
+        if (retainedRoot) gridButton.hidden = true;
+        else gridButton.remove();
+        grid = body.appendChild(new Element('aside', { id: 'fluent-grid-view', role: 'dialog',
+            ...(retainedRoot ? { 'aria-hidden': 'true' } : {}) }));
+        button(grid, 'Close grid view').onClick = () => write(() => {
+            grid.remove(); gridButton.hidden = false; body.appendChild(gridButton);
+        });
     };
     gridButton.onClick = () => write(openGrid);
-    if (kind === 'Grid' && ['grid-close', 'grid-close-foreign', 'selector-fallback'].includes(scenario)) openGrid();
+    if (kind === 'Grid' && ['grid-close', 'grid-close-foreign', 'selector-fallback','retained-root-close'].includes(scenario)) openGrid();
     const timer = body.appendChild(new Element('div', {}, timerOwner));
     const controlName = seconds => (localized ? 'Zeitsteuerung' : 'Timer controls') +
         ', ' + Math.floor(seconds / 60) + ' min, ' + seconds % 60 + ' sec remaining';
@@ -176,6 +182,11 @@ async function main() {
         assert.notEqual(toggle.getAttribute('aria-label'), 'Cancel timer for everyone', 'never cancel a timer to toggle it');
         write(() => { running = !running; setToggle(); });
     };
+    if (scenario === 'split-fiber') toggle.__reactFiber$guard = { return: rootFiber };
+    if (scenario === 'wrong-scope') {
+        body.appendChild(toggle);
+        toggle.__reactFiber$guard = { return: rootFiber };
+    }
     button(timer, 'Reset timer', '', timerOwner).onClick = () => write(() => {
         controls.setAttribute('aria-label', controlName(300));
         running = true; setToggle();
@@ -238,7 +249,8 @@ async function main() {
     assert.ok(all.every(el => !el.hasAttribute('data-sdtc-guarded-owned')), 'no owned markers may survive');
     const prewriteFailures = new Set(['foreign-popup', 'foreign-batched-open', 'grid-close-foreign',
         'unknown-state', 'ambiguous', 'missing-owner', 'missing-dialog', 'cancel-mapped', 'expired-before-write']);
-    const noWrite = prewriteFailures.has(scenario) || kind === 'TimerToggle' && scenario === 'expired';
+    const noWrite = (prewriteFailures.has(scenario) && !(kind.startsWith('Timer') && scenario === 'missing-owner')) ||
+        scenario === 'wrong-scope' || kind === 'TimerToggle' && scenario === 'expired';
     assert.equal(writes, noWrite ? 0 : 1, 'observe exactly the intended write count, including uncertain results');
     if (kind === 'Blur' && scenario !== 'cleanup-fails')
         assert.equal(!!popup?.isConnected, originalOpen, 'restore only the original popup state');

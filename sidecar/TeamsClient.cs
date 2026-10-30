@@ -308,10 +308,9 @@ public sealed class PowerPointLiveSpec
     /// <summary>
     /// The grid-of-thumbnails overlay.
     ///
-    /// Opening it replaces the entire slide-show subtree: the root, the
-    /// toolbar and every control disappear from the tree. Without knowing
-    /// about it the plugin would decide the presentation had ended and dim
-    /// every key — including the one key that closes the grid again.
+    /// Older layouts replace the slide-show subtree; current Teams can keep
+    /// the root and render a sibling drawer hidden from accessibility instead.
+    /// Its own key must remain live to close the grid in either layout.
     /// </summary>
     public string GridViewAutomationId { get; set; } = "fluent-grid-view";
 
@@ -1406,6 +1405,7 @@ public sealed partial class TeamsClient : IDisposable
     /// Live. Null outside a snapshot, and reset with the index.
     /// </summary>
     private bool? _gridPresent;
+    private GuardedDom.GridObservation? _directGrid;
 
     /// <summary>
     /// Looks an element up on the meeting toolbar only.
@@ -1487,26 +1487,22 @@ public sealed partial class TeamsClient : IDisposable
             root = FindAnywhere(win, ppt.RootAutomationId);
         }
 
-        // The grid overlay and the slide-show surface cannot both be in the
-        // tree: opening the grid unmounts the whole slide-show subtree, which
-        // is why the grid's own key is judged by presence rather than state. A
-        // root that is present is therefore proof the grid is not, and proving
-        // it again by search is expensive - a miss widens to every other Teams
-        // window, and the chat window alone cost 885-1575 ms of every snapshot
-        // while a deck was up, the largest single cost left in the sidecar.
-        //
-        // The answer is kept for the control loop, which asks the same question
-        // again a moment later for the grid key's own state.
-        AutomationElement? grid;
-        if (root is not null)
-        {
-            grid = null;
-            _gridPresent = false;
-        }
-        else
-        {
+        // A visible sibling drawer may be aria-hidden while Teams is backgrounded.
+        // Prefer the bounded Direct observation, retaining indexed UIA fallback
+        // and wide-search avoidance when the ordinary slide root is present.
+        _directGrid = _dom.ObserveGrid(_config);
+        var grid = FindOnToolbar(win, ppt.GridViewAutomationId);
+        if (grid is null && root is null && _directGrid is null)
             grid = FindAnywhere(win, ppt.GridViewAutomationId);
-            _gridPresent = grid is not null;
+        _gridPresent = _directGrid?.Open ?? grid is not null;
+        if (_directGrid is not null)
+        {
+            foreach (var (key, spec) in _config.Controls)
+            {
+                if (spec.ActiveWhenPresentAutomationId != ppt.GridViewAutomationId) continue;
+                _lastStates[key] = _directGrid.Open;
+                _lastAvailable[key] = _directGrid.Available;
+            }
         }
 
         // Those two buttons are PowerPoint-specific, so the role also proves a
@@ -1520,13 +1516,13 @@ public sealed partial class TeamsClient : IDisposable
 
         context["ppt.role"] = role;
 
-        if (grid is not null)
+        if (_gridPresent == true)
         {
             context["ppt.grid"] = "1";
 
             // The slide toolbar is gone, but the grid marks the current slide as
             // its selected thumbnail, so the counter keeps working.
-            var selected = SelectedGridSlide(grid) ?? _lastSlide;
+            var selected = grid is null ? _lastSlide : SelectedGridSlide(grid) ?? _lastSlide;
             if (selected is not null)
             {
                 context["ppt.slide"] = selected;
@@ -2566,6 +2562,7 @@ public sealed partial class TeamsClient : IDisposable
             {
                 _index = null;
                 _gridPresent = null;
+                _directGrid = null;
                 stages?.Report("snapshot");
             }
         }
@@ -2659,6 +2656,14 @@ public sealed partial class TeamsClient : IDisposable
             {
                 snap.Available[key] = false;
                 _lastAvailable[key] = false;
+                continue;
+            }
+
+            if (_directGrid is not null &&
+                spec.ActiveWhenPresentAutomationId == _config.PowerPointLive.GridViewAutomationId)
+            {
+                snap.States[key] = _directGrid.Open;
+                snap.Available[key] = _directGrid.Available;
                 continue;
             }
 

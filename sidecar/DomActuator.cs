@@ -340,6 +340,17 @@ internal sealed class DomActuator
             (script, remaining) => Cdp.Evaluate(page, script, remaining), Remaining());
     }
 
+    internal GuardedDom.GridObservation? ObserveGrid(SelectorConfig config)
+    {
+        if (!IsUsable || _slideShow is null) return null;
+        var pages = Cdp.ListTargets(_spec.Port, 500);
+        if (pages is null) return null;
+        var decks = pages.Where(candidate => (candidate.Type is "page" or "iframe") &&
+            IsSlideShowTarget(candidate.Url)).ToArray();
+        if (decks.Length != 1) return null;
+        return GuardedDom.ReadGrid(Cdp.Evaluate(decks[0], GuardedDom.BuildGridObservation(config), 500), config);
+    }
+
     /// <summary>
     /// Presses a control without showing its flyout.
     ///

@@ -9,6 +9,7 @@ internal static class GuardedDom
 {
     internal enum Kind { Blur, Grid, TimerToggle, TimerReset, ConfirmPresentation }
     internal sealed record Result(bool Ok, string? Error, bool? State = null);
+    internal sealed record GridObservation(bool Open, bool Available);
     private sealed record Candidate(int Index, string Id, string Name, bool? Checked);
     private sealed record Snapshot(IReadOnlyList<Candidate> Candidates, bool GridOpen);
     private sealed record Choice(Candidate Item, int Anchor = -1, bool? State = null,
@@ -201,6 +202,59 @@ internal static class GuardedDom
         if (!condition) throw new InvalidDataException(message);
     }
 
+    internal static GridObservation? ReadGrid(CdpResult reply, SelectorConfig config)
+    {
+        try
+        {
+            using var document = Read(reply);
+            if (!Flag(document.RootElement, "known")) return null;
+            var snapshot = SnapshotOf(document.RootElement);
+            var spec = config.Controls["ppt-grid"];
+            var id = snapshot.GridOpen ? spec.OffAutomationId : spec.AutomationId;
+            var identified = string.IsNullOrEmpty(id) ? [] :
+                snapshot.Candidates.Where(item => item.Id == id).Take(2).ToArray();
+            var available = identified.Length == 1;
+            if (identified.Length == 0 && snapshot.GridOpen && spec.OffRegex is { } pattern)
+                available = snapshot.Candidates.Count(item => pattern.IsMatch(item.Name)) == 1;
+            return new(snapshot.GridOpen, available);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Direct grid observation failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    internal static string BuildGridObservation(SelectorConfig config)
+    {
+        var spec = config.Controls["ppt-grid"];
+        return $$"""
+        (function() {
+            const grid=document.getElementById({{DomActuator.Js(spec.ActiveWhenPresentAutomationId)}});
+            const opener=document.getElementById({{DomActuator.Js(spec.AutomationId)}});
+            const visible=element=>{
+                if(!element?.getClientRects().length)return false;
+                for(let node=element;node;node=node.parentElement){
+                    const css=getComputedStyle(node);
+                    if(css.display==='none'||css.visibility==='hidden')return false;
+                }
+                return true;
+            };
+            const open=visible(grid);
+            const elements=open?[...grid.querySelectorAll('button,[role="button"]')]:opener?[opener]:[];
+            if(elements.length>256)return JSON.stringify({error:'Too many grid controls'});
+            const candidates=elements.filter(element=>visible(element)&&!element.disabled&&
+                element.getAttribute('aria-disabled')!=='true').map((element,index)=>{
+                    const labelled=(element.getAttribute('aria-labelledby')||'').split(' ').filter(Boolean)
+                        .map(id=>document.getElementById(id)?.textContent||'').join(' ').trim();
+                    return {index,id:element.id||'',name:(labelled||element.getAttribute('aria-label')||
+                        element.getAttribute('title')||element.textContent||'').trim(),checked:null};
+                });
+            return JSON.stringify({known:open||visible(opener),gridOpen:open,candidates});
+        })()
+        """;
+    }
+
     internal static string BuildFinish(string token, int index, string name, bool? selected, int anchor = -1) =>
         $"window.__sdtc_guarded_operation?.token === {DomActuator.Js(token)} ? " +
         $"window.__sdtc_guarded_operation.finish({index},{DomActuator.Js(name)}," +
@@ -247,7 +301,7 @@ internal static class GuardedDom
             const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
             const until = Date.now() + {{Math.Max(50, timeoutMs - 800)}};
             const operation = {token:data.token};
-            let rows = [], owner = null, ownedPopup = null, timerOwner = null, dialog = null;
+            let rows = [], owner = null, ownedPopup = null, timerOwner = null, timerScope = null, dialog = null;
             let originalOpen = false, knownOpen = false, opened = false, writeAttempted = false;
             let style = null, observer = null, watchdog = null, cleaned = false, reopened = false, finishing = false;
             const host = () => document.getElementById(data.menu);
@@ -309,7 +363,8 @@ internal static class GuardedDom
                 if (el.isConnected === false || !el.getClientRects().length) return false;
                 for (let node = el; node; node = node.parentElement) {
                     const css = getComputedStyle(node);
-                    if (node.getAttribute('aria-hidden') === 'true' || css.display === 'none' || css.visibility === 'hidden')
+                    // The visible background grid is aria-hidden to accessibility.
+                    if (css.display === 'none' || css.visibility === 'hidden')
                         return false;
                 }
                 return true;
@@ -339,7 +394,8 @@ internal static class GuardedDom
                 if (!scope) throw Error('The Direct control scope disappeared');
                 let elements = [...scope.querySelectorAll(buttons)].filter(visible);
                 if (data.kind === 'TimerToggle' || data.kind === 'TimerReset')
-                    elements = elements.filter(el => !timerOwner || belongs(el,timerOwner));
+                    elements = elements.filter(el => timerScope ? timerScope.contains(el) :
+                        !timerOwner || belongs(el,timerOwner));
                 if (data.kind === 'Grid' && scope === document)
                     elements = elements.filter(el => el.id === data.gridButton);
                 if (elements.length > 256) throw Error('Too many candidate Direct controls');
@@ -404,9 +460,19 @@ internal static class GuardedDom
                     if (data.kind === 'TimerToggle' || data.kind === 'TimerReset') {
                         const anchor = rows[anchorIndex];
                         if (!anchor?.isConnected) throw Error('The timer controls disappeared');
-                        timerOwner = branchFor(anchor);
-                        if (!timerOwner || !belongs(item,timerOwner) ||
-                            surfaces().some(el => !belongs(el,timerOwner)))
+                        const outside = data.outside.map(id => document.getElementById(id)).filter(Boolean);
+                        if (!outside.length) throw Error('The timer scope boundary is unavailable');
+                        let scope = anchor;
+                        while (scope && !scope.contains(item)) {
+                            if (outside.some(element => scope.contains(element))) { scope = null; break; }
+                            scope = scope.parentElement;
+                        }
+                        if (scope && !outside.some(element => scope.contains(element))) timerScope = scope;
+                        else timerOwner = branchFor(anchor);
+                        if (!(timerScope || timerOwner && belongs(item,timerOwner)) ||
+                            surfaces().some(el => timerScope
+                                ? !timerScope.contains(el) && !el.contains(timerScope)
+                                : !belongs(el,timerOwner)))
                             throw Error('The timer controls are not uniquely scoped');
                     }
                     if (data.kind === 'ConfirmPresentation' &&

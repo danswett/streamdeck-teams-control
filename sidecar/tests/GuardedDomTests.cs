@@ -31,6 +31,8 @@ public class GuardedDomTests
     [InlineData("Blur", "expired-before-write", false)]
     [InlineData("Grid", "normal", true)]
     [InlineData("Grid", "grid-close", true)]
+    [InlineData("Grid", "retained-root", true)]
+    [InlineData("Grid", "retained-root-close", true)]
     [InlineData("Grid", "selector-fallback", true)]
     [InlineData("Grid", "grid-close-foreign", false)]
     [InlineData("Grid", "foreign-popup", false)]
@@ -44,7 +46,9 @@ public class GuardedDomTests
     [InlineData("TimerToggle", "cancel-mapped", false)]
     [InlineData("TimerToggle", "foreign-popup", false)]
     [InlineData("TimerToggle", "ambiguous", false)]
-    [InlineData("TimerToggle", "missing-owner", false)]
+    [InlineData("TimerToggle", "missing-owner", true)]
+    [InlineData("TimerToggle", "split-fiber", true)]
+    [InlineData("TimerToggle", "wrong-scope", false)]
     [InlineData("TimerToggle", "ignored-write", false)]
     [InlineData("TimerToggle", "throw-after-write", false)]
     [InlineData("TimerReset", "normal", true)]
@@ -112,6 +116,17 @@ public class GuardedDomTests
                 return new(true, reply.RootElement.GetProperty("value").GetString(), null);
             }, 5000);
             Assert.True(result.Ok == expected, $"{operation}/{scenario}: {result.Error}");
+            if (kind == GuardedDom.Kind.Grid && result.Ok)
+            {
+                process.StandardInput.WriteLine(JsonSerializer.Serialize(GuardedDom.BuildGridObservation(config)));
+                process.StandardInput.Flush();
+                var line = await process.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(10));
+                using var observed = JsonDocument.Parse(line!);
+                var grid = GuardedDom.ReadGrid(new(true, observed.RootElement.GetProperty("value").GetString(), null), config);
+                Assert.NotNull(grid);
+                Assert.Equal(result.State, grid.Open);
+                Assert.True(grid.Available);
+            }
             if (!expected)
             {
                 Assert.NotEmpty(result.Error!);
