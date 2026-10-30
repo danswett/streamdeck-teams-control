@@ -35,6 +35,7 @@ vi.mock("../src/bridge", () => ({
 }));
 import { DirectModeControl } from "../src/direct-mode";
 import { readDirectModeSettings } from "../src/protocol";
+import { updateGlobalSettings } from "../src/settings";
 
 const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
 
@@ -162,6 +163,28 @@ describe("plugin-wide Direct mode settings", () => {
 		expect(await second).toMatchObject({ ok: false });
 		expect(await first).toEqual({ ok: true });
 		expect(mocks.save).toHaveBeenCalledOnce();
+	});
+
+	it("preserves profile restart protection during a concurrent Direct mode change", async () => {
+		await control.start();
+		let release: () => void = () => {};
+		const wait = new Promise<void>((resolve) => { release = resolve; });
+		mocks.save.mockImplementationOnce(async (settings: JsonObject) => {
+			await wait;
+			mocks.global = settings;
+		});
+		const profile = updateGlobalSettings((settings) => ({
+			...settings, pptProfilePending: { device: "deck", profile: "profiles/Teams Meeting" }
+		}));
+		const toggle = control.toggle();
+		await vi.advanceTimersByTimeAsync(0);
+		release();
+		await profile;
+		expect(await toggle).toEqual({ ok: true });
+		expect(mocks.global).toMatchObject({
+			directModeEnabled: true,
+			pptProfilePending: { device: "deck", profile: "profiles/Teams Meeting" }
+		});
 	});
 
 	it("declines runtime changes on macOS", async () => {

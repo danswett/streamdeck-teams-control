@@ -700,6 +700,7 @@ const outDir = path.join(PLUGIN_DIR, "profiles");
 
 /** What the manifest will declare, collected as each profile is written. */
 const registered: object[] = [];
+const layouts: Record<string, string[]> = {};
 
 /** Profiles whose layout moved without the revision being bumped. */
 const drifted: string[] = [];
@@ -795,8 +796,15 @@ for (const profile of PROFILES) {
 		Name: `profiles/${file}`,
 		DeviceType: device.deviceType,
 		Readonly: false,
+		AutoInstall: false,
 		DontAutoSwitchWhenInstalled: true
 	});
+	layouts[`profiles/${file}`] = [
+		...Object.entries(profile.layout).filter(([, key]) => !key.plugin)
+			.map(([position, key]) => `Keypad ${position} ${PLUGIN_UUID}.${key.action}`),
+		...Object.entries(profile.dials ?? {}).filter(([, key]) => !key.plugin)
+			.map(([position, key]) => `Encoder ${position} ${PLUGIN_UUID}.${key.action}`)
+	].sort();
 
 	const fingerprint = layoutFingerprint(profile);
 	if (profile.layoutHash === undefined) unrecorded.push(`  ${title}: layoutHash: "${fingerprint}"`);
@@ -867,7 +875,8 @@ writeFileSync(
 				"to read the manifest at runtime - DRM protects it, and the failure is",
 				"silent. tests/profiles.test.ts fails if this and the manifest disagree."
 			],
-			profiles: registered
+			profiles: registered,
+			layouts
 		},
 		null,
 		"\t"
