@@ -28,7 +28,7 @@ styled invisible, so nothing appears on screen at all.
 |---|---|---|
 | Reactions, blur, PPT Live menus | flyout visible, up to a few seconds | nothing visible, ~240 ms |
 | Camera selection/swap and preferences | camera flyout and, for mirror, video-settings pane | hidden navigation with confirmed single writes |
-| Ink colour | palette visible | nothing visible |
+| Ink colour and thickness dials | palette visible | hidden palette with confirmed single writes |
 | Jump to a slide | needs grid view open | jumps with nothing on screen |
 | Teams minimized | falls back to UIA `Invoke`, which raises the window | works, window stays down |
 | Everything else | unchanged | unchanged |
@@ -39,6 +39,12 @@ uncertain device or preference write is reported as an error rather than
 repeated: retrying a swap could silently undo the first switch. A later
 preference or cleanup failure can occur after the camera or earlier preferences
 have already changed.
+
+Ink adjustments use the normal path only when Direct is unavailable before an
+operation starts. Once a Direct ink operation starts, a timeout, unconfirmed
+write, or cleanup failure is reported rather than retried through UI Automation:
+repeating a relative colour step could apply it twice. A palette the user
+already opened is not hidden and is left open.
 
 ---
 
@@ -268,6 +274,13 @@ slide-show frame, which is what Teams itself does — the on-screen buttons are
 only one way of raising it. That is why a jump needs no grid view: the UI
 Automation path has to invoke a filmstrip tile, and a tile only exists while the
 filmstrip is on screen.
+
+**Ink dials** read the selected tool's own palette or range input in the
+slide-show document. Colour uses a single swatch click; thickness uses the
+native input-value setter and one input event. Neither is considered successful
+until the tool's application-updated name confirms the requested value. Popup
+ownership, temporary styles, and an operation lock bound the navigation and
+prevent uncertain relative writes from being repeated.
 
 Direct mode never activates the Teams window, so unlike the UI Automation path it
 needs no focus guard at all.
