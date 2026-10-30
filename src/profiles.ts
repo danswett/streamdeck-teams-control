@@ -149,6 +149,7 @@ export class ProfileSwitcher {
 	#loaded = false;
 	#paused = false;
 	#pending = false;
+	#error: string | undefined;
 	#epoch = 0;
 
 	/** Last profile chosen per device, so only a genuine change switches. */
@@ -192,8 +193,12 @@ export class ProfileSwitcher {
 	}
 
 	async #load(): Promise<void> {
+		const epoch = this.#epoch;
+		const error = this.#error;
 		try {
-			this.#receive(await getGlobalSettings());
+			const settings = await getGlobalSettings();
+			if (epoch === this.#epoch && this.#error === error) this.#error = undefined;
+			this.#receive(settings);
 		} catch (err) {
 			this.#pause(`Could not load profile settings: ${String(err)}`);
 		}
@@ -227,6 +232,7 @@ export class ProfileSwitcher {
 				if (epoch !== this.#epoch) return;
 				this.#loaded = true;
 				if (enabled) this.#pending = false;
+				this.#error = undefined;
 				this.#paused = false;
 				logger.info(`Meeting profiles ${enabled ? "enabled" : "disabled"}`);
 				this.#apply();
@@ -239,11 +245,12 @@ export class ProfileSwitcher {
 
 	#pause(reason: string): void {
 		this.#paused = true;
+		this.#error = reason;
 		logger.warn(`${reason}; automatic profile following paused. Turn following off and on to retry.`);
 		void this.#publish(reason);
 	}
 
-	async #publish(error = ""): Promise<void> {
+	async #publish(error = this.#error ?? ""): Promise<void> {
 		if (!streamDeck.ui.action) return;
 		try {
 			await streamDeck.ui.sendToPropertyInspector({

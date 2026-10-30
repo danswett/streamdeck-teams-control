@@ -163,7 +163,12 @@ describe("automatic profile installation policy", () => {
 		mocks.publish.mockReset().mockResolvedValue(undefined);
 		mocks.land = true;
 		mocks.nextId = 0;
-		mocks.get.mockReset().mockImplementation(async () => structuredClone(mocks.global));
+		mocks.get.mockReset().mockImplementation(async () => {
+			const settings = structuredClone(mocks.global);
+			// SDK reads also emit global-settings events; they are not user consent.
+			for (const fn of mocks.receive) fn({ settings });
+			return settings;
+		});
 		mocks.save.mockReset().mockImplementation(async (settings: JsonObject) => {
 			mocks.global = structuredClone(settings);
 			for (const fn of mocks.receive) fn({ settings: structuredClone(settings) });
@@ -338,12 +343,24 @@ describe("automatic profile installation policy", () => {
 		}
 		await vi.advanceTimersByTimeAsync(0);
 		expect(mocks.switch).not.toHaveBeenCalled();
+		expect(mocks.publish.mock.lastCall?.[0]).toMatchObject({ loaded: true, error: "" });
 		following(false);
 		await vi.advanceTimersByTimeAsync(1000);
 		following(true);
 		await vi.advanceTimersByTimeAsync(1000);
 		expect(mocks.switch).toHaveBeenCalledOnce();
 		expect(mocks.global.pptProfilePending).toBeUndefined();
+	});
+
+	it("keeps a failed settings load visible after the inspector asks for status", async () => {
+		mocks.get.mockRejectedValue(new Error("settings unavailable"));
+		await start();
+		for (const fn of mocks.request) {
+			await fn({ payload: { event: "profile-following-status", enabled: false }, action: { id: "settings" } });
+		}
+		expect(mocks.publish.mock.lastCall?.[0]).toMatchObject({
+			loaded: false, error: expect.stringContaining("settings unavailable")
+		});
 	});
 
 	it("does not replace explicit startup consent with a late, older settings reply", async () => {
