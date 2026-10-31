@@ -210,7 +210,8 @@ describe("automatic profile installation policy", () => {
 		await change({ inMeeting: true });
 		for (const fn of mocks.connect) fn({ device: { id: "deck" } });
 		await vi.advanceTimersByTimeAsync(60_000);
-		expect(mocks.switch.mock.calls).toEqual([["deck", profilePath(MEETING, 0)]]);
+		// The request is still handed back once, so smart profiles resume; it is never re-sent.
+		expect(mocks.switch.mock.calls).toEqual([["deck", profilePath(MEETING, 0)], ["deck"]]);
 		expect(mocks.global.pptProfilePending).toEqual({
 			device: "deck", profile: profilePath(MEETING, 0)
 		});
@@ -254,9 +255,9 @@ describe("automatic profile installation policy", () => {
 		await vi.advanceTimersByTimeAsync(1000);
 		mocks.land = true;
 		following(true);
-		await vi.advanceTimersByTimeAsync(1000);
+		await vi.advanceTimersByTimeAsync(5000);
 		expect(mocks.switch.mock.calls).toEqual([
-			["deck", profilePath(MEETING, 0)], ["deck", profilePath(MEETING, 0)]
+			["deck", profilePath(MEETING, 0)], ["deck"], ["deck", profilePath(MEETING, 0)]
 		]);
 		expect(mocks.global.pptProfilePending).toBeUndefined();
 		expect(mocks.global).toMatchObject({
@@ -438,15 +439,38 @@ describe("automatic profile installation policy", () => {
 		expect(mocks.disappear.size).toBe(0);
 	});
 
-	it("does not return away from a layout the user changed after a confirmed switch", async () => {
+	it("hands the deck back after the user edits a confirmed layout, so smart profiles resume", async () => {
 		await start();
 		await vi.advanceTimersByTimeAsync(1000);
 		const first = mocks.visible.values().next().value!;
 		first.coordinates = { column: 99, row: 99 };
-		const before = [...mocks.visible];
 		await change({ inMeeting: false });
-		expect(mocks.switch).toHaveBeenCalledOnce();
-		expect([...mocks.visible]).toEqual(before);
+		expect(mocks.switch.mock.calls).toEqual([["deck", profilePath(MEETING, 0)], ["deck"]]);
+	});
+
+	it("hands back a customized profile whose layout was never confirmed when the meeting ends", async () => {
+		mocks.switch.mockImplementation(async (device: string, profile?: string) => {
+			showLayout(device, profile);
+			if (profile) addExtraControl();
+		});
+		await start();
+		await vi.advanceTimersByTimeAsync(10_000);
+		expect(mocks.global.pptProfilePending).toBeDefined();
+		await change({ inMeeting: false });
+		await vi.advanceTimersByTimeAsync(5000);
+		expect(mocks.switch.mock.calls).toEqual([["deck", profilePath(MEETING, 0)], ["deck"]]);
+		await change({ inMeeting: true });
+		await change({ inMeeting: false });
+		expect(mocks.switch).toHaveBeenCalledTimes(2);
+	});
+
+	it("hands back an unconfirmed profile when following is turned off mid-meeting", async () => {
+		mocks.land = false;
+		await start();
+		await vi.advanceTimersByTimeAsync(10_000);
+		following(false);
+		await vi.advanceTimersByTimeAsync(5000);
+		expect(mocks.switch.mock.calls).toEqual([["deck", profilePath(MEETING, 0)], ["deck"]]);
 	});
 
 	it("allows an accepted installation to finish within the observation budget", async () => {
