@@ -495,6 +495,13 @@ nothing appears on screen, and a reaction completes in ~240 ms rather than
 seconds. It also works with Teams minimized, and can jump straight to a slide
 without opening grid view.
 
+Direct also handles the Grid View toggle (including pressing the Current Slide
+dial), meeting-timer pause/resume/reset, and the held Stop Presenting
+confirmation. The requested grid and confirmation dialog remain visible;
+Direct does not remove the hold-to-confirm safeguard. Controls matched by name,
+including blur, use the configured C# regex timeouts rather than running those
+patterns inside Teams.
+
 **Security tradeoff:** this is a Windows-only, unofficial Teams integration.
 The debugging port is **unauthenticated**: local programs that can reach it can
 read or drive your Teams session. Do not enable it on a managed, shared, or kiosk
@@ -547,9 +554,10 @@ machines. A separately named preview plugin has its own consent and does not
 enable the official plugin.
 
 If Direct is unavailable or a control has no Direct path, the normal UI
-Automation path may raise Teams. An uncertain camera, preference, or ink write is
-reported as an error rather than repeated: retrying a swap could undo the first
-switch, and retrying a relative color step could apply it twice.
+Automation path may raise Teams. An uncertain camera, preference, ink, blur,
+grid, timer, or presentation-confirmation write is reported as an error rather
+than repeated: retrying a swap could undo the first switch, and retrying a
+relative color step could apply it twice.
 
 **To turn it off:** disable the Direct Mode key to stop the plugin using the
 connection. This leaves the port open. Follow the

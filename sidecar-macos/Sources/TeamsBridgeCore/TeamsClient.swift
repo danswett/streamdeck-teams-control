@@ -394,6 +394,16 @@ public final class TeamsClient {
         let itemID = fillArg(spec.menuItemAutomationId, arg)
         let itemToggleID = fillArg(spec.menuItemToggleAutomationId, arg)
 
+        if spec.automationId.isEmpty, let name = spec.name, !name.isEmpty {
+            return Self.invokeTransient(target: target, find: { () -> AXNode? in
+                let windows = AX.windows(appEl)
+                let liveNodes = Tree.walk(windows: windows)
+                let liveIDs = Tree.indexByID(liveNodes)
+                guard self.pickMeetingWindow(wins: windows, byID: liveIDs) != nil else { return nil }
+                return self.resolve(spec, byID: liveIDs, nodes: liveNodes)
+            }, perform: { self.press($0.element, name: target) })
+        }
+
         // A flyout left open - by the press before this one, or by the user -
         // takes the meeting toolbar out of the accessibility tree with it, so
         // every control outside the popup reads as missing and the key does
@@ -763,6 +773,24 @@ public final class TeamsClient {
     private func rememberToggle(_ target: String) {
         if let prev = lastStates[target] {
             lastStates[target] = !prev
+        }
+    }
+
+    static func invokeTransient<Control>(
+        target: String,
+        now: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+        pause: () -> Void = { Thread.sleep(forTimeInterval: 0.08) },
+        find: () -> Control?,
+        perform: (Control) -> (ok: Bool, error: String?)
+    ) -> (ok: Bool, error: String?) {
+        let deadline = now() + 2.5
+        while true {
+            if let control = find() {
+                guard now() < deadline else { return (false, "control '\(target)' discovery timed out") }
+                return perform(control)
+            }
+            if now() >= deadline { return (false, "control '\(target)' not found") }
+            pause()
         }
     }
 

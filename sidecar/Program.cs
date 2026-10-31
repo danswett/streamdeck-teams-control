@@ -512,7 +512,7 @@ public static class Program
                     break;
                 }
 
-                var (ok, err) = client.Invoke(item.Target ?? "", item.Arg);
+                var (ok, err) = client.Invoke(item.Target ?? "", item.Arg, item.QueuedAt + 10_000);
                 Emit(w =>
                 {
                     w.WriteString("type", "result");

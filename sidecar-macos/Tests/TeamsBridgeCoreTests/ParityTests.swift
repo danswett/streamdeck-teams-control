@@ -40,6 +40,71 @@ final class ParityTests: XCTestCase {
         XCTAssertEqual(spec?.withinClass, "dlg")
     }
 
+    func testConfirmationWaitsForRenderingBeforeItsOnlyPress() {
+        var clock: TimeInterval = 0
+        var discoveries = 0
+        var presses = 0
+        let result = TeamsClient.invokeTransient(
+            target: "ppt-stop-presenting-confirm",
+            now: { clock }, pause: { clock += 0.08 },
+            find: { () -> String? in
+                discoveries += 1
+                return discoveries == 3 ? "dialog" : nil
+            }, perform: { value in
+                XCTAssertEqual(value, "dialog")
+                presses += 1
+                return (true, nil)
+            })
+        XCTAssertTrue(result.ok)
+        XCTAssertEqual(discoveries, 3)
+        XCTAssertEqual(presses, 1)
+    }
+
+    func testAnUncertainConfirmationIsNeverRepeated() {
+        var presses = 0
+        let result = TeamsClient.invokeTransient(
+            target: "ppt-stop-presenting-confirm",
+            find: { "dialog" }, perform: { _ in
+                presses += 1
+                return (false, "AXPress timed out")
+            })
+        XCTAssertFalse(result.ok)
+        XCTAssertEqual(presses, 1)
+        XCTAssertEqual(result.error, "AXPress timed out")
+    }
+
+    func testAMissingConfirmationTimesOutWithoutPressing() {
+        var clock: TimeInterval = 0
+        var presses = 0
+        let result = TeamsClient.invokeTransient(
+            target: "ppt-stop-presenting-confirm",
+            now: { clock }, pause: { clock += 0.5 },
+            find: { () -> String? in nil }, perform: { _ in
+                presses += 1
+                return (true, nil)
+            })
+        XCTAssertFalse(result.ok)
+        XCTAssertEqual(presses, 0)
+        XCTAssertEqual(clock, 2.5)
+    }
+
+    func testSlowDiscoveryCannotProduceALateConfirmation() {
+        var clock: TimeInterval = 0
+        var presses = 0
+        let result = TeamsClient.invokeTransient(
+            target: "ppt-stop-presenting-confirm",
+            now: { clock }, pause: {},
+            find: { () -> String? in
+                clock = 3
+                return "dialog"
+            }, perform: { _ in
+                presses += 1
+                return (true, nil)
+            })
+        XCTAssertFalse(result.ok)
+        XCTAssertEqual(presses, 0)
+    }
+
     // MARK: - Targets the plugin asks for that this sidecar cannot do
 
     func testUnimplementedTargetsAreNamed() {

@@ -308,10 +308,9 @@ public sealed class PowerPointLiveSpec
     /// <summary>
     /// The grid-of-thumbnails overlay.
     ///
-    /// Opening it replaces the entire slide-show subtree: the root, the
-    /// toolbar and every control disappear from the tree. Without knowing
-    /// about it the plugin would decide the presentation had ended and dim
-    /// every key — including the one key that closes the grid again.
+    /// Older layouts replace the slide-show subtree; current Teams can keep
+    /// the root and render a sibling drawer hidden from accessibility instead.
+    /// Its own key must remain live to close the grid in either layout.
     /// </summary>
     public string GridViewAutomationId { get; set; } = "fluent-grid-view";
 
@@ -1406,6 +1405,7 @@ public sealed partial class TeamsClient : IDisposable
     /// Live. Null outside a snapshot, and reset with the index.
     /// </summary>
     private bool? _gridPresent;
+    private GuardedDom.GridObservation? _directGrid;
 
     /// <summary>
     /// Looks an element up on the meeting toolbar only.
@@ -1487,26 +1487,22 @@ public sealed partial class TeamsClient : IDisposable
             root = FindAnywhere(win, ppt.RootAutomationId);
         }
 
-        // The grid overlay and the slide-show surface cannot both be in the
-        // tree: opening the grid unmounts the whole slide-show subtree, which
-        // is why the grid's own key is judged by presence rather than state. A
-        // root that is present is therefore proof the grid is not, and proving
-        // it again by search is expensive - a miss widens to every other Teams
-        // window, and the chat window alone cost 885-1575 ms of every snapshot
-        // while a deck was up, the largest single cost left in the sidecar.
-        //
-        // The answer is kept for the control loop, which asks the same question
-        // again a moment later for the grid key's own state.
-        AutomationElement? grid;
-        if (root is not null)
-        {
-            grid = null;
-            _gridPresent = false;
-        }
-        else
-        {
+        // A visible sibling drawer may be aria-hidden while Teams is backgrounded.
+        // Prefer the bounded Direct observation, retaining indexed UIA fallback
+        // and wide-search avoidance when the ordinary slide root is present.
+        _directGrid = _dom.ObserveGrid(_config);
+        var grid = FindOnToolbar(win, ppt.GridViewAutomationId);
+        if (grid is null && root is null && _directGrid is null)
             grid = FindAnywhere(win, ppt.GridViewAutomationId);
-            _gridPresent = grid is not null;
+        _gridPresent = _directGrid?.Open ?? grid is not null;
+        if (_directGrid is not null)
+        {
+            foreach (var (key, spec) in _config.Controls)
+            {
+                if (spec.ActiveWhenPresentAutomationId != ppt.GridViewAutomationId) continue;
+                _lastStates[key] = _directGrid.Open;
+                _lastAvailable[key] = _directGrid.Available;
+            }
         }
 
         // Those two buttons are PowerPoint-specific, so the role also proves a
@@ -1520,13 +1516,13 @@ public sealed partial class TeamsClient : IDisposable
 
         context["ppt.role"] = role;
 
-        if (grid is not null)
+        if (_gridPresent == true)
         {
             context["ppt.grid"] = "1";
 
             // The slide toolbar is gone, but the grid marks the current slide as
             // its selected thumbnail, so the counter keeps working.
-            var selected = SelectedGridSlide(grid) ?? _lastSlide;
+            var selected = grid is null ? _lastSlide : SelectedGridSlide(grid) ?? _lastSlide;
             if (selected is not null)
             {
                 context["ppt.slide"] = selected;
@@ -2566,6 +2562,7 @@ public sealed partial class TeamsClient : IDisposable
             {
                 _index = null;
                 _gridPresent = null;
+                _directGrid = null;
                 stages?.Report("snapshot");
             }
         }
@@ -2659,6 +2656,14 @@ public sealed partial class TeamsClient : IDisposable
             {
                 snap.Available[key] = false;
                 _lastAvailable[key] = false;
+                continue;
+            }
+
+            if (_directGrid is not null &&
+                spec.ActiveWhenPresentAutomationId == _config.PowerPointLive.GridViewAutomationId)
+            {
+                snap.States[key] = _directGrid.Open;
+                snap.Available[key] = _directGrid.Available;
                 continue;
             }
 
@@ -3517,8 +3522,10 @@ public sealed partial class TeamsClient : IDisposable
         }
     }
 
-    public (bool ok, string? error) Invoke(string target, string? arg = null)
+    public (bool ok, string? error) Invoke(string target, string? arg = null, long? invocationDeadline = null)
     {
+        if (invocationDeadline.HasValue && Environment.TickCount64 >= invocationDeadline.Value)
+            return (false, "request expired before execution");
         // Ink color and thickness are UI Automation patterns inside a flyout
         // rather than a selector walk, so they are handled directly rather than
         // described in the config like every other control. Jumping to a slide
@@ -3534,7 +3541,7 @@ public sealed partial class TeamsClient : IDisposable
         // Direct mode runs first when it is available. It is deliberately
         // outside the focus guard below: evaluating script in the page never
         // activates the Teams window, so there is no focus to put back.
-        if (TryDirect(target, spec, arg, jump, timer, ink) is { } handled) return handled;
+        if (TryDirect(target, spec, arg, jump, timer, ink, invocationDeadline) is { } handled) return handled;
 
         // Chromium activates the Teams window when a control is invoked, so the
         // window that had focus is put back afterwards.
@@ -3542,8 +3549,8 @@ public sealed partial class TeamsClient : IDisposable
         try
         {
             if (jump) return GoToSlide(arg);
-            if (timer) return DriveTimer(target);
-            return ink ? AdjustInk(target, arg) : InvokeCore(target, spec!, arg);
+            if (timer) return DriveTimer(target, invocationDeadline);
+            return ink ? AdjustInk(target, arg) : InvokeCore(target, spec!, arg, invocationDeadline);
         }
         finally
         {
@@ -3561,10 +3568,15 @@ public sealed partial class TeamsClient : IDisposable
     /// fault worth seeing even though the fallback hides it from the user.
     /// </summary>
     private (bool ok, string? error)? TryDirect(
-        string target, ControlSpec? spec, string? arg, bool jump, bool timer, bool ink)
+        string target, ControlSpec? spec, string? arg, bool jump, bool timer, bool ink, long? invocationDeadline)
     {
-        // The timer has no ids to find anything by.
-        if (timer) return null;
+        if (timer || target is "blur" or "ppt-grid" or "ppt-stop-presenting-confirm")
+            return TryDirectGuarded(() =>
+            {
+                var result = _dom.InvokeGuarded(_config, target, invocationDeadline);
+                if (result is { Ok: true, State: not null }) _lastStates[target] = result.State.Value;
+                return result;
+            });
 
         if (ink) return TryDirectInk(() =>
         {
@@ -3651,6 +3663,23 @@ public sealed partial class TeamsClient : IDisposable
         {
             Console.Error.WriteLine($"direct ink adjustment threw: {ex.Message}");
             return (false, "Direct ink adjustment failed; ink settings may already have changed");
+        }
+    }
+
+    internal static (bool ok, string? error)? TryDirectGuarded(Func<GuardedDom.Result?> invoke)
+    {
+        try
+        {
+            var result = invoke();
+            if (result is null) return null;
+            if (result.Ok) return (true, null);
+            Console.Error.WriteLine($"guarded Direct operation failed: {result.Error}");
+            return (false, result.Error);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"guarded Direct operation threw: {ex.Message}");
+            return (false, "Direct operation failed; Teams may already have changed");
         }
     }
 
@@ -3812,11 +3841,12 @@ public sealed partial class TeamsClient : IDisposable
     }
 
     /// <summary>Total seconds in "4 min, 57 sec remaining", or null.</summary>
-    private int? ParseRemaining(string name)
+    private int? ParseRemaining(string name) => ParseRemaining(name, _config.Timer);
+
+    internal static int? ParseRemaining(string name, TimerSpec timer)
     {
         if (string.IsNullOrWhiteSpace(name)) return null;
 
-        var timer = _config.Timer;
         var hours = MatchNumber(name, timer.HoursPattern);
         var minutes = MatchNumber(name, timer.MinutesPattern);
         var seconds = MatchNumber(name, timer.SecondsPattern);
@@ -3893,7 +3923,7 @@ public sealed partial class TeamsClient : IDisposable
     /// does the right thing without the plugin having to know which state
     /// Teams thinks it is in.
     /// </summary>
-    private (bool ok, string? error) DriveTimer(string target)
+    private (bool ok, string? error) DriveTimer(string target, long? invocationDeadline)
     {
         var win = ResolveMeetingWindow();
         if (win is null) return (false, "not in a meeting");
@@ -3903,7 +3933,7 @@ public sealed partial class TeamsClient : IDisposable
         {
             var reset = FindByNamePattern(win, timer.ResetPattern);
             if (reset is null) return (false, "no timer running");
-            return InvokeElement(reset, "the timer");
+            return InvokeElement(reset, "the timer", invocationDeadline);
         }
 
         var toggle = FindByNamePattern(win, timer.PausePattern)
@@ -3920,11 +3950,13 @@ public sealed partial class TeamsClient : IDisposable
                 : (false, "no timer running");
         }
 
-        return InvokeElement(toggle, "the timer");
+        return InvokeElement(toggle, "the timer", invocationDeadline);
     }
 
-    private static (bool ok, string? error) InvokeElement(AutomationElement el, string what)
+    private static (bool ok, string? error) InvokeElement(AutomationElement el, string what, long? invocationDeadline)
     {
+        if (invocationDeadline.HasValue && Environment.TickCount64 >= invocationDeadline.Value)
+            return (false, $"request expired before invoking {what}");
         try
         {
             el.Patterns.Invoke.Pattern.Invoke();
@@ -4102,7 +4134,8 @@ public sealed partial class TeamsClient : IDisposable
         }
     }
 
-    private (bool ok, string? error) InvokeCore(string target, ControlSpec spec, string? arg = null)
+    private (bool ok, string? error) InvokeCore(string target, ControlSpec spec, string? arg = null,
+        long? invocationDeadline = null)
     {
         var swap = target == "camera-swap";
         var cameraChoices = target is "camera-select" or "camera-swap" ? CameraArguments.Parse(arg, swap) : null;
@@ -4136,6 +4169,24 @@ public sealed partial class TeamsClient : IDisposable
             originalVideoTab = SelectedVideoSettingsTab(videoTabs);
             if (originalVideoTab is null)
                 return (false, "Teams did not expose the selected video settings tab");
+        }
+
+        if (spec.IsPressOnly)
+        {
+            // Wait for rendering before the one irreversible invocation, never retry it.
+            var deadline = Math.Min(Environment.TickCount64 + 2500, invocationDeadline ?? long.MaxValue);
+            AutomationElement? confirmation;
+            do
+            {
+                confirmation = ResolveControl(target, spec);
+                if (confirmation is not null || Environment.TickCount64 >= deadline) break;
+                Thread.Sleep(PopupScanIntervalMs);
+            } while (true);
+            if (confirmation is null) return (false, $"control '{target}' not found");
+            if (!SafeEnabled(confirmation)) return (false, $"control '{target}' is disabled");
+            var outcome = InvokeElement(confirmation, $"confirmation '{target}'", invocationDeadline);
+            Console.Error.WriteLine($"dialog button '{target}' ({NameOf(confirmation)}): invoked={outcome.ok}");
+            return outcome;
         }
 
         // A control that is already on may close from somewhere else entirely —
@@ -4192,21 +4243,6 @@ public sealed partial class TeamsClient : IDisposable
             }
             if (el is null) return (false, $"control '{target}' not found");
             if (!SafeEnabled(el)) return (false, $"control '{target}' is disabled");
-
-            // A dialog button is invoked rather than clicked. Press posts a
-            // synthetic click into the render widget, which is right for the
-            // toolbar - it avoids stealing focus - but a posted click only
-            // reports that it was posted, not that it landed, and this dialog
-            // is a separate popup layer from that widget. Ending a presentation
-            // is one-way and silently doing nothing is the worst outcome, so it
-            // uses the deterministic path. Verified live on 2026-09-18: Invoke
-            // on this button stops the presentation.
-            if (spec.IsPressOnly)
-            {
-                var invoked = TryInvoke(el);
-                Console.Error.WriteLine($"dialog button '{target}' ({NameOf(el)}): invoked={invoked}");
-                return invoked ? (true, null) : (false, $"could not invoke '{target}'");
-            }
 
             return Press(el) ? (true, null) : (false, $"could not invoke '{target}'");
         }
