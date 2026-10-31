@@ -195,6 +195,13 @@ meeting goes:
 | The deck stops | back to **Teams Meeting** |
 | You leave | back to whichever profile you were on before |
 
+While the plugin has moved a deck onto a meeting layout, Stream Deck pauses its
+own app-specific (smart) profile switching on that deck, which is what keeps
+the meeting keys up while Teams is in the background. When you leave the
+meeting, or turn following off, the plugin always hands the deck back, which
+resumes app-specific switching. It does this even if the layout was customized
+or never confirmed.
+
 Each PowerPoint Live layout keeps mute within reach on every deck, so being
 moved onto a presentation layout never costs you the meeting basics.
 
@@ -209,7 +216,8 @@ and plugin restarts. The SDK cannot tell whether you cancelled an install,
 deleted a profile, or customized it, so the plugin does not keep retrying.
 Your existing layouts and manual controls are left alone. Close any outstanding
 install prompt, then turn **Follow the meeting between profiles** off and on
-when you want to retry.
+when you want to retry. A paused request is still handed back when the meeting
+ends, but it is never sent again automatically.
 
 Stream Deck can still show one prompt when a switch targets a missing or
 unrecognized bundled profile; the SDK provides no quiet existence check.

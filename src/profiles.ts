@@ -154,7 +154,16 @@ export class ProfileSwitcher {
 
 	/** Last profile chosen per device, so only a genuine change switches. */
 	readonly #current = new Map<string, string>();
-	readonly #owned = new Map<string, string>();
+	/**
+	 * Decks sent a named switch that has not been handed back yet.
+	 *
+	 * Stream Deck suspends app-specific (smart) profile switching on a deck
+	 * from the moment a plugin switches it by name until that plugin switches
+	 * it back with no name. Whether the layout was confirmed, customized or
+	 * edited afterwards has no bearing on that hold, so every request is
+	 * recorded here before it is sent and released when the meeting ends.
+	 */
+	readonly #held = new Set<string>();
 	readonly #restoring = new Set<string>();
 
 	/** Serializes profile changes; see {@link ProfileSwitcher.enqueue}. */
@@ -358,13 +367,13 @@ export class ProfileSwitcher {
 			}
 			const observation = this.#waitForLayout(id, INSTALL_GAP_MS, profile);
 			try {
+				this.#held.add(id);
 				await streamDeck.profiles.switchToProfile(id, profile);
 				const took = await observation.result;
 				if (took === null) {
 					this.#pause(`Could not confirm ${id} -> "${profile}" inside ${INSTALL_GAP_MS}ms`);
 					return;
 				}
-				this.#owned.set(id, profile);
 				await this.#savePending(undefined, observation.isStable);
 				logger.info(`${id} -> "${profile}" (${took}ms)`);
 			} finally {
@@ -373,8 +382,6 @@ export class ProfileSwitcher {
 		} catch (err) {
 			this.#pause(`Could not switch ${id} to "${profile}": ${String(err)}`);
 		} finally {
-			const previous = this.#owned.get(id);
-			if (previous && !this.#matchesLayout(id, previous)) this.#owned.delete(id);
 			this.#apply();
 		}
 	}
@@ -449,13 +456,9 @@ export class ProfileSwitcher {
 	async #restore(id: string): Promise<void> {
 		if (this.#enabled && profileFor(bridge.state) !== null) return;
 		if (![...streamDeck.devices].some((device) => device.id === id && device.isConnected)) return;
-		const profile = this.#owned.get(id);
-		if (!profile) return;
-		this.#owned.delete(id);
-		if (!this.#matchesLayout(id, profile)) {
-			logger.info(`Keeping the changed profile on ${id}`);
-			return;
-		}
+		// Released even when the layout was never confirmed or has since been
+		// edited: skipping this leaves smart profiles suspended on the deck.
+		if (!this.#held.delete(id)) return;
 		this.#current.delete(id);
 		const observation = this.#waitForLayout(id, SWITCH_GAP_MS);
 		try {
@@ -474,7 +477,7 @@ export class ProfileSwitcher {
 	}
 
 	#restoreWhenIdle(id: string): void {
-		if (!this.#owned.has(id) || this.#restoring.has(id)) return;
+		if (!this.#held.has(id) || this.#restoring.has(id)) return;
 		this.#restoring.add(id);
 		this.#enqueue(async () => {
 			try { await this.#restore(id); }
