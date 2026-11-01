@@ -155,9 +155,13 @@ internal sealed class DomActuator
         }
 
         // Teams keeps several page targets alive — the main window, chat
-        // pop-outs, the meeting. Only one has the meeting toolbar in it, and
-        // asking is cheaper and more honest than guessing from the title, which
-        // is localized and changes with the meeting subject.
+        // pop-outs, the meeting. Asking is cheaper and more honest than
+        // guessing from the title, which is localized and changes with the
+        // meeting subject. More than one can answer: while the meeting window
+        // is minimized, the 380x120 "compact view" carries the microphone too,
+        // but not the timer, the reactions or anything else. So take the
+        // largest page that has the toolbar; a minimized window keeps its size.
+        var bestArea = -1L;
         foreach (var page in teamsPages)
         {
             // Returned as JSON rather than a bare boolean so it is read the
@@ -165,21 +169,15 @@ internal sealed class DomActuator
             // arrives as .NET's "True", which is not what a JSON comparison
             // expects.
             var probe = Cdp.Evaluate(page,
-                $"JSON.stringify({{ found: !!document.getElementById({Js(_probeElementId)}) }})",
+                $"JSON.stringify({{ found: !!document.getElementById({Js(_probeElementId)}), area: innerWidth * innerHeight }})",
                 Math.Min(_spec.TimeoutMs, 1500));
 
-            if (!probe.Ok || probe.Json is null) continue;
-            try
+            var area = MeetingPageArea(probe);
+            if (area > bestArea)
             {
-                using var doc = JsonDocument.Parse(probe.Json);
-                if (doc.RootElement.TryGetProperty("found", out var f) &&
-                    f.ValueKind == JsonValueKind.True)
-                {
-                    _meetingPage = page;
-                    break;
-                }
+                bestArea = area;
+                _meetingPage = page;
             }
-            catch (JsonException) { }
         }
 
         if (_meetingPage is null)
@@ -326,7 +324,7 @@ internal sealed class DomActuator
                 probe = "[" + string.Join(",", new[] { "share", "people", "chat" }
                     .Select(key => Js(config.Controls[key].AutomationId))) +
                     "].some(id=>!!document.getElementById(id))";
-            probe = $"JSON.stringify({{found:!!document.getElementById({Js(config.MeetingProbeAutomationId)})&&({probe})}})";
+            probe = $"JSON.stringify({{found:!!document.getElementById({Js(config.MeetingProbeAutomationId)})&&({probe}),area:innerWidth*innerHeight}})";
             page = CameraDom.FindPage(_meetingPage,
                 () => Remaining() > 800 ? Cdp.ListTargets(_spec.Port, Math.Min(Remaining(), 1500)) : null,
                 candidate => Remaining() > 800
@@ -662,6 +660,27 @@ internal sealed class DomActuator
     }
 
     /// <summary>A JavaScript string literal, or null.</summary>
+    /// <summary>
+    /// Reads a page probe's <c>{found, area}</c> reply: the viewport area when
+    /// the page has what was looked for, otherwise -1. A reply without an area
+    /// counts as 0, so it still wins over a page that was not found.
+    /// </summary>
+    internal static long MeetingPageArea(CdpResult reply)
+    {
+        if (!reply.Ok || reply.Json is null) return -1;
+        try
+        {
+            using var doc = JsonDocument.Parse(reply.Json);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object ||
+                !root.TryGetProperty("found", out var found) || found.ValueKind != JsonValueKind.True)
+                return -1;
+            return root.TryGetProperty("area", out var area) && area.TryGetInt64(out var value) && value >= 0
+                ? value : 0;
+        }
+        catch (JsonException) { return -1; }
+    }
+
     internal static string Js(string? value) =>
         value is null ? "null" : "\"" + JsonEncodedText.Encode(value) + "\"";
 

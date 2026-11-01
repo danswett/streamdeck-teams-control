@@ -15,22 +15,18 @@ internal static class CameraDom
     {
         static bool Eligible(CdpTarget page) => page.Type == "page" &&
             page.Url.StartsWith("https://teams.microsoft.com/", StringComparison.OrdinalIgnoreCase);
-        bool Found(CdpTarget page)
-        {
-            var reply = probe(page);
-            if (!reply.Ok || reply.Json is null) return false;
-            try
-            {
-                using var doc = JsonDocument.Parse(reply.Json);
-                return doc.RootElement.ValueKind == JsonValueKind.Object &&
-                    doc.RootElement.TryGetProperty("found", out var found) && found.ValueKind == JsonValueKind.True;
-            }
-            catch (JsonException) { return false; }
-        }
-        if (Eligible(preferred) && Found(preferred)) return preferred;
+        if (Eligible(preferred) && DomActuator.MeetingPageArea(probe(preferred)) >= 0) return preferred;
+        // Several pages can answer - the minimized meeting's compact view does -
+        // so keep the largest, as DomActuator.Probe does.
+        CdpTarget? best = null;
+        var bestArea = -1L;
         foreach (var page in (listPages() ?? []).Where(Eligible).Take(maxPages))
-            if (page.WebSocketUrl != preferred.WebSocketUrl && Found(page)) return page;
-        return null;
+        {
+            if (page.WebSocketUrl == preferred.WebSocketUrl) continue;
+            var area = DomActuator.MeetingPageArea(probe(page));
+            if (area > bestArea) { bestArea = area; best = page; }
+        }
+        return best;
     }
 
     internal static Result Interpret(CdpResult reply)

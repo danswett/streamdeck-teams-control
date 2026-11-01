@@ -36,6 +36,30 @@ public class CameraDomTests
     }
 
     [Fact]
+    public void When_several_pages_answer_the_largest_wins_not_the_minimized_compact_view()
+    {
+        // Teams lists the 380x120 compact view first, and while the meeting is
+        // minimized it carries the toolbar ids too.
+        var gone = Page("gone");
+        var compact = Page("compact");
+        var full = Page("full");
+        var main = Page("main");
+        Assert.Equal(full, CameraDom.FindPage(gone, () => [compact, full, main], page => new(true,
+            page == compact ? """{"found":true,"area":45600}""" :
+            page == full ? """{"found":true,"area":1748212}""" :
+            """{"found":false,"area":2825860}""", null), 8));
+    }
+
+    [Theory]
+    [InlineData("""{"found":true,"area":1748212}""", 1748212)]
+    [InlineData("""{"found":true}""", 0)]
+    [InlineData("""{"found":true,"area":-5}""", 0)]
+    [InlineData("""{"found":false,"area":99}""", -1)]
+    [InlineData("broken", -1)]
+    public void Meeting_page_probe_reports_area_only_for_a_found_page(string json, long expected) =>
+        Assert.Equal(expected, DomActuator.MeetingPageArea(new(true, json, null)));
+
+    [Fact]
     public void Page_search_is_bounded_and_only_probes_Teams_pages()
     {
         var probes = 0;
