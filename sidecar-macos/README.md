@@ -42,6 +42,15 @@ Dismissal runs after the result is sent, so it does not show up as a key that
 stays lit, and it is bounded so a popup that will not close cannot stall the
 queue. It is logged: look for `flyout dismissed by …` in the plugin log.
 
+A meeting that drops out of the accessibility tree is re-checked every half
+second and only reported as ended once it has been missing for three readings
+over at least two seconds, because ending a meeting hands the deck back to
+app-specific profile switching ([#52](https://github.com/danswett/streamdeck-teams-control/issues/52)).
+Teams quitting ends it at once. The plugin log records `meeting detected`,
+`meeting not found; re-checking …`, `meeting found again …` and `meeting
+ended …`, each with window counts and flags (never titles) showing what the
+sidecar could see.
+
 Known gaps vs Windows, all of which now *say so* rather than failing as though
 something were broken: polling instead of AXObserver; `AXPress` raises the Teams
 window for ~300ms (then we `AXRaise` the previous app); slide capture (`thumb`),
