@@ -717,10 +717,12 @@ https://github.com/danswett/streamdeck-teams-control/releases
 There are two separate publishes, and only the first is automated.
 
 **1. GitHub — automated.** `.github/workflows/release.yml` runs on any `v*`
-tag. It installs from the lockfile, runs both unit suites, builds the sidecar
-and the plugin, validates the manifest, packages the `.streamDeckPlugin`, checks
-the tag against the manifest version, and attaches the package to the GitHub
-release.
+tag. It builds through `package.yml`, the same path every PR takes. That runs
+every test suite, builds both helpers, smoke-tests them, validates and packages
+the `.streamDeckPlugin`, then opens it on a Mac to verify it. The workflow then
+checks the tag against the manifest version and attaches the package to the
+GitHub release. If the manifest declares macOS, the release fails unless the
+Mac helper is signed and notarized.
 
 ```bash
 # 1. bump "Version" in com.bad-duck.teamscontrol.sdPlugin/manifest.json

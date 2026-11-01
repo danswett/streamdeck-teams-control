@@ -105,7 +105,7 @@ In **Settings → Secrets and variables → Actions**:
 | `MACOS_NOTARY_KEY_ID` | Key ID from step 4 |
 | `MACOS_NOTARY_ISSUER_ID` | Issuer ID from step 4 |
 
-The exact `MACOS_SIGN_IDENTITY` string is printed by the `sidecar-macos` job's
+The exact `MACOS_SIGN_IDENTITY` string is printed by the `helper-macos` job's
 `security find-identity` step on the first run after the certificate lands, so
 add the other five, run the workflow, and copy it from the log.
 
@@ -113,10 +113,10 @@ Delete `developerid.p12`, `developerid.key` and the `.p8` from disk afterwards.
 
 ## 6. What CI then does
 
-`build.yml`'s `sidecar-macos` job imports the certificate into a throwaway
-keychain, builds a universal binary, wraps it in `TeamsBridge.app`, signs the
-bundle with the hardened runtime and a trusted timestamp, and prints what the
-artifact actually is:
+`package.yml`'s `helper-macos` job imports the certificate into a throwaway
+keychain. It then builds a universal binary, wraps it in `TeamsBridge.app` and
+signs the bundle with the hardened runtime and a trusted timestamp. Finally it
+prints what the artifact actually is:
 
 ```
 lipo -info            both slices present, or the build fails
@@ -126,9 +126,20 @@ spctl --assess        Gatekeeper's own verdict
 ```
 
 Every step is skipped cleanly when the secrets are absent, so a fork still
-builds.
+builds. Builds that ship the helper, `macos-testbuild.yml` and a release
+declaring macOS, refuse to run unsigned.
 
-**Notarization is opt-in**, via the `notarize` input on a manual run. It is a
+The package is packed on Windows, so the `verify` job opens it again on a Mac.
+There it re-runs `codesign --verify --deep --strict`, `stapler validate` and
+`spctl` against the extracted bundle, then starts the helper from the package.
+A signature or ticket lost in packing fails there, not on a user's Mac.
+
+`signing-health.yml` runs weekly. It fails 60 days before the certificate
+expires, if `MACOS_SIGN_IDENTITY` no longer names the identity in the `.p12`,
+or if the notary credentials are rejected.
+
+**Notarization is opt-in** for `build.yml`, via the `notarize` input on a
+manual run. `macos-testbuild.yml` and `release.yml` always notarize. It is a
 queue at Apple rather than work we do — this team's submissions have sat
 `In Progress` anywhere from 44 minutes to over 2½ hours while the build itself
 took two — and it proves nothing on a routine commit that signing has not
