@@ -281,14 +281,48 @@ describe("automatic profile installation policy", () => {
 		expect(mocks.global.pptProfilePending).toBeUndefined();
 	});
 
-	it("leaves an already-visible bundled layout alone, including after reconnect", async () => {
+	it("claims an already-visible layout that is not redrawn, and hands it back after the meeting", async () => {
 		showLayout("deck", profilePath(MEETING, 0)!);
+		// Switching to the profile already on screen may redraw nothing at all.
+		mocks.switch.mockImplementation(async (device: string, profile?: string) => {
+			if (profile === undefined) showLayout(device);
+		});
 		await start();
+		await vi.advanceTimersByTimeAsync(2000);
+		expect(mocks.switch.mock.calls).toEqual([["deck", profilePath(MEETING, 0)]]);
+		expect(mocks.global.pptProfilePending).toBeUndefined();
 		for (const fn of mocks.connect) fn({ device: { id: "deck" } });
 		await vi.advanceTimersByTimeAsync(20_000);
+		expect(mocks.global.pptProfilePending).toBeUndefined();
+		expect(mocks.warn).not.toHaveBeenCalled();
 		await change({ inMeeting: false });
-		expect(mocks.switch).not.toHaveBeenCalled();
-		expect(mocks.save).not.toHaveBeenCalled();
+		expect(mocks.switch).toHaveBeenLastCalledWith("deck");
+	});
+
+	it("claims an already-visible layout that Stream Deck redraws", async () => {
+		showLayout("deck", profilePath(MEETING, 0)!);
+		await start();
+		await vi.advanceTimersByTimeAsync(2000);
+		expect(mocks.switch.mock.calls).toEqual([["deck", profilePath(MEETING, 0)]]);
+		expect(mocks.global.pptProfilePending).toBeUndefined();
+		await change(presenting);
+		expect(mocks.switch).toHaveBeenLastCalledWith("deck", profilePath(PRESENTER, 0));
+	});
+
+	it("does not confirm an already-visible claim while the layout is still changing", async () => {
+		showLayout("deck", profilePath(MEETING, 0)!);
+		mocks.switch.mockImplementation(async () => {
+			const timer = setInterval(() => {
+				const extra = addExtraControl();
+				mocks.visible.delete(extra.id);
+				for (const fn of [...mocks.disappear]) fn({ action: extra });
+			}, 300);
+			setTimeout(() => clearInterval(timer), 12_000);
+		});
+		await start();
+		await vi.advanceTimersByTimeAsync(10_000);
+		expect(mocks.global.pptProfilePending).toBeDefined();
+		expect(mocks.warn).toHaveBeenCalledWith(expect.stringContaining("paused"));
 	});
 
 	it.each(["modified", "deleted"])("stops re-requesting a previously installed profile after it is %s", async (operation) => {

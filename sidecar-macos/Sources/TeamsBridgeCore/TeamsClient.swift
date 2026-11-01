@@ -240,6 +240,39 @@ public final class TeamsClient {
         }
     }
 
+    /**
+     * What the sidecar can see of Teams' windows, for the log when a meeting is
+     * found or lost.
+     *
+     * Counts and flags only: window titles carry meeting and chat names, and
+     * this ends up in logs that testers attach to public issues. It answers the
+     * questions a background miss raises (#52) - did a window go missing, was
+     * the meeting window minimized or behind another Teams window, did the
+     * combined walk run out of room before reaching it.
+     */
+    public func diagnose() -> String {
+        guard let app = findTeams() else { return "Teams is not running" }
+        guard attach(), let appEl else { return "could not attach to Teams" }
+
+        let wins = AX.windows(appEl)
+        var parts = ["teamsActive=\(app.isActive)", "teamsHidden=\(app.isHidden)", "windows=\(wins.count)"]
+        for (index, w) in wins.enumerated() {
+            let ids = Tree.indexByID(Tree.walk(windows: [w]))
+            let flags = [
+                ("minimized", kAXMinimizedAttribute as String),
+                ("main", kAXMainAttribute as String),
+                ("focused", kAXFocusedAttribute as String),
+            ].compactMap { name, attr in AX.bool(w, attr) == true ? name : nil }
+            let markers = config.meetingMarkers.filter { ids[$0] != nil }.count
+            parts.append(
+                "[\(index): \(flags.isEmpty ? "-" : flags.joined(separator: ","))"
+                + " ids=\(ids.count) probe=\(ids[config.meetingProbeAutomationId] != nil) markers=\(markers)]"
+            )
+        }
+        parts.append("combinedWalk=\(Tree.walk(windows: wins).count)")
+        return parts.joined(separator: " ")
+    }
+
     private struct MeetingWindow {
         var window: AXUIElement
         var title: String

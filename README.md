@@ -202,6 +202,11 @@ meeting, or turn following off, the plugin always hands the deck back, which
 resumes app-specific switching. It does this even if the layout was customized
 or never confirmed.
 
+Only a switch the plugin makes itself creates that hold. So when a meeting
+starts with the meeting layout already on the deck, put there by hand or by an
+app-specific profile, the plugin still switches to it. Otherwise the deck would
+leave the meeting layout as soon as Teams went to the background.
+
 Each PowerPoint Live layout keeps mute within reach on every deck, so being
 moved onto a presentation layout never costs you the meeting basics.
 

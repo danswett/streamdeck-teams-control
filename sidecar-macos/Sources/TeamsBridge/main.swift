@@ -95,6 +95,30 @@ let idlePoll: TimeInterval = 15.0
 let staleInvoke: TimeInterval = 9.0
 let settle: TimeInterval = 1.2
 var settleAt: Date?
+var presence = MeetingPresence()
+/// Whether a missing meeting is being re-checked; see MeetingPresence.
+var confirmingEnd = false
+let confirmPoll: TimeInterval = 0.5
+
+/// Every reading goes through here, so a status request or the snapshot after
+/// a press cannot report a meeting as ended that the poll is still re-checking.
+func observedSnapshot() -> MeetingSnapshot {
+    let reading = presence.observe(client.getSnapshot())
+    confirmingEnd = reading.confirming
+    switch reading.transition {
+    case .started?:
+        IO.err("meeting detected: \(client.diagnose())")
+    case .missed?:
+        IO.err("meeting not found; re-checking before reporting it ended: \(client.diagnose())")
+    case .recovered(let misses)?:
+        IO.err("meeting found again after \(misses) missed reading(s); not reported as ended")
+    case .ended(let misses, let span)?:
+        IO.err("meeting ended (not found in \(misses) reading(s) over \(String(format: "%.1f", span))s): \(client.diagnose())")
+    case nil:
+        break
+    }
+    return reading.snapshot
+}
 
 func enqueue(_ item: WorkItem) {
     pending.sync { items.append(item) }
@@ -114,7 +138,7 @@ func handle(_ item: WorkItem) {
             IO.emit(["type": "result", "id": item.id, "ok": true])
         }
     case "status":
-        let snap = client.getSnapshot()
+        let snap = observedSnapshot()
         lastFingerprint = snap.fingerprint()
         emitState(snap)
         IO.emit(["type": "result", "id": item.id, "ok": true])
@@ -135,7 +159,7 @@ func handle(_ item: WorkItem) {
         // happen before the snapshot below, because a flyout standing over the
         // toolbar is not a reading worth sending.
         client.runPendingCleanup()
-        let snap = client.getSnapshot()
+        let snap = observedSnapshot()
         lastFingerprint = snap.fingerprint()
         emitState(snap)
         settleAt = Date().addingTimeInterval(settle)
@@ -241,8 +265,10 @@ while running {
     if let s = settleAt, now >= s { settleAt = nil }
 
     queue.sync {
-        let snap = client.getSnapshot()
-        nextPoll = Date().addingTimeInterval(snap.inMeeting ? meetingPoll : idlePoll)
+        let snap = observedSnapshot()
+        nextPoll = Date().addingTimeInterval(
+            confirmingEnd ? confirmPoll : (snap.inMeeting ? meetingPoll : idlePoll)
+        )
         let fp = snap.fingerprint()
         if fp != lastFingerprint {
             lastFingerprint = fp

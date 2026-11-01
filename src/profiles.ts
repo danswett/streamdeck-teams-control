@@ -118,6 +118,14 @@ const SETTLE_MS = 400;
 /** Time to observe the requested layout before pausing, not permission to retry. */
 const INSTALL_GAP_MS = 9000;
 
+/**
+ * How long a layout that was already showing must stay untouched after the
+ * switch to count as confirmed. Switching to the profile already on screen
+ * may not redraw anything, so there may be no key events to wait for; long
+ * enough that a redraw Stream Deck does make has started well before it.
+ */
+const QUIET_CLAIM_MS = 1500;
+
 /** Give a newly connected deck time to initialize, without blind retry requests. */
 const DEVICE_SETTLE_MS = 4000;
 
@@ -353,7 +361,10 @@ export class ProfileSwitcher {
 	}
 
 	async #switch(id: string, profile: string, epoch: number): Promise<void> {
-		if (!this.#eligible(id, profile, epoch) || this.#matchesLayout(id, profile)) return;
+		// Sent even when the layout is already showing - put there by hand or by an
+		// app-specific profile - because only the plugin's own switch holds the deck
+		// against app-specific switching for the rest of the meeting (#52).
+		if (!this.#eligible(id, profile, epoch)) return;
 		if (!layouts[profile]) {
 			this.#pause(`No bundled layout metadata for "${profile}"`);
 			return;
@@ -361,11 +372,12 @@ export class ProfileSwitcher {
 		try {
 			// Persist before sending: a restart while the native prompt is open must not re-arm it.
 			await this.#savePending({ device: id, profile });
-			if (!this.#eligible(id, profile, epoch) || this.#matchesLayout(id, profile)) {
+			if (!this.#eligible(id, profile, epoch)) {
 				await this.#savePending();
 				return;
 			}
-			const observation = this.#waitForLayout(id, INSTALL_GAP_MS, profile);
+			const shown = this.#matchesLayout(id, profile);
+			const observation = this.#waitForLayout(id, INSTALL_GAP_MS, profile, shown ? QUIET_CLAIM_MS : undefined);
 			try {
 				this.#held.add(id);
 				await streamDeck.profiles.switchToProfile(id, profile);
@@ -390,8 +402,9 @@ export class ProfileSwitcher {
 	 * Arrival requires the requested layout to remain quiet and matching through settlement.
 	 * Keep monitoring through the settings write; its read can outlive that first match.
 	 * Disappearance only paces a restore; the SDK cannot identify the user's previous profile.
+	 * With `quietMs`, a layout that already matched and stays untouched that long also counts.
 	 */
-	#waitForLayout(deviceId: string, budgetMs: number, profile?: string) {
+	#waitForLayout(deviceId: string, budgetMs: number, profile?: string, quietMs?: number) {
 		let stop = (): void => {};
 		let isStable = (): boolean => false;
 		const result = new Promise<number | null>((resolve) => {
@@ -400,12 +413,14 @@ export class ProfileSwitcher {
 			let stopped = false;
 			let changedAt = startedAt;
 			let stabilization: NodeJS.Timeout | undefined;
+			let quiet: NodeJS.Timeout | undefined;
 
 			const dispose = (): void => {
 				if (stopped) return;
 				stopped = true;
 				clearTimeout(timer);
 				if (stabilization) clearTimeout(stabilization);
+				if (quiet) clearTimeout(quiet);
 				for (const subscription of subscriptions) subscription.dispose();
 			};
 			const finish = (value: number | null): void => {
@@ -445,6 +460,15 @@ export class ProfileSwitcher {
 				dispose();
 				finish(null);
 			}, budgetMs);
+			if (profile !== undefined && quietMs !== undefined) {
+				quiet = setTimeout(() => {
+					quiet = undefined;
+					// A redraw that did happen is left to the stabilization path above.
+					if (!settled && Date.now() - changedAt >= quietMs && isStable()) {
+						finish(Date.now() - startedAt);
+					}
+				}, quietMs);
+			}
 			stop = () => {
 				dispose();
 				finish(null);
