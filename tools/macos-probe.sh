@@ -121,7 +121,9 @@ step() {
 }
 
 echo "Probing the Teams tree for the macOS parity features."
-echo "Grant Accessibility to your terminal if macOS asks."
+echo "macOS will ask to allow your terminal under Accessibility; the probe cannot read Teams without it."
+# The helper never prompts by itself; running this probe is the explicit choice.
+echo '{"id":0,"cmd":"permissions","arg":"request-accessibility"}' >&3
 sleep 2
 
 step "1/8  Teams running, NOT in a meeting." || send '{"id":1,"cmd":"discover"}'

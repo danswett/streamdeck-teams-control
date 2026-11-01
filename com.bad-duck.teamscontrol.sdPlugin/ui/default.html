@@ -29,6 +29,21 @@
 		</p>
 		<p class="hint" id="profile-status" role="status"></p>
 		<script src="profile-settings.js"></script>
+		<div id="teams-control" hidden>
+			<sdpi-item label="Teams control">
+				<label><input id="teams-control-enabled" type="checkbox" disabled />
+					Allow Teams control on this Mac</label>
+			</sdpi-item>
+			<p class="hint">
+				Lets the plugin press Teams' meeting controls for you. Turning it on
+				asks macOS to allow Stream Deck under Accessibility. Every Teams key
+				needs it. Shared setting: every key in this plugin uses it. Slide
+				thumbnails need Screen Recording as well, asked for separately by the
+				slide dials.
+			</p>
+			<p class="hint" id="teams-control-status" role="status"></p>
+		</div>
+		<script src="teams-control-settings.js"></script>
 		<script src="action-descriptions.js"></script>
 		<script>
 			// Several actions share each inspector - most PowerPoint Live keys share

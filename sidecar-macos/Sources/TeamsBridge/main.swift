@@ -76,6 +76,9 @@ if hasFlag(args, "-h") || hasFlag(args, "--help") {
       {"id":5,"cmd":"cameras"}
       {"id":6,"cmd":"thumb","arg":"current","w":200,"h":100,"fade":0}
       {"id":7,"cmd":"forget","arg":"current"}   (no reply, as on Windows)
+      {"id":9,"cmd":"permissions"}              status; never prompts
+      {"id":10,"cmd":"permissions","arg":"request-accessibility"}
+      {"id":11,"cmd":"permissions","arg":"request-screen-recording"}
       {"cmd":"shutdown"}
 
     Answered, but not implemented here - it reports that rather than looking
@@ -93,8 +96,10 @@ let pollMs = max(150, min(5000, Int(argValue(args, "--poll") ?? "700") ?? 700))
 let restoreFocus = !hasFlag(args, "--no-focus-guard")
 let config = loadConfig(path: selectorsPath)
 
-if !AX.isTrusted(prompt: true) {
-    IO.err("not trusted for Accessibility — grant it to this binary (or Stream Deck) in System Settings > Privacy & Security > Accessibility")
+// Never asked for here. Prompting is the plugin's decision, made only once the
+// user has turned Teams control on; see the "permissions" command below.
+if !AX.isTrusted() {
+    IO.err("not trusted for Accessibility yet; the plugin asks for it once Teams control is allowed in its settings")
 }
 
 let client = TeamsClient(config: config, restoreFocus: restoreFocus)
@@ -184,6 +189,24 @@ func handle(_ item: WorkItem) {
             "id": item.id,
             "menu": item.menu ?? "",
             "elements": rows,
+        ])
+    case "permissions":
+        // The only place a macOS permission prompt can come from. Each one is
+        // asked for by name, and the plugin asks only on an explicit choice:
+        // Accessibility once Teams control is turned on, Screen Recording once
+        // a slide dial is allowed to show the slide. A bare request is a
+        // status check and never prompts.
+        switch item.arg {
+        case "request-accessibility": _ = AX.isTrusted(prompt: true)
+        case "request-screen-recording": SlideCapture.requestPermission()
+        default: break
+        }
+        IO.emit([
+            "type": "permissions",
+            "id": item.id,
+            "ok": true,
+            "accessibility": AX.isTrusted(),
+            "screenRecording": SlideCapture.hasPermission,
         ])
     case "cameras":
         let cameras = Cameras.enumerate()

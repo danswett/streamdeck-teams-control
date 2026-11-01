@@ -78,10 +78,20 @@ is overlayable in `selectors.json`:
 - **Timer.** Read from button names, so the `timer` block of `selectors.json`
   localizes it.
 
-Two permissions beyond Accessibility, each asked for only when its feature is
-first used: **Screen Recording** for slide thumbnails (macOS 14 or later), and
-none for listing cameras - only opening one needs camera access, and the
-sidecar never does.
+**Permissions are opt-in, one at a time.** The sidecar never prompts on its
+own: the only path to a macOS permission prompt is the `permissions` command,
+and the plugin sends it only after an explicit choice.
+
+- **Accessibility**, which every Teams key needs, follows the plugin-wide
+  **Allow Teams control on this Mac** setting. A native dialog asks once when
+  the plugin first runs, so it is settled before the first meeting, and any
+  Teams key's settings can change it later. Until it is on, presses and
+  captures are refused with a reason and keys show a setup tile.
+- **Screen Recording**, for slide thumbnails (macOS 14 or later), is held
+  separately: it is asked for only when a slide dial's **Show the slide on the
+  touch strip** box is ticked.
+- **Camera access is never needed.** Listing cameras does not prompt; only
+  opening one would, and the sidecar never does.
 
 Remaining gaps vs Windows: polling instead of AXObserver; `AXPress` raises the
 Teams window for ~300ms (then we `AXRaise` the previous app); camera video

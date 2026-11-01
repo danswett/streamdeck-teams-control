@@ -39,7 +39,7 @@ public enum SlideCapture {
         public var message: String {
             switch self {
             case .permission:
-                return "slide thumbnails need Screen Recording permission for Stream Deck (System Settings > Privacy & Security > Screen & System Audio Recording)"
+                return "slide thumbnails need Screen Recording permission for Stream Deck; turning on Show the slide in the dial's settings asks for it"
             case .unsupported: return "slide thumbnails need macOS 14 or later"
             case .noWindow: return "could not find the Teams window to capture"
             case .outsideWindow: return "the slide is outside the Teams window"
@@ -65,10 +65,9 @@ public enum SlideCapture {
         slotHeight: Int
     ) -> Result<Composed, Failure> {
         guard windowFrame.insetBy(dx: -1, dy: -1).contains(rect) else { return .failure(.outsideWindow) }
-        guard CGPreflightScreenCaptureAccess() else {
-            requestPermissionOnce()
-            return .failure(.permission)
-        }
+        // Checked, never requested: asking is the plugin's call, made when the
+        // user allows a dial to show the slide.
+        guard hasPermission else { return .failure(.permission) }
         guard #available(macOS 14.0, *) else { return .failure(.unsupported) }
 
         let shot: CGImage
@@ -127,16 +126,14 @@ public enum SlideCapture {
 
     private static let lock = NSLock()
     private static var previous: [String: CGImage] = [:]
-    private static var requestedPermission = false
 
-    /// Asks once per run. The prompt is the system's; asking on every
-    /// thumbnail would only re-raise it while the user is presenting.
-    private static func requestPermissionOnce() {
-        lock.lock()
-        let ask = !requestedPermission
-        requestedPermission = true
-        lock.unlock()
-        if ask { _ = CGRequestScreenCaptureAccess() }
+    /// Whether Screen Recording is granted. Never prompts.
+    public static var hasPermission: Bool { CGPreflightScreenCaptureAccess() }
+
+    /// Asks macOS for Screen Recording. The system shows its prompt at most
+    /// once; after that the user changes it in System Settings.
+    public static func requestPermission() {
+        _ = CGRequestScreenCaptureAccess()
     }
 
     @available(macOS 14.0, *)

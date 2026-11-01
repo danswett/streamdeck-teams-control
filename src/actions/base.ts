@@ -10,7 +10,8 @@ import streamDeck from "@elgato/streamdeck";
 import type { JsonObject } from "@elgato/utils";
 
 import { bridge, type TeamsState } from "../bridge";
-import { toDataUri } from "../icons";
+import { renderSetup, toDataUri } from "../icons";
+import { teamsControl } from "../teams-control";
 
 const logger = streamDeck.logger.createScope("Action");
 
@@ -27,6 +28,7 @@ export function usable(state: TeamsState, key: string): boolean {
  */
 export abstract class TeamsAction<T extends JsonObject = JsonObject> extends SingletonAction<T> {
 	#unsubscribe: (() => void) | undefined;
+	#unsubscribeSetup: (() => void) | undefined;
 	#visible = 0;
 
 	/** Last image drawn per key, so unchanged state costs nothing. */
@@ -105,6 +107,7 @@ export abstract class TeamsAction<T extends JsonObject = JsonObject> extends Sin
 		this.#visible++;
 		if (!this.#unsubscribe) {
 			this.#unsubscribe = bridge.subscribe((state) => this.#paintAll(state));
+			this.#unsubscribeSetup = teamsControl.subscribe(() => this.#paintAll(bridge.state));
 		}
 		if (ev.action.isKey()) void this.#paint(ev.action, bridge.state);
 	}
@@ -117,6 +120,8 @@ export abstract class TeamsAction<T extends JsonObject = JsonObject> extends Sin
 		if (this.#visible === 0 && this.#unsubscribe) {
 			this.#unsubscribe();
 			this.#unsubscribe = undefined;
+			this.#unsubscribeSetup?.();
+			this.#unsubscribeSetup = undefined;
 		}
 	}
 
@@ -158,7 +163,9 @@ export abstract class TeamsAction<T extends JsonObject = JsonObject> extends Sin
 		// Never overwrite a frame mid-animation.
 		if (this.#animating.has(action.id)) return;
 
-		const svg = this.draw(state, action);
+		// Until Teams control is allowed on a Mac no key can act, so every one
+		// says what is needed instead of looking merely inactive.
+		const svg = teamsControl.needsSetup ? renderSetup(teamsControl.waitingForMacOS) : this.draw(state, action);
 
 		// Stream Deck redraws on every setImage, so skip identical frames.
 		if (this.#painted.get(action.id) === svg) return;

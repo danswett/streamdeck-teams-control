@@ -30,6 +30,7 @@ import streamDeck from "@elgato/streamdeck";
 import type { JsonObject } from "@elgato/utils";
 
 import { bridge, type TeamsState } from "../bridge";
+import { teamsControl } from "../teams-control";
 import { TimerClock } from "../timer-clock";
 import { renderInkColor, renderInkThickness, renderSlideJump, renderStripIdle, renderStripNext, renderTimer, toPixmap, toolColor } from "../icons";
 import { pptLive } from "./powerpoint";
@@ -798,7 +799,13 @@ abstract class SlideThumbDialAction extends TeamsDialAction<ThumbSettings & Json
 
 	override onDidReceiveSettings(ev: DidReceiveSettingsEvent<ThumbSettings & JsonObject>): void {
 		const was = this.#on();
+		const allowedBefore = this.#allowed.get(ev.action.id) === true;
 		this.#allow(ev.action.id, ev.payload.settings.capture === true);
+
+		// Ticking the box is the explicit choice Screen Recording belongs to on
+		// macOS, so that is the one moment it is asked for - never by Teams
+		// control, and never by a capture on its own.
+		if (!allowedBefore && ev.payload.settings.capture === true) void teamsControl.requestScreenRecording();
 
 		// Everything in flight is torn down, not just the picture. A capture
 		// armed before the box was unticked would otherwise still fire - up to

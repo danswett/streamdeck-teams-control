@@ -1236,15 +1236,21 @@ Build on a Mac:
 npm run build:sidecar:macos
 ```
 
-Grant **Accessibility** to Stream Deck (the responsible process when it spawns
-the helper), then fully quit and reopen it.
+Permissions are opt-in, each tied to the feature that needs it. On first run a
+native dialog asks whether to **Allow Teams control on this Mac**; saying yes is
+what asks macOS to allow Stream Deck under **Accessibility**, which every Teams
+key needs. The same setting is in every Teams key's settings, and until it is on
+keys show a setup tile and do nothing. **Screen Recording** is separate and is
+asked for only when a slide dial's **Show the slide on the touch strip** box is
+ticked. Nothing else prompts. Fully quit and reopen Stream Deck after granting
+a permission if a key still reports it missing.
 
 Every Windows feature except Direct mode is implemented, but the ones that read
 PowerPoint Live's flyouts and filmstrip, and camera selection, were written
 against the Windows tree and are unconfirmed on a Mac; see
 [sidecar-macos/README.md](sidecar-macos/README.md). Slide thumbnails need
-Screen Recording permission and macOS 14. Still missing: `AXObserver` (the
-sidecar polls), camera video preferences, and Direct mode. Tracking:
+macOS 14. Still missing: `AXObserver` (the sidecar polls), camera video
+preferences, and Direct mode. Tracking:
 [#4](https://github.com/danswett/streamdeck-teams-control/issues/4).
 
 **The manifest does not declare macOS**, so Stream Deck will not install this on
