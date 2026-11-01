@@ -28,7 +28,11 @@ const INVOKE_TIMEOUT_MS = 10_000;
 export { EMPTY_STATE, type TeamsState };
 
 export type CameraDevice = { id: string; name: string };
-type BridgeResult = { ok: boolean; error?: string; cameras?: CameraDevice[]; directMode?: DirectModeStatus };
+/** macOS permission state as the sidecar reads it. Absent on Windows. */
+export type Permissions = { accessibility: boolean; screenRecording: boolean };
+type BridgeResult = {
+	ok: boolean; error?: string; cameras?: CameraDevice[]; directMode?: DirectModeStatus; permissions?: Permissions;
+};
 
 type Pending = {
 	resolve: (v: BridgeResult) => void;
@@ -84,6 +88,26 @@ class Bridge {
 	#directListeners = new Set<(status: DirectModeStatus) => void>();
 	#directVersion = 0;
 	#directApplied = false;
+	#readyListeners = new Set<() => void>();
+	/** Why presses and captures are refused right now, or undefined when they are not. */
+	#gate: () => string | undefined = () => undefined;
+
+	/**
+	 * Refuses every press and capture while `gate` returns a reason.
+	 *
+	 * Teams control on macOS is opt-in, and a key that pressed anyway would
+	 * fail inside the sidecar with a bare "not trusted for Accessibility" -
+	 * so the reason is given here, in terms of the setting that fixes it.
+	 */
+	setGate(gate: () => string | undefined): void {
+		this.#gate = gate;
+	}
+
+	/** Runs `fn` each time a sidecar comes up, which is when its answers become current. */
+	onReady(fn: () => void): () => void {
+		this.#readyListeners.add(fn);
+		return () => this.#readyListeners.delete(fn);
+	}
 
 	get state(): TeamsState {
 		return this.#state;
@@ -258,7 +282,29 @@ class Bridge {
 					void this.configureDirectMode(this.#directSettings).then((result) => {
 						if (!result.ok) logger.warn(`Direct mode setup failed: ${result.error}`);
 					});
+				for (const fn of this.#readyListeners) {
+					try { fn(); }
+					catch (err) { logger.error(`Ready listener failed: ${String(err)}`); }
+				}
 				break;
+
+			case "permissions": {
+				const id = Number(msg["id"]);
+				const pending = this.#pending.get(id);
+				if (!pending) break;
+				clearTimeout(pending.timer);
+				this.#pending.delete(id);
+				if (msg["ok"] !== true || typeof msg["accessibility"] !== "boolean" ||
+					typeof msg["screenRecording"] !== "boolean") {
+					pending.resolve({ ok: false, error: "invalid permission status from sidecar" });
+					break;
+				}
+				pending.resolve({
+					ok: true,
+					permissions: { accessibility: msg["accessibility"], screenRecording: msg["screenRecording"] }
+				});
+				break;
+			}
 
 			case "directmode": {
 				const id = Number(msg["id"]);
@@ -465,6 +511,8 @@ class Bridge {
 	 * firing long after it was pressed.
 	 */
 	invoke(target: string, arg?: string): Promise<{ ok: boolean; error?: string }> {
+		const refused = this.#gate();
+		if (refused !== undefined) return Promise.resolve({ ok: false, error: refused });
 		// Do not run a press with old consent after a settings request failed.
 		if (process.platform === "win32" && this.directModeNeedsSync)
 			return Promise.resolve({ ok: false, error: "Direct mode settings have not been applied yet" });
@@ -509,6 +557,8 @@ class Bridge {
 	 * subscribed later.
 	 */
 	capture(which: "current" | "next", fade = 0, size?: { w: number; h: number }): Promise<Thumbnail> {
+		const refused = this.#gate();
+		if (refused !== undefined) return Promise.resolve({ ok: false, error: refused });
 		const id = this.#nextId++;
 		if (!this.#send({ id, cmd: "thumb", arg: which, fade, w: size?.w ?? 200, h: size?.h ?? 100 })) {
 			return Promise.resolve({ ok: false, error: "sidecar not running" });
@@ -533,6 +583,31 @@ class Bridge {
 	 */
 	forget(which: "current" | "next"): void {
 		this.#send({ id: this.#nextId++, cmd: "forget", arg: which });
+	}
+
+	/**
+	 * Reads the macOS permissions the sidecar holds, or asks for one.
+	 *
+	 * The only path to a permission prompt: the sidecar never asks on its own,
+	 * so a request here must follow an explicit choice by the user.
+	 */
+	permissions(request?: "accessibility" | "screen-recording"): Promise<BridgeResult> {
+		if (process.platform !== "darwin") return Promise.resolve({ ok: false, error: "macOS only" });
+		if (!this.#ready) return Promise.resolve({ ok: false, error: "sidecar not ready" });
+		const id = this.#nextId++;
+		const arg = request === undefined ? undefined : `request-${request}`;
+		return new Promise((resolve) => {
+			const timer = setTimeout(() => {
+				this.#pending.delete(id);
+				resolve({ ok: false, error: "permission check timed out" });
+			}, INVOKE_TIMEOUT_MS);
+			this.#pending.set(id, { resolve, timer });
+			if (!this.#send({ id, cmd: "permissions", arg })) {
+				clearTimeout(timer);
+				this.#pending.delete(id);
+				resolve({ ok: false, error: "sidecar not running" });
+			}
+		});
 	}
 }
 

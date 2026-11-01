@@ -32,6 +32,11 @@ public final class TeamsClient {
     /// Last ink colour and thickness seen per tool, carried across the moments
     /// the tool button leaves the tree - which is whenever its flyout opens.
     private var lastInk: [String: String] = [:]
+    /// Each drawing tool's palette, in the order its flyout lays it out. Only
+    /// readable while that flyout is open, so remembered for the colour dial.
+    private var lastPalette: [String: [String]] = [:]
+    /// The deck's slide count, which a slide jump checks the filmstrip against.
+    private var lastSlideTotal: Int?
     private var appEl: AXUIElement?
     private var teamsPID: pid_t = 0
 
@@ -92,6 +97,12 @@ public final class TeamsClient {
         let role = hidden ? lastRole : readPPTRole(byID: byID)
         if !hidden { lastRole = role }
 
+        // Before the flyout check, as on Windows: the timer sits in its own
+        // strip and stays readable while a flyout covers the toolbar, and a
+        // reading that vanished for the length of a menu would reset the dial.
+        let buttonNames = nodes.filter { $0.role == (kAXButtonRole as String) }.map(\.label)
+        for (key, value) in TimerReading.context(buttonNames, config: config.timer) { snap.context[key] = value }
+
         snap.states["ppt-live"] = role != nil
         snap.states["ppt-presenting"] = role == "presenter"
         if let role { snap.context["ppt.role"] = role }
@@ -102,10 +113,16 @@ public final class TeamsClient {
             }
             snap.available = lastAvailable
             for (key, value) in lastInk { snap.context[key] = value }
+            publishPalettes(into: &snap)
             return snap
         }
 
         readSlidePosition(nodes, into: &snap)
+        // Kept when the counter is out of sight, as on Windows: it is what a
+        // slide jump checks the strip against, and losing it would switch that
+        // check off exactly when the toolbar auto-hides.
+        if let total = snap.context["ppt.slides"].flatMap({ Int($0) }) { lastSlideTotal = total }
+        publishPalettes(into: &snap)
 
         for (key, spec) in config.controls {
             if let need = spec.requiresRole, need.lowercased() != (role ?? "") {
@@ -154,6 +171,12 @@ public final class TeamsClient {
             }
         }
         return snap
+    }
+
+    private func publishPalettes(into snap: inout MeetingSnapshot) {
+        for (key, palette) in lastPalette where !palette.isEmpty {
+            snap.context["ppt.palette.\(key)"] = palette.joined(separator: "|")
+        }
     }
 
     private func applyNameState(_ spec: ControlSpec, node: AXNode, key: String, snap: inout MeetingSnapshot) {
@@ -369,31 +392,40 @@ public final class TeamsClient {
      *
      * Named rather than left to fall through to "unknown target", which reads
      * like a mismatched build or a corrupted config and sends anyone debugging
-     * it looking in the wrong place. Each of these is a real Windows feature
-     * with no macOS implementation: driving the ink flyout, jumping to a slide
-     * on the filmstrip, the meeting timer, and selecting cameras.
+     * it looking in the wrong place. Empty now that every Windows target has a
+     * macOS implementation; kept so a future gap is reported the same way.
      */
-    static let unimplementedTargets: [String: String] = [
-        "camera-select": "camera selection",
-        "camera-swap": "camera swapping",
-        "ppt-ink-color": "ink colour",
-        "ppt-ink-thickness": "ink thickness",
-        "ppt-goto-slide": "jumping to a slide",
-        "timer-toggle": "the meeting timer",
-        "timer-reset": "the meeting timer",
+    static let unimplementedTargets: [String: String] = [:]
+
+    /// Targets handled by code rather than described in the control map, as on
+    /// Windows: patterns inside a flyout, a filmstrip tile, and a timer with no ids.
+    static let inkColorTarget = "ppt-ink-color"
+    static let inkThicknessTarget = "ppt-ink-thickness"
+    static let goToSlideTarget = "ppt-goto-slide"
+    static let timerToggleTarget = "timer-toggle"
+    static let timerResetTarget = "timer-reset"
+    static let codedTargets: Set<String> = [
+        inkColorTarget, inkThicknessTarget, goToSlideTarget, timerToggleTarget, timerResetTarget,
     ]
 
     public func invoke(target: String, arg: String?) -> (ok: Bool, error: String?) {
         if let what = Self.unimplementedTargets[target] {
             return (false, "\(what) is not implemented in the macOS sidecar yet")
         }
-        guard config.controls[target] != nil else { return (false, "unknown target '\(target)'") }
+        guard Self.codedTargets.contains(target) || config.controls[target] != nil else {
+            return (false, "unknown target '\(target)'")
+        }
         guard attach(), appEl != nil else { return (false, "Teams is not running") }
         guard AX.isTrusted() else { return (false, "not trusted for Accessibility") }
 
         let captured = restoreFocus ? FocusRestore.capture(teamsPID: teamsPID) : nil
         defer { if restoreFocus { FocusRestore.restore(captured) } }
-        return invokeCore(target: target, arg: arg)
+        switch target {
+        case Self.goToSlideTarget: return goToSlide(arg)
+        case Self.timerToggleTarget, Self.timerResetTarget: return driveTimer(reset: target == Self.timerResetTarget)
+        case Self.inkColorTarget, Self.inkThicknessTarget: return adjustInk(thickness: target == Self.inkThicknessTarget, arg: arg)
+        default: return invokeCore(target: target, arg: arg)
+        }
     }
 
     /**
@@ -420,6 +452,15 @@ public final class TeamsClient {
 
     private func invokeCore(target: String, arg: String?) -> (ok: Bool, error: String?) {
         guard let spec = config.controls[target], let appEl else { return (false, "not in a meeting") }
+        var arg = arg
+        var cameraChoices: [CameraChoice]?
+        if target == "camera-select" || target == "camera-swap" {
+            guard let choices = CameraArguments.parse(arg, swap: target == "camera-swap") else {
+                return (false, "choose valid webcams and video preferences in this button's settings")
+            }
+            cameraChoices = choices
+            arg = choices[0].id
+        }
         var wins = AX.windows(appEl)
         var nodes = Tree.walk(windows: wins)
         var byID = Tree.indexByID(nodes)
@@ -475,6 +516,9 @@ public final class TeamsClient {
         // every reaction is right there whenever the flyout is already open.
         for id in [itemID, itemToggleID].compactMap({ $0 }) where !id.isEmpty {
             if let item = byID[id], item.enabled {
+                if let cameraChoices {
+                    return selectCamera(first: item, choices: cameraChoices, spec: spec, menuID: spec.menu)
+                }
                 let result = press(item.element, name: target)
                 if result.ok {
                     lastStates[target] = !(lastStates[target] ?? false)
@@ -524,6 +568,10 @@ public final class TeamsClient {
             // up, so it has to come down either way.
             scheduleDismissal(anchor: nil, hostID: menuID)
             return (false, "menu item for '\(target)' not found")
+        }
+
+        if let cameraChoices {
+            return selectCamera(first: item, choices: cameraChoices, spec: spec, menuID: menuID)
         }
 
         let plan = Self.menuPress(
@@ -630,9 +678,10 @@ public final class TeamsClient {
     }
 
     /// Owes a dismissal to whoever sends the result. See runPendingCleanup.
-    private func scheduleDismissal(anchor: AXNode?, hostID: String?) {
+    /// `until` names what proves the flyout is down; the meeting toolbar by default.
+    private func scheduleDismissal(anchor: AXNode?, hostID: String?, until: [String]? = nil) {
         pendingCleanup = { [weak self] in
-            self?.dismissFlyout(anchor: anchor, hostID: hostID)
+            self?.dismissFlyout(anchor: anchor, hostID: hostID, until: until)
         }
     }
 
@@ -706,10 +755,13 @@ public final class TeamsClient {
      * key that does nothing for as long as it takes - so the ladder stops when
      * the budget is gone and says so, rather than trying everything it knows.
      */
-    private func dismissFlyout(anchor: AXNode?, hostID: String?) {
+    private func dismissFlyout(anchor: AXNode?, hostID: String?, until: [String]? = nil) {
         let budget = Date().addingTimeInterval(2.5)
         func remaining(_ want: TimeInterval) -> TimeInterval {
             min(want, max(0, budget.timeIntervalSinceNow))
+        }
+        func waitForToolbar(_ timeout: TimeInterval) -> Bool {
+            self.waitForToolbar(timeout, ids: until)
         }
 
         // The press may have closed it. Acting now would re-open what is
@@ -782,15 +834,385 @@ public final class TeamsClient {
      * buys more full walks, the same measurement the Windows sidecar records
      * for its own dismissal wait.
      */
-    private func waitForToolbar(_ timeout: TimeInterval) -> Bool {
+    private func waitForToolbar(_ timeout: TimeInterval, ids: [String]? = nil) -> Bool {
         guard let appEl else { return false }
-        let probe = [config.meetingProbeAutomationId]
+        let probe = ids ?? [config.meetingProbeAutomationId]
         let deadline = Date().addingTimeInterval(timeout)
         while true {
             if Tree.containsAny(windows: AX.windows(appEl), ids: probe) { return true }
             if Date() >= deadline { return false }
             Thread.sleep(forTimeInterval: 0.08)
         }
+    }
+
+    // MARK: - Coded targets: slide jump, timer, ink, cameras, thumbnails
+
+    /// The meeting window and one walk of every Teams window, or nil outside a meeting.
+    private func meetingView() -> (window: AXUIElement, nodes: [AXNode], byID: [String: AXNode])? {
+        guard let appEl else { return nil }
+        let wins = AX.windows(appEl)
+        let nodes = Tree.walk(windows: wins)
+        let byID = Tree.indexByID(nodes)
+        guard let meeting = pickMeetingWindow(wins: wins, byID: byID) else { return nil }
+        return (meeting.window, nodes, byID)
+    }
+
+    private static func matches(_ rx: NSRegularExpression?, _ text: String) -> Bool {
+        guard let rx, !text.isEmpty else { return false }
+        return rx.firstMatch(in: text, options: [], range: NSRange(text.startIndex..., in: text)) != nil
+    }
+
+    /// Whether a swatch, camera or tile is the chosen one: a radio reports it as
+    /// AXValue, a list option as AXSelected. Nil when the element says neither.
+    private func isSelected(_ el: AXUIElement) -> Bool? {
+        AX.checked(el) ?? AX.bool(el, kAXSelectedAttribute as String)
+    }
+
+    /**
+     * The presenter-view filmstrip, or the grid view, in deck order.
+     *
+     * Slide-sized children of an AXList. Frames are read only for elements with
+     * a plausible role inside a list, because a frame costs two more calls into
+     * Teams per element and the window holds thousands.
+     */
+    private func filmstripTiles(in window: AXUIElement) -> [Filmstrip.Tile<AXUIElement>] {
+        let roles = Set(config.powerPointLive.filmstripItemRoles)
+        var tiles: [Filmstrip.Tile<AXUIElement>] = []
+        var stack: [(el: AXUIElement, depth: Int, inList: Bool, list: CGRect?)] = [(window, 0, false, nil)]
+        var visited = 0
+        while let (el, depth, inList, list) = stack.popLast() {
+            visited += 1
+            if visited > 12_000 { break }
+            let role = AX.string(el, kAXRoleAttribute as String) ?? ""
+            if inList, roles.contains(role), let frame = AX.frame(el),
+               frame.width >= Filmstrip.minWidth, frame.height >= Filmstrip.minHeight {
+                tiles.append(Filmstrip.Tile(
+                    handle: el, frame: frame, selected: isSelected(el) ?? false,
+                    name: AX.label(el), viewport: list
+                ))
+                continue
+            }
+            guard depth < 40 else { continue }
+            let isList = role == (kAXListRole as String)
+            let listFrame = isList ? AX.frame(el) : nil
+            for child in AX.children(el).reversed() {
+                stack.append((child, depth + 1, isList, listFrame))
+            }
+        }
+        return Filmstrip.order(tiles)
+    }
+
+    /**
+     * Goes straight to a slide by pressing its tile.
+     *
+     * The alternative is walking there one Next press at a time: slow over any
+     * distance, and wrong on a deck with builds, because Next advances the
+     * build rather than the slide.
+     */
+    private func goToSlide(_ arg: String?) -> (ok: Bool, error: String?) {
+        guard let wanted = Int((arg ?? "").trimmingCharacters(in: .whitespaces)) else { return (false, "no slide number") }
+        guard let view = meetingView() else { return (false, "not in a meeting") }
+        // Stricter than Windows on purpose: which macOS elements make up the
+        // strip is still a guess, so a jump is only made once the deck's own
+        // count is known to check that guess against.
+        guard let total = lastSlideTotal else { return (false, "the deck's slide count is not known yet") }
+        let strip = filmstripTiles(in: view.window)
+        switch Filmstrip.index(forSlide: wanted, stripCount: strip.count, reportedTotal: total) {
+        case let .failure(error):
+            return (false, error.message)
+        case let .success(index):
+            let err = AX.press(strip[index].handle)
+            return err == .success ? (true, nil) : (false, "could not reach slide \(wanted): AXError \(err.rawValue)")
+        }
+    }
+
+    /// Starts or pauses the timer, or puts it back to the top. The toggle is
+    /// whichever of Pause and Resume is showing; see TimerReading.press.
+    private func driveTimer(reset: Bool) -> (ok: Bool, error: String?) {
+        guard let view = meetingView() else { return (false, "not in a meeting") }
+        let buttons = view.nodes.filter { $0.role == (kAXButtonRole as String) && !$0.label.isEmpty }
+        let found = TimerReading.match(buttons.map(\.label), config: config.timer)
+        switch TimerReading.press(reset: reset, buttons: found) {
+        case let .refuse(why):
+            return (false, why)
+        case let .press(label):
+            guard let node = buttons.first(where: { $0.label == label }) else { return (false, "no timer running") }
+            let err = AX.press(node.element)
+            return err == .success ? (true, nil) : (false, "could not reach the timer: AXError \(err.rawValue)")
+        }
+    }
+
+    /// Cursor and eraser carry no colour or thickness, so they open no flyout.
+    private static let colourlessInkTools: Set<String> = ["ppt-cursor", "ppt-eraser"]
+
+    /// The selected drawing tool. Its button leaves the tree while its flyout
+    /// is open, so this is the selection that held when the flyout opened.
+    private func selectedInkKey() -> String? {
+        config.controls.filter { $0.value.colorFromName }.keys.sorted().first { lastStates[$0] == true }
+    }
+
+    private struct InkFlyout {
+        var slider: AXNode?
+        var swatches: [AXNode] = []
+        var isEmpty: Bool { slider == nil && swatches.isEmpty }
+    }
+
+    /**
+     * Everything an open drawing-tool flyout offers, in one walk: the thickness
+     * slider and the colour swatches. The meeting window first, where the
+     * flyout renders, and every window only if that finds nothing - other Teams
+     * windows have radio buttons of their own.
+     */
+    private func readInkFlyout(meeting: AXUIElement?) -> InkFlyout {
+        guard let appEl else { return InkFlyout() }
+        let ppt = config.powerPointLive
+        let scopes: [[AXUIElement]] = meeting.map { [[$0], AX.windows(appEl)] } ?? [AX.windows(appEl)]
+        for scope in scopes {
+            var out = InkFlyout()
+            for node in Tree.walk(windows: scope) {
+                let name = node.label.trimmingCharacters(in: .whitespaces)
+                if node.role == (kAXSliderRole as String) {
+                    if out.slider == nil, ppt.inkThicknessRegex == nil || Self.matches(ppt.inkThicknessRegex, name) {
+                        out.slider = node
+                    }
+                    continue
+                }
+                guard node.role == (kAXRadioButtonRole as String), !name.isEmpty else { continue }
+                // The pen's flyout carries the laser's arrow options too.
+                if Self.matches(ppt.arrowOptionRegex, name) { continue }
+                out.swatches.append(node)
+            }
+            if !out.isEmpty { return out }
+        }
+        return InkFlyout()
+    }
+
+    /// Opens the selected tool's options, changes one thing, and leaves the
+    /// flyout to be closed once the result has been sent.
+    private func adjustInk(thickness: Bool, arg: String?) -> (ok: Bool, error: String?) {
+        guard let appEl, let view = meetingView() else { return (false, "not in a meeting") }
+        guard let key = selectedInkKey(), let spec = config.controls[key], !spec.automationId.isEmpty,
+              var tool = view.byID[spec.automationId] else { return (false, "no drawing tool is selected") }
+        if Self.colourlessInkTools.contains(key) { return (false, "'\(key)' has no color or thickness to set") }
+
+        let root = config.powerPointLive.rootAutomationId
+        var flyout = InkFlyout()
+        for attempt in 0..<3 where flyout.isEmpty {
+            if attempt > 0 {
+                // Re-found on every attempt: Teams rebuilds the slide-show
+                // toolbar on demand, and pressing a stale element silently does
+                // nothing. An open flyout unmounts the slide-show subtree, so a
+                // missing root means one is already up - pressing the tool
+                // again would shut it, so that case only waits and re-reads.
+                let live = Tree.indexByID(Tree.walk(windows: AX.windows(appEl)))
+                if live[root] == nil {
+                    Thread.sleep(forTimeInterval: 0.15)
+                    flyout = readInkFlyout(meeting: view.window)
+                    continue
+                }
+                if let fresh = live[spec.automationId] { tool = fresh }
+            }
+            guard AX.press(tool.element) == .success else { return (false, "could not open the drawing tool's options") }
+            for i in 0..<3 {
+                Thread.sleep(forTimeInterval: i == 0 ? 0.12 : 0.09)
+                flyout = readInkFlyout(meeting: view.window)
+                if thickness ? flyout.slider != nil : !flyout.swatches.isEmpty { break }
+            }
+        }
+
+        scheduleDismissal(anchor: flyout.slider ?? flyout.swatches.first, hostID: spec.automationId, until: [root])
+        return thickness ? setInkThickness(flyout.slider, key: key, arg: arg) : stepInkColor(flyout, key: key, arg: arg, meeting: view.window)
+    }
+
+    private func setInkThickness(_ slider: AXNode?, key: String, arg: String?) -> (ok: Bool, error: String?) {
+        guard let slider else { return (false, "this tool has no thickness") }
+        let el = slider.element
+        guard let current = AX.number(el, kAXValueAttribute as String),
+              let low = AX.number(el, kAXMinValueAttribute as String),
+              let high = AX.number(el, kAXMaxValueAttribute as String) else {
+            return (false, "could not read the thickness slider")
+        }
+        if high <= low { return (false, "the thickness slider reports no range") }
+        guard let wanted = InkAdjust.thickness(current: current, min: low, max: high, arg: arg) else { return (true, nil) }
+
+        let set = AXUIElementSetAttributeValue(el, kAXValueAttribute as CFString, NSNumber(value: wanted))
+        if set != .success {
+            // Not every slider accepts a value; stepping it is what the arrow keys do.
+            let action = (wanted > current ? kAXIncrementAction : kAXDecrementAction) as CFString
+            for _ in 0..<Int(abs(wanted - current).rounded()) {
+                guard AXUIElementPerformAction(el, action) == .success else {
+                    return (false, "could not set thickness (AXError \(set.rawValue))")
+                }
+            }
+        }
+        lastInk["ppt.thickness.\(key)"] = String(Int(wanted))
+        return (true, nil)
+    }
+
+    private func stepInkColor(_ flyout: InkFlyout, key: String, arg: String?, meeting: AXUIElement) -> (ok: Bool, error: String?) {
+        let swatches = flyout.swatches
+        guard !swatches.isEmpty else { return (false, "this tool has no colors") }
+        let names = swatches.map { $0.label.trimmingCharacters(in: .whitespaces) }
+        // The palette is per tool and the sets differ, so the open flyout is
+        // always the authority on what the colours are.
+        lastPalette[key] = names
+
+        let selected = swatches.firstIndex { isSelected($0.element) == true }
+        guard let wanted = InkAdjust.colorIndex(selected: selected, count: swatches.count, arg: arg) else { return (true, nil) }
+
+        // A swatch can go stale between being read and being chosen - the
+        // palette is rebuilt underneath this more often than it looks - so a
+        // failure is retried against a freshly read flyout.
+        var chosen = AX.press(swatches[wanted].element) == .success
+        if !chosen {
+            let again = readInkFlyout(meeting: meeting).swatches
+            chosen = again.count == swatches.count && AX.press(again[wanted].element) == .success
+        }
+        guard chosen else { return (false, "could not select the color") }
+        lastInk["ppt.color.\(key)"] = names[wanted]
+        return (true, nil)
+    }
+
+    /// Waits for an element by DOM id, for the second camera of a swap.
+    private func findByID(_ id: String, within timeout: TimeInterval) -> AXNode? {
+        guard let appEl else { return nil }
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            if let found = Tree.indexByID(Tree.walk(windows: AX.windows(appEl)))[id] { return found }
+            if Date() >= deadline { return nil }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+    }
+
+    /**
+     * Chooses a camera in the open video flyout, or swaps between two.
+     *
+     * A swap reads which camera Teams has selected rather than trusting the
+     * last press, so a change made by hand - or by another key - never puts
+     * the toggle out of step. The selection is then confirmed, because a press
+     * that Teams ignored would otherwise read as success.
+     */
+    private func selectCamera(first: AXNode, choices: [CameraChoice], spec: ControlSpec, menuID: String?) -> (ok: Bool, error: String?) {
+        if choices.contains(where: \.hasPreferences) {
+            IO.err("warning: camera video preferences (mirror, soft focus, brightness) are not applied by the macOS sidecar yet")
+        }
+        var item = first
+        defer { scheduleDismissal(anchor: item, hostID: menuID) }
+
+        if choices.count == 2 {
+            guard let second = findByID(choices[1].id, within: 1.5), item.enabled, second.enabled else {
+                return (false, "both configured webcams must be available in Teams to swap")
+            }
+            guard let firstOn = isSelected(item.element), isSelected(second.element) != nil else {
+                return (false, "Teams did not expose webcam selection")
+            }
+            if firstOn { item = second }
+        }
+
+        guard item.enabled else { return (false, "the configured webcam is not available right now") }
+        guard let on = isSelected(item.element) else { return (false, "Teams did not expose webcam selection") }
+        if on { return (true, nil) }
+        guard AX.press(item.element) == .success else { return (false, "could not select the configured webcam") }
+
+        let deadline = Date().addingTimeInterval(1.5)
+        while Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.1)
+            let live = findByID(item.id, within: 0) ?? item
+            if isSelected(live.element) == true { return (true, nil) }
+        }
+        return (false, "Teams did not confirm the webcam selection")
+    }
+
+    public struct Thumbnail {
+        public var ok: Bool
+        public var error: String?
+        public var image: String?
+        public var name: String?
+        public var end = false
+        public var frames: [String] = []
+    }
+
+    /**
+     * Captures the slide being shown, or the one after it.
+     *
+     * "Current" is the live slide surface, so it matches what the room sees,
+     * animations and all, with or without presenter view. "Next" can only come
+     * from the presenter-view filmstrip, fully built, because a slide not yet
+     * reached has no live render. Same split, and same messages, as Windows.
+     */
+    public func captureSlide(which: String, fade: Int, width: Int, height: Int) -> Thumbnail {
+        func fail(_ error: String, name: String? = nil, end: Bool = false) -> Thumbnail {
+            Thumbnail(ok: false, error: error, image: nil, name: name, end: end)
+        }
+        guard attach(), let view = meetingView() else { return fail("not in a meeting") }
+
+        let rect: CGRect
+        let name: String?
+        let source: AXUIElement
+        if which != "next" {
+            guard let container = view.byID[config.powerPointLive.slideContainerAutomationId] else {
+                return fail("no slide is being shown")
+            }
+            let images = Tree.walk(windows: [container.element], withFrames: true)
+                .filter { $0.role == (kAXImageRole as String) }
+                .compactMap(\.frame)
+            guard let live = Filmstrip.liveSlide(among: images) else { return fail("no slide is being shown") }
+            rect = live
+            name = container.label
+            source = container.element
+        } else {
+            let strip = filmstripTiles(in: view.window)
+            guard !strip.isEmpty else { return fail("presenter view is closed") }
+            guard let at = strip.firstIndex(where: \.selected) else { return fail("no slide selected") }
+            // Running off the end is its own answer: the picture is now wrong
+            // and has to go, where a failure should leave it and try again.
+            if at + 1 >= strip.count {
+                SlideCapture.forget(which)
+                return fail("no next slide; this is the last one", end: true)
+            }
+            let target = strip[at + 1]
+            guard let shown = showInStrip(target) else { return fail("scrolled out of view", name: target.name) }
+            rect = shown
+            name = target.name
+            source = target.handle
+        }
+
+        // The window the slide element itself belongs to - a popped-out deck
+        // is not in the meeting window - captured by its window-server id.
+        let owner = AX.window(of: source) ?? view.window
+        guard let windowFrame = AX.frame(owner) else { return fail("could not find the Teams window to capture") }
+        let grabbed = SlideCapture.grab(
+            key: "\(which):\(width)x\(height)", pid: teamsPID, windowID: AX.windowID(owner),
+            windowFrame: windowFrame, rect: rect,
+            border: which != "next", fadeFrames: fade, slotWidth: width, slotHeight: height
+        )
+        switch grabbed {
+        case let .success(composed):
+            return Thumbnail(ok: true, error: nil, image: composed.image, name: name, frames: composed.frames)
+        case let .failure(failure):
+            return fail(failure.message, name: which == "next" ? name : nil)
+        }
+    }
+
+    /**
+     * The visible part of a filmstrip tile, scrolling it into view if needed.
+     *
+     * Teams keeps the current slide at the strip's trailing edge, so the next
+     * one is usually just out of sight. AXScrollToVisible only scrolls - it
+     * never selects, which would move the presentation for everyone.
+     */
+    private func showInStrip(_ tile: Filmstrip.Tile<AXUIElement>) -> CGRect? {
+        if let shown = Filmstrip.clip(tile.frame, to: tile.viewport ?? tile.frame) { return shown }
+        let scroll = "AXScrollToVisible"
+        guard AX.actions(tile.handle).contains(scroll),
+              AXUIElementPerformAction(tile.handle, scroll as CFString) == .success else { return nil }
+        // The scroll animates, so the first look back is usually mid-flight.
+        for _ in 0..<5 {
+            Thread.sleep(forTimeInterval: 0.12)
+            guard let frame = AX.frame(tile.handle) else { continue }
+            if let shown = Filmstrip.clip(frame, to: tile.viewport ?? frame) { return shown }
+        }
+        return nil
     }
 
     private func rememberToggle(_ target: String) {
@@ -833,6 +1255,19 @@ public final class TeamsClient {
             // the same thing "toggle".
             if let checked = AX.checked(n.element) {
                 row["checked"] = checked ? "true" : "false"
+            }
+            // What the parity features decide by, so one capture on a Mac can
+            // confirm them: filmstrip tiles are slide-sized children of an
+            // AXList and the current one is selected; a camera menu item says
+            // which camera is in use; the ink slider carries a numeric value.
+            if let parent = AX.parent(n.element), let role = AX.string(parent, kAXRoleAttribute as String) {
+                row["parentRole"] = role
+            }
+            if let selected = AX.bool(n.element, kAXSelectedAttribute as String) {
+                row["selected"] = selected ? "true" : "false"
+            }
+            if let value = AX.number(n.element, kAXValueAttribute as String) {
+                row["value"] = String(value)
             }
             return row
         }

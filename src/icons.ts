@@ -323,6 +323,26 @@ function escapeText(value: string): string {
 }
 
 /**
+ * What every Teams key shows on a Mac until Teams control is allowed.
+ *
+ * Replaces the key's own artwork rather than badging it, because some keys
+ * are pre-rendered PNGs with nothing to layer over. Two states, worded as what
+ * the user does next: turn the setting on, or finish the macOS permission.
+ */
+export function renderSetup(waitingForMacOS: boolean): string {
+	const lines = waitingForMacOS ? ["Allow in", "macOS", "Settings"] : ["Teams", "control", "is off"];
+	const text = lines.map((line, i) =>
+		`<text x="${SIZE / 2}" y="${44 + i * 32}" text-anchor="middle" ` +
+		`font-family="Segoe UI, system-ui, sans-serif" font-size="26" font-weight="600" ` +
+		`fill="${COLORS.on}">${escapeText(line)}</text>`
+	).join("");
+	return wrap(
+		`<rect x="4" y="4" width="${SIZE - 8}" height="${SIZE - 8}" rx="18" fill="none" ` +
+		`stroke="${COLORS.accent}" stroke-width="4"/>${text}`
+	);
+}
+
+/**
  * Renders a glyph with a short label beneath it.
  *
  * Used for the slide counter, where the useful information is a value rather
