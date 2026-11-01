@@ -7,7 +7,20 @@ struct WorkItem {
     var target: String?
     var menu: String?
     var arg: String?
+    var fade = 0
+    var width = 200
+    var height = 100
     var queuedAt = Date()
+}
+
+/// Bounds on a thumbnail request, as on Windows: a fade allocates a frame per
+/// step and a slot is a bitmap, so a caller cannot ask for an unbounded one.
+let maxFadeFrames = 12
+let maxSlotPixels = 1024
+
+func clampedInt(_ raw: Any?, _ low: Int, _ high: Int, default fallback: Int) -> Int {
+    guard let n = raw as? NSNumber else { return fallback }
+    return min(max(n.intValue, low), high)
 }
 
 func argValue(_ args: [String], _ name: String) -> String? {
@@ -60,13 +73,14 @@ if hasFlag(args, "-h") || hasFlag(args, "--help") {
       {"id":2,"cmd":"invoke","target":"mute"}
       {"id":3,"cmd":"discover","menu":""}
       {"id":4,"cmd":"ping"}
+      {"id":5,"cmd":"cameras"}
+      {"id":6,"cmd":"thumb","arg":"current","w":200,"h":100,"fade":0}
+      {"id":7,"cmd":"forget","arg":"current"}   (no reply, as on Windows)
       {"cmd":"shutdown"}
 
-    Answered, but not implemented here - they report that rather than looking
+    Answered, but not implemented here - it reports that rather than looking
     like an unrecognised command:
-      {"id":5,"cmd":"thumb","arg":"current"}   slide capture
-      {"id":6,"cmd":"directmode"}              drive Teams through a debug port
-      {"id":7,"cmd":"forget","arg":"current"}  (no reply, as on Windows)
+      {"id":8,"cmd":"directmode"}              drive Teams through a debug port
 
     """, stderr)
     exit(0)
@@ -172,31 +186,34 @@ func handle(_ item: WorkItem) {
             "elements": rows,
         ])
     case "cameras":
+        let cameras = Cameras.enumerate()
         IO.emit([
             "type": "cameras",
             "id": item.id,
-            "ok": false,
-            "error": "camera enumeration is not implemented in the macOS sidecar yet",
+            "ok": true,
+            "cameras": cameras.map { ["id": $0.id, "name": $0.name] },
         ])
     case "thumb":
-        // Answered in the shape the plugin waits for. Letting this fall through
-        // to "unknown command" below sent back a "result", which the plugin
-        // routes to a different table entirely - so the request sat in its
-        // capture table until the capture timeout expired, and every slide
-        // preview cost that wait instead of failing at once.
-        IO.emit([
+        // Its own message type rather than a result, because it carries a
+        // picture: kept off the state channel so a thumbnail never rides along
+        // with every key's availability. The slot size is the caller's.
+        let which = item.arg ?? "current"
+        let shot = client.captureSlide(which: which, fade: item.fade, width: item.width, height: item.height)
+        var reply: [String: Any] = [
             "type": "thumb",
             "id": item.id,
-            "ok": false,
-            "which": item.arg ?? "current",
-            "end": false,
-            "error": "slide capture is not implemented in the macOS sidecar yet",
-        ])
+            "ok": shot.ok,
+            "which": which,
+            "end": shot.end,
+        ]
+        if let name = shot.name { reply["name"] = name }
+        if let image = shot.image { reply["image"] = image }
+        if let error = shot.error { reply["error"] = error }
+        if !shot.frames.isEmpty { reply["frames"] = shot.frames }
+        IO.emit(reply)
     case "forget":
-        // No reply, matching Windows: the plugin sends this to drop a held
-        // slide and has nothing to do with an answer. There is no slide held
-        // here, so there is nothing to drop either.
-        break
+        // No reply, matching Windows: drops the picture a slot fades from.
+        SlideCapture.forget(item.arg)
     case "directmode":
         // Direct mode drives Teams through a debugging port the user opens
         // themselves, and has no macOS implementation. Answered rather than
@@ -235,7 +252,10 @@ DispatchQueue.global(qos: .userInitiated).async {
             cmd: cmd,
             target: obj["target"] as? String,
             menu: obj["menu"] as? String,
-            arg: obj["arg"] as? String
+            arg: obj["arg"] as? String,
+            fade: clampedInt(obj["fade"], 0, maxFadeFrames, default: 0),
+            width: clampedInt(obj["w"], 16, maxSlotPixels, default: 200),
+            height: clampedInt(obj["h"], 16, maxSlotPixels, default: 100)
         ))
     }
     enqueue(WorkItem(id: 0, cmd: "shutdown"))

@@ -1239,9 +1239,13 @@ npm run build:sidecar:macos
 Grant **Accessibility** to Stream Deck (the responsible process when it spawns
 the helper), then fully quit and reopen it.
 
-Still missing vs Windows, on purpose for this cut: `AXObserver` (the sidecar
-polls), PowerPoint Live ink colour / slide thumbnails (`thumb` / `forget`),
-and a signed/notarized helper. Tracking: [#4](https://github.com/danswett/streamdeck-teams-control/issues/4).
+Every Windows feature except Direct mode is implemented, but the ones that read
+PowerPoint Live's flyouts and filmstrip, and camera selection, were written
+against the Windows tree and are unconfirmed on a Mac; see
+[sidecar-macos/README.md](sidecar-macos/README.md). Slide thumbnails need
+Screen Recording permission and macOS 14. Still missing: `AXObserver` (the
+sidecar polls), camera video preferences, and Direct mode. Tracking:
+[#4](https://github.com/danswett/streamdeck-teams-control/issues/4).
 
 **The manifest does not declare macOS**, so Stream Deck will not install this on
 a Mac and Marketplace will not list it as supported. What stood in the way, all
@@ -1295,8 +1299,9 @@ One answer is in, and it is worth having:
 What is left needs a Mac with live Teams:
 
 - **Does Accessibility drive Teams as it does on Windows?** Every control, the
-  state reporting, and the PowerPoint Live capture behind ink colour and slide
-  thumbnails.
+  state reporting, and the parity features: the filmstrip behind slide jumps
+  and next-slide thumbnails, the ink flyout, camera menu ids and the timer.
+  `tools/macos-probe.sh` captures all of it in one guided session.
 
 One worry is already answered: Maker Console's DRM leaves binaries untouched —
 `TeamsBridge.exe` came back byte-identical from a processed upload — so a signed

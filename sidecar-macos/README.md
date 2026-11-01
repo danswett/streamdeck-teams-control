@@ -51,13 +51,42 @@ Teams quitting ends it at once. The plugin log records `meeting detected`,
 ended …`, each with window counts and flags (never titles) showing what the
 sidecar could see.
 
-Known gaps vs Windows, all of which now *say so* rather than failing as though
-something were broken: polling instead of AXObserver; `AXPress` raises the Teams
-window for ~300ms (then we `AXRaise` the previous app); slide capture (`thumb`),
-ink colour and thickness actuation (`ppt-ink-color` / `ppt-ink-thickness`),
-slide jumping (`ppt-goto-slide`), the meeting timer (`timer-toggle` /
-`timer-reset`) and direct mode are not implemented.
+Every Windows feature except Direct mode now has a macOS implementation:
+slide thumbnails (`thumb` / `forget`, through ScreenCaptureKit), ink colour and
+thickness (`ppt-ink-color` / `ppt-ink-thickness`), slide jumping
+(`ppt-goto-slide`), the meeting timer (`timer-toggle` / `timer-reset`, and the
+`timer.*` context), and cameras (`cameras` through AVFoundation, plus
+`camera-select` / `camera-swap`). They mirror the Windows rules and error
+messages, and none has been run against a live Teams on a Mac yet.
+`tools/macos-probe.sh` captures what each one depends on, and every guess below
+is overlayable in `selectors.json`:
 
-Ink colour, ink thickness and the slide counter are *read* and published in the
-snapshot context, so keys and dials display correctly even where they cannot yet
-be driven.
+- **Filmstrip.** Slide jumps and the next-slide thumbnail take the presenter
+  view's slides to be slide-sized children of an `AXList`, the current one
+  carrying `AXSelected`. The roles counted are
+  `powerPointLive.filmstripItemRoles`. Because that is a guess, a jump is
+  refused until the deck's slide counter has been read and the strip holds
+  exactly that many slides - stricter than Windows, which jumps when the count
+  is unknown.
+- **Ink flyout.** Swatches are taken to be `AXRadioButton`s and thickness an
+  `AXSlider` named by `powerPointLive.inkThicknessPattern`; the laser's arrow
+  options are excluded by `arrowOptionPattern`, as on Windows.
+- **Cameras.** A camera's menu item is taken to carry AVFoundation's
+  `uniqueID` as its DOM id, the way Windows' carries the device id. Mirror,
+  soft focus and brightness preferences are not applied yet; a key that sets
+  them still switches camera and logs a warning.
+- **Timer.** Read from button names, so the `timer` block of `selectors.json`
+  localizes it.
+
+Two permissions beyond Accessibility, each asked for only when its feature is
+first used: **Screen Recording** for slide thumbnails (macOS 14 or later), and
+none for listing cameras - only opening one needs camera access, and the
+sidecar never does.
+
+Remaining gaps vs Windows: polling instead of AXObserver; `AXPress` raises the
+Teams window for ~300ms (then we `AXRaise` the previous app); camera video
+preferences; and Direct mode, which answers `usable: false` with a reason.
+Teams for Mac is reportedly built on Edge WebView too, but whether it honours
+`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=…` is unverified,
+and the port's ownership check is the security boundary, so it waits for a Mac
+to confirm the port opens at all.

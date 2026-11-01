@@ -3,6 +3,9 @@ import ApplicationServices
 import CoreGraphics
 import Foundation
 
+@_silgen_name("_AXUIElementGetWindow")
+private func _AXUIElementGetWindow(_ element: AXUIElement, _ id: UnsafeMutablePointer<CGWindowID>) -> AXError
+
 public enum AX {
     static func value(_ el: AXUIElement, _ name: String) -> CFTypeRef? {
         var v: CFTypeRef?
@@ -30,6 +33,26 @@ public enum AX {
 
     static func bool(_ el: AXUIElement, _ name: String) -> Bool? {
         value(el, name) as? Bool
+    }
+
+    static func number(_ el: AXUIElement, _ name: String) -> Double? {
+        (value(el, name) as? NSNumber)?.doubleValue
+    }
+
+    /// The window an element belongs to.
+    static func window(of el: AXUIElement) -> AXUIElement? {
+        value(el, kAXWindowAttribute as String).flatMap(asElement)
+    }
+
+    /**
+     * The window server's id for a window element, which is what ties it to
+     * the window ScreenCaptureKit captures. Private, but long stable and used
+     * by every macOS window manager; without it the only link is the frame,
+     * which two maximized Teams windows share.
+     */
+    static func windowID(_ window: AXUIElement) -> CGWindowID? {
+        var id: CGWindowID = 0
+        return _AXUIElementGetWindow(window, &id) == .success && id != 0 ? id : nil
     }
 
     static func children(_ el: AXUIElement) -> [AXUIElement] {
