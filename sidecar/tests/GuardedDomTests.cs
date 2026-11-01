@@ -53,6 +53,7 @@ public class GuardedDomTests
     [InlineData("TimerToggle", "throw-after-write", false)]
     [InlineData("TimerReset", "normal", true)]
     [InlineData("TimerReset", "expired", true)]
+    [InlineData("TimerReset", "full-duration", false)]
     [InlineData("TimerReset", "cancel-mapped", false)]
     [InlineData("TimerReset", "ignored-write", false)]
     [InlineData("TimerReset", "throw-after-write", false)]

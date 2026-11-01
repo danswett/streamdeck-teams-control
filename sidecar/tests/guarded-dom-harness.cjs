@@ -170,7 +170,8 @@ async function main() {
     const controlName = seconds => (localized ? 'Zeitsteuerung' : 'Timer controls') +
         ', ' + Math.floor(seconds / 60) + ' min, ' + seconds % 60 + ' sec remaining';
     const expired = scenario === 'expired' || scenario === 'cancel-mapped';
-    const controls = button(timer, controlName(expired ? 0 : 120), '', timerOwner);
+    // full-duration: a reset from the full five minutes reads the same afterwards.
+    const controls = button(timer, controlName(expired ? 0 : scenario === 'full-duration' ? 300 : 120), '', timerOwner);
     if (scenario === 'missing-owner' && kind.startsWith('Timer')) delete controls.__reactFiber$guard;
     const toggle = button(timer, '', '', timerOwner);
     const setToggle = () => toggle.setAttribute('aria-label', expired && !running
