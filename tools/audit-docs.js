@@ -64,7 +64,7 @@ const usedInspectors = new Set(
 );
 if (manifest.PropertyInspectorPath && !existsSync(path.join(PLUGIN, manifest.PropertyInspectorPath)))
 	fail("manifest", `plugin inspector "${manifest.PropertyInspectorPath}" is missing`);
-const support = new Set(["inspector.css", "action-descriptions.js", "sdpi-components.js"]);
+const support = new Set(["inspector.css", "action-descriptions.js", "profile-settings.js", "sdpi-components.js", "teams-control-settings.js"]);
 for (const f of readdirSync(uiDir)) {
 	if (!f.endsWith(".html")) continue;
 	if (!usedInspectors.has(f)) fail("ui", `${f} is not used by any action`);
@@ -226,6 +226,22 @@ const pngSize = (file) => {
 	return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) };
 };
 const marketReadme = read(path.join(MARKET, "README.md"));
+
+// ------------------------------------------------------- platform claims
+// The manifest's OS list decides where the plugin installs, and the docs must
+// say the same. The day macOS is declared, every "Windows only" line becomes a
+// false claim to a Mac user; until then, nothing may promise them support.
+const declaresMac = manifest.OS.some((os) => os.Platform === "mac");
+const listingCopy = fencedBlocks(marketReadme).join("\n");
+if (declaresMac) {
+	if (/badge\/macOS-in%20progress/.test(readme)) fail("README.md", "macOS is declared, but the badge still says it is in progress");
+	if (/Windows only, for now/.test(readme)) fail("README.md", "macOS is declared, but the banner still says Windows only");
+	if (/Windows only\./.test(listingCopy)) fail("marketplace/README.md", "macOS is declared, but the listing copy still says Windows only");
+	if (!/macOS \d+ or later/.test(listingCopy)) fail("marketplace/README.md", "macOS is declared, but the listing copy never states a macOS requirement");
+} else {
+	if (!/Windows only, for now/.test(readme)) fail("README.md", "the manifest declares Windows only, but the README no longer says so");
+	if (/macOS \d+ or later/.test(listingCopy)) fail("marketplace/README.md", "the listing copy states a macOS requirement, but the manifest does not declare macOS");
+}
 const listed = new Set([
 	"app-icon-288.png",
 	"thumbnail.png",

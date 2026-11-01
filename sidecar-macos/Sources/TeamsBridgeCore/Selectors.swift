@@ -71,9 +71,54 @@ struct PowerPointLiveConfig {
     var toolColorPattern = #"^[^:]+:\s*([^,]+?)\s*(?:,|$)"#
     var toolThicknessPattern = #"Thickness\s*(\d+)"#
 
+    /// The container named after the live slide; the slide is the 16:9 image inside it.
+    var slideContainerAutomationId = "slideshow-app-container"
+
+    /**
+     * The thickness slider in a drawing tool's flyout, matched by name because
+     * Teams generates its DOM id per render.
+     */
+    var inkThicknessPattern = #"^\s*Ink thickness\s*$"#
+
+    /**
+     * The laser's arrow options, which share the pen's flyout and are radio
+     * buttons like every colour swatch - so they have to be told apart by name.
+     */
+    var arrowOptionPattern = #"^(No arrow|Single arrow|Double arrows)$"#
+
+    /**
+     * Roles a filmstrip slide may carry. Chromium does not map list items to a
+     * single macOS role, so the slide-sized descendants of an AXList with any
+     * of these roles count. Overlayable once a Mac capture says which it is.
+     */
+    var filmstripItemRoles = ["AXGroup", "AXStaticText", "AXRow", "AXCell", "AXButton", "AXRadioButton"]
+
     var slidePositionRegex: NSRegularExpression? { ControlSpec.compile(slidePositionPattern) }
     var toolColorRegex: NSRegularExpression? { ControlSpec.compile(toolColorPattern) }
     var toolThicknessRegex: NSRegularExpression? { ControlSpec.compile(toolThicknessPattern) }
+    var inkThicknessRegex: NSRegularExpression? { ControlSpec.compile(inkThicknessPattern) }
+    var arrowOptionRegex: NSRegularExpression? { ControlSpec.compile(arrowOptionPattern) }
+}
+
+/**
+ * The meeting timer, matching the Windows sidecar's TimerSpec.
+ *
+ * None of its controls carry an identifier, and the remaining time exists only
+ * in the accessible name of the button holding them: "Timer controls, 4 min,
+ * 57 sec remaining". Every pattern is therefore matched against a localized
+ * string, and every one is overlayable for that reason.
+ */
+struct TimerConfig {
+    var controlsPattern = #"^\s*Timer controls\b"#
+    var pausePattern = #"^\s*Pause timer\s*$"#
+    var resumePattern = #"^\s*Resume timer\s*$"#
+    var resetPattern = #"^\s*Reset timer\s*$"#
+    /// What the toggle becomes once time is up. Matched to recognise expiry and
+    /// never pressed: it ends the timer for everyone in the meeting.
+    var cancelPattern = #"^\s*Cancel timer for everyone\s*$"#
+    var hoursPattern = #"(\d+)\s*hr"#
+    var minutesPattern = #"(\d+)\s*min"#
+    var secondsPattern = #"(\d+)\s*sec"#
 }
 
 public struct SelectorConfig {
@@ -101,6 +146,7 @@ public struct SelectorConfig {
 
     var controls: [String: ControlSpec] = [:]
     var powerPointLive = PowerPointLiveConfig()
+    var timer = TimerConfig()
 
     /// The markers actually searched for, with the probe always among them.
     /// Overriding one without the other should narrow a meeting's definition,
@@ -147,6 +193,11 @@ public enum Defaults {
                 activePattern: #"camera\s+off|Kamera ausschalten"#,
                 inactivePattern: #"camera\s+on|Kamera einschalten"#
             ),
+            // The camera's menu item carries the device id as its DOM id, as on
+            // Windows. Whether Teams for Mac uses AVFoundation's uniqueID for it
+            // is the first thing to confirm on a Mac; the overlay can retarget it.
+            "camera-select": ControlSpec(menu: "video-button-configure", menuItemAutomationId: "{arg}"),
+            "camera-swap": ControlSpec(menu: "video-button-configure", menuItemAutomationId: "{arg}"),
             "leave": ControlSpec(automationId: "hangup-button"),
             "share": ControlSpec(
                 automationId: "share-button",
@@ -306,6 +357,32 @@ public enum Defaults {
             if let v = ppt["toolThicknessPattern"] as? String, !v.isEmpty {
                 cfg.powerPointLive.toolThicknessPattern = v
             }
+            if let v = ppt["slideContainerAutomationId"] as? String, !v.isEmpty {
+                cfg.powerPointLive.slideContainerAutomationId = v
+            }
+            if let v = ppt["inkThicknessPattern"] as? String, !v.isEmpty {
+                cfg.powerPointLive.inkThicknessPattern = v
+            }
+            if let v = ppt["arrowOptionPattern"] as? String, !v.isEmpty {
+                cfg.powerPointLive.arrowOptionPattern = v
+            }
+            if let v = ppt["filmstripItemRoles"] as? [String] {
+                let kept = v.filter { !$0.isEmpty }
+                if !kept.isEmpty { cfg.powerPointLive.filmstripItemRoles = kept }
+            }
+        }
+        if let timer = obj["timer"] as? [String: Any] {
+            func take(_ key: String, _ path: WritableKeyPath<TimerConfig, String>) {
+                if let v = timer[key] as? String, !v.isEmpty { cfg.timer[keyPath: path] = v }
+            }
+            take("controlsPattern", \.controlsPattern)
+            take("pausePattern", \.pausePattern)
+            take("resumePattern", \.resumePattern)
+            take("resetPattern", \.resetPattern)
+            take("cancelPattern", \.cancelPattern)
+            take("hoursPattern", \.hoursPattern)
+            take("minutesPattern", \.minutesPattern)
+            take("secondsPattern", \.secondsPattern)
         }
         guard let controls = obj["controls"] as? [String: Any] else { return cfg }
         for (key, raw) in controls {

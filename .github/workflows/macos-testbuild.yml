@@ -1,26 +1,18 @@
 name: macos-testbuild
 
-# Produces an installable macOS build, so testing it needs no toolchain and no
-# checkout - download a .streamDeckPlugin, double-click, done.
+# The rolling preview a Mac tester installs: download a .streamDeckPlugin,
+# double-click, done.
 #
-# main's manifest declares Windows only, because the macOS sidecar is not fit to
-# publish yet. A build from main therefore will not install on a Mac at all,
-# which makes the one question that matters impossible to ask: does Stream Deck
-# quarantine what it extracts from a downloaded package?
-#
-# So this patches the manifest to declare macOS *instead of* Windows. Mac-only
-# keeps the whole thing buildable and packable on one runner - the .NET sidecar
-# is win-x64 and cannot be built here - and a Mac tester has no use for the
-# Windows half anyway.
+# main's manifest declares Windows only, so a build from main would not install
+# on a Mac at all. This builds the same package a release will be once macOS is
+# declared - both helpers, Windows and macOS, in one file - so the preview tests
+# the real thing, and a Windows user who picks it up by mistake gets a working
+# plugin rather than one with no helper.
 #
 # Published as a prerelease, clearly marked, never as a Marketplace submission.
-#
-# It runs on every push to main, notarized, because a macOS build that has to be
-# asked for is a macOS build nobody asks for: the Windows work carries on, the
-# Swift quietly stops compiling, and the gap surfaces on the day someone finally
-# wants to ship it. One rolling tag rather than a release per push keeps a single
-# permanent URL to hand a tester, and keeps the release list from filling with
-# builds nobody will install.
+# One rolling tag rather than a release per push keeps a single permanent URL to
+# hand a tester, and keeps the release list from filling with builds nobody
+# will install.
 
 on:
   push:
@@ -43,149 +35,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  testbuild:
-    runs-on: macos-latest
-    timeout-minutes: 60
+  package:
+    uses: ./.github/workflows/package.yml
+    with:
+      notarize: ${{ github.event_name == 'push' || inputs.notarize }}
+      require-signing: true
+      declare-mac: true
+      # Stream Deck refuses to install a version it already has - it stops at
+      # checkAlreadyInstalled and shows no dialog at all - so every preview gets
+      # a distinct fourth component and installs over the last.
+      version-suffix: ${{ github.run_number }}
+      artifact: preview
+    secrets: inherit
+
+  publish:
+    needs: package
+    # Only main moves the tester's link. A dispatch from a branch builds and
+    # verifies the preview without publishing it.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/download-artifact@v7
         with:
-          node-version: 24
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      # The build a tester downloads. A Swift change that breaks these rules
-      # would otherwise be found by a human in a live meeting, which is how
-      # both rounds of #7 went.
-      - name: Unit tests (Swift sidecar)
-        run: npm run test:sidecar:macos
-
-      - name: Write the notary key, if configured
-        id: notary
-        env:
-          NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
-        run: |
-          if [ -n "$NOTARY_KEY" ]; then
-            printf '%s' "$NOTARY_KEY" > "$RUNNER_TEMP/notary.p8"
-            echo "path=$RUNNER_TEMP/notary.p8" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Import the signing certificate
-        env:
-          CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
-          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-        run: |
-          if [ -z "$CERT_P12" ]; then
-            echo "No MACOS_CERT_P12 - the build would be ad-hoc signed, which"
-            echo "answers none of the questions this build exists to answer."
-            exit 1
-          fi
-          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
-          PASSPHRASE="$(uuidgen)"
-          security create-keychain -p "$PASSPHRASE" "$KEYCHAIN"
-          security set-keychain-settings -lut 3600 "$KEYCHAIN"
-          security unlock-keychain -p "$PASSPHRASE" "$KEYCHAIN"
-          printf '%s' "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
-          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
-            -P "$CERT_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$PASSPHRASE" "$KEYCHAIN" >/dev/null
-          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
-          rm -f "$RUNNER_TEMP/cert.p12"
-
-      - name: Declare macOS, and give the build its own version
-        id: manifest
-        run: |
-          MANIFEST=com.bad-duck.teamscontrol.sdPlugin/manifest.json
-          # Stream Deck refuses to install a version it already has - it stops
-          # at checkAlreadyInstalled and shows no dialog at all - so every test
-          # build gets a distinct fourth component and installs over the last.
-          VERSION="$(node -p "require('./$MANIFEST').Version.split('.').slice(0,3).join('.')").${{ github.run_number }}"
-          node -e "
-            const fs = require('fs');
-            const m = JSON.parse(fs.readFileSync('$MANIFEST', 'utf8'));
-            m.Version = '$VERSION';
-            m.OS = [{ Platform: 'mac', MinimumVersion: '13' }];
-            fs.writeFileSync('$MANIFEST', JSON.stringify(m, null, '\t') + '\n');
-          "
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Built as $VERSION, macOS only."
-
-      - name: Build
-        id: build
-        env:
-          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
-          # On by default now. A push always notarizes; a manual run can untick
-          # it to skip the queue.
-          MACOS_NOTARIZE: ${{ (github.event_name == 'push' || inputs.notarize) && '1' || '' }}
-          NOTARIZE_REQUESTED: ${{ (github.event_name == 'push' || inputs.notarize) && '1' || '' }}
-          MACOS_NOTARY_KEY_PATH: ${{ steps.notary.outputs.path }}
-          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
-          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
-        run: |
-          APP=com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge.app
-
-          # build-sidecar-macos.sh exits non-zero when Apple's queue outruns its
-          # --timeout. That is not a build failure - the bundle is already built,
-          # signed and valid, and the submission carries on server-side. Judge
-          # from the artifact rather than the exit code, so a slow queue at Apple
-          # cannot turn main red for something nobody here did wrong.
-          set +e
-          npm run build:sidecar:macos
-          BUILD_RC=$?
-          set -e
-
-          if [ ! -x "$APP/Contents/MacOS/TeamsBridge" ]; then
-            echo "::error::Sidecar did not build (rc=$BUILD_RC) - no bundle at $APP"
-            exit 1
-          fi
-
-          # Signing is ours, takes seconds and has no queue, so unlike
-          # notarization there is no excuse for it to be missing.
-          if ! codesign --verify --deep --strict "$APP" 2>/dev/null; then
-            echo "::error::Bundle is not validly signed (rc=$BUILD_RC)"
-            exit 1
-          fi
-
-          if xcrun stapler validate "$APP" >/dev/null 2>&1; then
-            echo "notarized=true" >> "$GITHUB_OUTPUT"
-            echo "Notarized, ticket stapled."
-          else
-            echo "notarized=false" >> "$GITHUB_OUTPUT"
-            if [ -n "$NOTARIZE_REQUESTED" ]; then
-              echo "::warning::Signed but not notarized - Apple's queue outran the wait (rc=$BUILD_RC). The submission is not lost; it continues server-side and the next push will staple it from cache. To see where it got to: gh workflow run notary-status.yml --ref main"
-            fi
-          fi
-
-          # Not build:sidecar - that is the win-x64 .NET host and cannot be
-          # built here. Icons are committed rather than generated at build time.
-          npm run build:profiles
-          npm run build:plugin
-
-      - name: Validate and package
-        run: |
-          # check-sidecars reads the manifest's OS list, so with Windows no
-          # longer declared it asks only for the Mach-O - which is present.
-          node tools/check-sidecars.ts
-          npx streamdeck validate com.bad-duck.teamscontrol.sdPlugin --no-update-check
-          npx streamdeck pack com.bad-duck.teamscontrol.sdPlugin --output dist --force --no-update-check
-
-      - name: What the tester is getting
-        run: |
-          APP=com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge.app
-          lipo -info "$APP/Contents/MacOS/TeamsBridge"
-          codesign --display --verbose=2 "$APP" 2>&1 | grep -E 'Authority|Signature' || true
-          xcrun stapler validate "$APP" 2>&1 || true
-          spctl --assess --type execute --verbose=2 "$APP" 2>&1 || true
+          name: preview
+          path: dist
 
       - name: Publish the rolling test build
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.manifest.outputs.version }}
-          NOTARIZED: ${{ steps.build.outputs.notarized }}
+          VERSION: ${{ needs.package.outputs.version }}
+          NOTARIZED: ${{ needs.package.outputs.notarized }}
         run: |
           TAG=macos-test
 
@@ -196,29 +78,24 @@ jobs:
           fi
 
           cat > notes.md <<NOTES
-          **macOS test build — not for publication, not a Marketplace submission.**
+          **Preview build with macOS support — not a Marketplace submission.**
 
           Rebuilt automatically on every push to \`main\`. This release rolls: the tag,
           the notes and the attached package always describe the newest build, so this
           URL never goes stale and never needs replacing.
 
           Built from \`main\` at \`${GITHUB_SHA:0:7}\` as version \`$VERSION\`.
-          Sidecar is $STATE.
 
-          The manifest is patched to declare **macOS only** so it installs on a Mac;
-          \`main\` itself declares Windows only, because the macOS sidecar is not fit
-          to publish yet. The Windows sidecar is absent by design — this build is for
-          answering the questions in #7 and nothing else.
-
-          Sidecar: universal \`arm64\` + \`x86_64\`, wrapped in \`TeamsBridge.app\` so a
-          notarization ticket has somewhere to live.
+          One package for both platforms: the Windows helper and a universal
+          (\`arm64\` + \`x86_64\`) macOS helper. The macOS helper is $STATE.
+          The released Marketplace build still declares Windows only.
 
           ### Install
           Download the \`.streamDeckPlugin\` below and double-click it. Please do not
-          sideload or \`streamdeck link\` — a downloaded install is the whole point, and
-          the quarantine question cannot be answered any other way.
+          sideload or \`streamdeck link\` — a downloaded install is what users will get.
 
-          Then follow #7.
+          On a Mac the plugin asks once whether to turn on Teams control, which needs
+          Accessibility permission. Findings go on #52.
           NOTES
 
           # Move the tag rather than deleting and recreating it. Deleting a tag
@@ -228,7 +105,7 @@ jobs:
           git tag -f "$TAG" "$GITHUB_SHA"
           git push -f origin "refs/tags/$TAG"
 
-          TITLE="macOS test build (latest) — $VERSION"
+          TITLE="Preview with macOS (latest) — $VERSION"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" --title "$TITLE" --notes-file notes.md --prerelease
             gh release upload "$TAG" dist/*.streamDeckPlugin --clobber

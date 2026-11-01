@@ -50,6 +50,7 @@ import {
 import { profileSwitcher } from "./profiles";
 import { DirectModeAction } from "./actions/direct-mode";
 import { directModeControl } from "./direct-mode";
+import { teamsControl } from "./teams-control";
 
 streamDeck.logger.setLevel("info");
 
@@ -102,9 +103,11 @@ streamDeck.actions.registerAction(new SlideCurrentDialAction());
 streamDeck.actions.registerAction(new SlideNextDialAction());
 streamDeck.actions.registerAction(new TimerDialAction());
 
-profileSwitcher.start();
+void profileSwitcher.start();
 
 // Connect last, once every action is registered.
 await streamDeck.connect();
 void directModeControl.start();
+// Before the sidecar starts, so its gate and ready hook are in place for it.
+void teamsControl.start();
 bridge.start();

@@ -195,11 +195,43 @@ meeting goes:
 | The deck stops | back to **Teams Meeting** |
 | You leave | back to whichever profile you were on before |
 
+While the plugin has moved a deck onto a meeting layout, Stream Deck pauses its
+own app-specific (smart) profile switching on that deck, which is what keeps
+the meeting keys up while Teams is in the background. When you leave the
+meeting, or turn following off, the plugin always hands the deck back, which
+resumes app-specific switching. It does this even if the layout was customized
+or never confirmed.
+
+Only a switch the plugin makes itself creates that hold. So when a meeting
+starts with the meeting layout already on the deck, put there by hand or by an
+app-specific profile, the plugin still switches to it. Otherwise the deck would
+leave the meeting layout as soon as Teams went to the background.
+
 Each PowerPoint Live layout keeps mute within reach on every deck, so being
 moved onto a presentation layout never costs you the meeting basics.
 
 **It is off by default.** Turn it on in any PowerPoint Live key's settings; the
-setting is shared by all of them.
+setting is shared by all of them. Bundled profiles are optional and are offered
+for installation only when following first needs them, not when you install the
+plugin.
+
+**No automatic retries after an unconfirmed change.** If the requested layout
+does not settle within nine seconds, automatic following pauses across meetings, reconnects
+and plugin restarts. The SDK cannot tell whether you cancelled an install,
+deleted a profile, or customized it, so the plugin does not keep retrying.
+Your existing layouts and manual controls are left alone. Close any outstanding
+install prompt, then turn **Follow the meeting between profiles** off and on
+when you want to retry. A paused request is still handed back when the meeting
+ends, but it is never sent again automatically.
+
+Stream Deck can still show one prompt when a switch targets a missing or
+unrecognized bundled profile; the SDK provides no quiet existence check.
+An unconfirmed request does not trigger further automatic install attempts.
+
+Following recognizes the bundled layout by its action types and positions, not
+its icons or key settings. Rearranging or removing controls can therefore pause
+following even after a successful switch; leave following off to use a custom
+layout manually.
 
 ### Every deck, and what it gets
 
@@ -306,9 +338,10 @@ Download the `.streamDeckPlugin` file from
 [Releases](https://github.com/danswett/streamdeck-teams-control/releases) and
 double-click it.
 
-Stream Deck will ask whether to install the bundled profiles. Accept if you want
-[automatic profile switching](#profiles-that-follow-the-meeting); decline and
-everything else still works.
+Bundled profiles are optional. If you enable
+[automatic profile switching](#profiles-that-follow-the-meeting), Stream Deck
+will offer to install each needed layout on demand. Decline and everything else
+still works; automatic following pauses rather than repeatedly asking.
 
 For optional Windows Direct mode, follow the
 [persistent Teams-only setup](#direct-mode-optional-off-by-default) below.
@@ -332,7 +365,8 @@ start-up.
 Linking copies files into place and skips Stream Deck's installer, which has one
 consequence: **bundled profiles are only registered when Stream Deck installs a
 packaged plugin itself.** To exercise the profiles, open the packed
-`dist/*.streamDeckPlugin` instead and accept the prompt.
+`dist/*.streamDeckPlugin` instead, enable following, and accept the on-demand
+install prompt.
 
 ---
 
@@ -644,9 +678,14 @@ A few operational notes:
   front of the user, and they can decline.
 - **That dialog holds Stream Deck's profile lock until it is answered**, which
   may be hours. A second switch request meanwhile is refused with `Another
-  operation is already in progress`. Repeat asks for the same path are therefore
-  suppressed for 30 s and given up after three, while a genuine change of target
-  still switches immediately.
+  operation is already in progress`. Each named request is saved before it is
+  sent and cleared after the requested layout has remained matching and quiet
+  for 400 ms, or the user explicitly retries. The layout is checked again after
+  reading settings, immediately before clearing the guard. If the layout does
+  not settle within nine seconds, following pauses
+  across meetings and restarts until the
+  user explicitly disables and re-enables it. An unrelated key appearing is not
+  proof of installation. `AutoInstall: false` also prevents install-time prompts.
 - **Stream Deck re-reads the manifest when the app starts**, not when plugin
   files change, so a newly declared profile needs an app restart to be noticed.
 
@@ -867,9 +906,38 @@ node tools/build-profile.ts    # rebuild the bundled profiles
 has no sidecar for. Neither machine can cross-build the other's — the .NET host
 is win-x64, the Swift one is Mach-O — so packing on Windows alone would produce
 a plugin that claims macOS support and then sits dimmed on every Mac that
-installs it, with nothing about the file saying so. CI builds both halves and
-packs on macOS. For a deliberate single-platform build, set
+installs it, with nothing about the file saying so. CI builds the Mac helper on
+a macOS runner and packs on Windows. For a deliberate single-platform build, set
 `SKIP_SIDECAR_CHECK=1`.
+
+### CI
+
+Every package, whoever asks for it, comes out of
+[`package.yml`](.github/workflows/package.yml):
+
+1. **macOS runner:** TypeScript tests on a POSIX filesystem, Swift tests, then
+   the universal helper is built, signed and, when asked, notarized. Then
+   [`tools/sidecar-smoke.ts`](tools/sidecar-smoke.ts) runs it and walks the
+   protocol.
+2. **Windows runner:** the docs audit plus TypeScript and C# tests, then a build
+   and a smoke test of the Windows helper. When the package declares macOS, the
+   Mac helper is added. The job validates and packs.
+3. **macOS runner again:** the package is unzipped as a user would receive it.
+   This checks that the helper is still universal, signed and stapled after
+   being packed on Windows, then smoke-tests it from inside the package.
+
+| workflow | when | what it produces |
+|---|---|---|
+| `build.yml` | every PR and push | a package declaring both platforms. Signed when the certificate is available; notarized only on request |
+| `macos-testbuild.yml` | every push to `main` | the same, notarized, published to the rolling [`macos-test`](https://github.com/danswett/streamdeck-teams-control/releases/tag/macos-test) prerelease |
+| `release.yml` | `v*` tags | whatever the tagged manifest declares. Fails if it declares macOS without a notarized helper |
+| `signing-health.yml` | weekly | fails 60 days before the Developer ID certificate expires, or as soon as the notary credentials stop working |
+
+The manifest in the tree is never edited by CI.
+[`tools/set-manifest-platforms.ts`](tools/set-manifest-platforms.ts) adds macOS
+to the build copy only. The docs audit holds the README and listing to whatever
+the manifest declares. Adding `mac` to the manifest fails it until the
+"Windows only" wording is gone.
 
 ### Which copy is Stream Deck running?
 
@@ -1205,12 +1273,22 @@ Build on a Mac:
 npm run build:sidecar:macos
 ```
 
-Grant **Accessibility** to Stream Deck (the responsible process when it spawns
-the helper), then fully quit and reopen it.
+Permissions are opt-in, each tied to the feature that needs it. On first run a
+native dialog asks whether to **Allow Teams control on this Mac**; saying yes is
+what asks macOS to allow Stream Deck under **Accessibility**, which every Teams
+key needs. The same setting is in every Teams key's settings, and until it is on
+keys show a setup tile and do nothing. **Screen Recording** is separate and is
+asked for only when a slide dial's **Show the slide on the touch strip** box is
+ticked. Nothing else prompts. Fully quit and reopen Stream Deck after granting
+a permission if a key still reports it missing.
 
-Still missing vs Windows, on purpose for this cut: `AXObserver` (the sidecar
-polls), PowerPoint Live ink colour / slide thumbnails (`thumb` / `forget`),
-and a signed/notarized helper. Tracking: [#4](https://github.com/danswett/streamdeck-teams-control/issues/4).
+Every Windows feature except Direct mode is implemented, but the ones that read
+PowerPoint Live's flyouts and filmstrip, and camera selection, were written
+against the Windows tree and are unconfirmed on a Mac; see
+[sidecar-macos/README.md](sidecar-macos/README.md). Slide thumbnails need
+macOS 14. Still missing: `AXObserver` (the sidecar polls), camera video
+preferences, and Direct mode. Tracking:
+[#4](https://github.com/danswett/streamdeck-teams-control/issues/4).
 
 **The manifest does not declare macOS**, so Stream Deck will not install this on
 a Mac and Marketplace will not list it as supported. What stood in the way, all
@@ -1264,8 +1342,9 @@ One answer is in, and it is worth having:
 What is left needs a Mac with live Teams:
 
 - **Does Accessibility drive Teams as it does on Windows?** Every control, the
-  state reporting, and the PowerPoint Live capture behind ink colour and slide
-  thumbnails.
+  state reporting, and the parity features: the filmstrip behind slide jumps
+  and next-slide thumbnails, the ink flyout, camera menu ids and the timer.
+  `tools/macos-probe.sh` captures all of it in one guided session.
 
 One worry is already answered: Maker Console's DRM leaves binaries untouched —
 `TeamsBridge.exe` came back byte-identical from a processed upload — so a signed

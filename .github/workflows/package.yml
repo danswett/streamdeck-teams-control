@@ -1,0 +1,364 @@
+name: package
+
+# One .streamDeckPlugin carrying both sidecars, built the same way for every
+# caller: CI on each PR and push (build.yml), the rolling preview
+# (macos-testbuild.yml) and tagged releases (release.yml).
+#
+# Neither runner can build the other's sidecar - the .NET host is win-x64, the
+# Swift one is Mach-O - so the macOS job builds, signs and (when asked)
+# notarizes the helper, and the Windows job builds everything else and packs.
+# The Mac app goes into the package only when the manifest declares macOS:
+# a Windows-only package has no use for it.
+#
+# Then the package is opened on a Mac and checked as a user would receive it,
+# because it is packed on Windows and nothing else proves the signature, the
+# stapled ticket and both architectures survive that trip intact.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit, branch or tag to build (defaults to the triggering ref)
+        type: string
+        default: ""
+      notarize:
+        description: Notarize and staple the macOS helper (waits on Apple's queue)
+        type: boolean
+        default: false
+      require-signing:
+        description: Fail if the Developer ID certificate is not configured
+        type: boolean
+        default: false
+      require-notarized:
+        description: Fail if a package that declares macOS carries an unstapled helper
+        type: boolean
+        default: false
+      declare-mac:
+        description: Add macOS to the manifest for this build (main still declares Windows alone)
+        type: boolean
+        default: false
+      version-suffix:
+        description: Fourth version component for this build, if any
+        type: string
+        default: ""
+      artifact:
+        description: Name of the uploaded plugin artifact
+        type: string
+        default: com.bad-duck.teamscontrol.streamDeckPlugin
+    outputs:
+      version:
+        value: ${{ jobs.plugin.outputs.version }}
+      declares-mac:
+        value: ${{ jobs.plugin.outputs.declares-mac }}
+      notarized:
+        value: ${{ jobs.helper-macos.outputs.notarized }}
+
+permissions:
+  contents: read
+
+jobs:
+  helper-macos:
+    runs-on: macos-latest
+    # Signing is ours and takes seconds. Notarization is a queue at Apple and
+    # took 44 minutes on this team's first submission; the ceiling covers it.
+    timeout-minutes: 60
+    outputs:
+      signed: ${{ steps.build.outputs.signed }}
+      notarized: ${{ steps.build.outputs.notarized }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The other home of this suite is windows-latest, where a POSIX file mode
+      # cannot be represented at all, so the tests covering the execute bit the
+      # package loses (#7) would skip everywhere. Run before the keychain work
+      # so a failure costs nothing.
+      - name: Unit tests (TypeScript, on a POSIX filesystem)
+        run: npm run test:ts
+
+      - name: Unit tests (Swift sidecar)
+        run: npm run test:sidecar:macos
+
+      # Signing and notarization requirements apply only to a package that will
+      # carry this helper. A Windows-only release still builds and tests it, but
+      # must not wait on Apple's queue or fail for want of a Mac certificate.
+      - name: Will this package ship the helper?
+        id: ships
+        env:
+          DECLARE_MAC: ${{ inputs.declare-mac }}
+        run: |
+          if [ "$DECLARE_MAC" = "true" ] || node -e "process.exit(require('./com.bad-duck.teamscontrol.sdPlugin/manifest.json').OS.some(o => o.Platform === 'mac') ? 0 : 1)"; then
+            echo "mac=true" >> "$GITHUB_OUTPUT"
+            echo "This package declares macOS and will carry the helper."
+          else
+            echo "mac=false" >> "$GITHUB_OUTPUT"
+            echo "Windows-only package: the helper is built and tested, not shipped."
+          fi
+
+      - name: Write the notary key, if configured
+        id: notary
+        env:
+          NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+        run: |
+          if [ -n "$NOTARY_KEY" ]; then
+            printf '%s' "$NOTARY_KEY" > "$RUNNER_TEMP/notary.p8"
+            echo "path=$RUNNER_TEMP/notary.p8" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Import the signing certificate, if configured
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          REQUIRED: ${{ inputs.require-signing && steps.ships.outputs.mac == 'true' && '1' || '' }}
+        run: |
+          if [ -z "$CERT_P12" ]; then
+            if [ -n "$REQUIRED" ]; then
+              echo "::error::No MACOS_CERT_P12 - this build must be Developer ID signed."
+              exit 1
+            fi
+            echo "No MACOS_CERT_P12 (a fork or Dependabot PR) - building unsigned."
+            exit 0
+          fi
+          # A throwaway keychain, unlocked only for this job. Importing into the
+          # login keychain would leave the identity on a shared runner image.
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          PASSPHRASE="$(uuidgen)"
+          security create-keychain -p "$PASSPHRASE" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$PASSPHRASE" "$KEYCHAIN"
+          printf '%s' "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+            -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          # codesign: matters as much as the other two. Without it codesign asks
+          # the keychain for authorisation through a UI prompt, and on a headless
+          # runner nobody answers - the job hangs until it is killed. Cost a
+          # 41-minute run.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$PASSPHRASE" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security find-identity -v -p codesigning "$KEYCHAIN"
+
+      - name: Build the helper
+        id: build
+        env:
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          MACOS_NOTARIZE: ${{ inputs.notarize && steps.ships.outputs.mac == 'true' && '1' || '' }}
+          MACOS_NOTARY_KEY_PATH: ${{ steps.notary.outputs.path }}
+          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          MACOS_NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          MACOS_NOTARY_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+          MACOS_NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+          NOTARIZE_REQUESTED: ${{ inputs.notarize && steps.ships.outputs.mac == 'true' && '1' || '' }}
+        run: |
+          APP=com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge.app
+
+          # build-sidecar-macos.sh exits non-zero when Apple's queue outruns its
+          # --timeout. The bundle is already built and signed by then and the
+          # submission carries on server-side, so judge from the artifact
+          # rather than the exit code.
+          set +e
+          npm run build:sidecar:macos
+          BUILD_RC=$?
+          set -e
+
+          if [ ! -x "$APP/Contents/MacOS/TeamsBridge" ]; then
+            echo "::error::Helper did not build (rc=$BUILD_RC) - no bundle at $APP"
+            exit 1
+          fi
+
+          if [ -n "$MACOS_SIGN_IDENTITY" ]; then
+            # Signing is ours, takes seconds and has no queue, so unlike
+            # notarization there is no excuse for it to be missing.
+            if ! codesign --verify --deep --strict "$APP" 2>/dev/null; then
+              echo "::error::Bundle is not validly signed (rc=$BUILD_RC)"
+              exit 1
+            fi
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if xcrun stapler validate "$APP" >/dev/null 2>&1; then
+            echo "notarized=true" >> "$GITHUB_OUTPUT"
+            echo "Notarized, ticket stapled."
+          else
+            echo "notarized=false" >> "$GITHUB_OUTPUT"
+            if [ -n "$NOTARIZE_REQUESTED" ]; then
+              echo "::warning::Signed but not notarized - Apple's queue outran the wait (rc=$BUILD_RC). The submission continues server-side; the next run staples it from cache. To see where it got to: gh workflow run notary-status.yml --ref main"
+            fi
+          fi
+
+      - name: Smoke test the helper
+        run: node tools/sidecar-smoke.ts com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge.app/Contents/MacOS/TeamsBridge
+
+      - name: Report what the binary actually is
+        # Printed every run, because all three facts that made the 1.10.1
+        # binary unfit to ship were readable straight off the artifact and
+        # nobody was looking.
+        run: |
+          APP=com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge.app
+          lipo -info "$APP/Contents/MacOS/TeamsBridge"
+          codesign --display --verbose=4 "$APP" 2>&1 | grep -E 'Authority|Signature|flags' || true
+          xcrun stapler validate "$APP" 2>&1 || true
+          spctl --assess --type execute --verbose=4 "$APP" 2>&1 || true
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sidecar-macos
+          path: com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge.app
+          if-no-files-found: error
+
+  plugin:
+    needs: helper-macos
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.manifest.outputs.version }}
+      declares-mac: ${{ steps.manifest.outputs.declares-mac }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Documentation audit, TypeScript and C# tests
+        run: npm run test
+
+      - name: Build sidecar, profiles and plugin
+        run: npm run build
+
+      - name: Smoke test the Windows helper
+        run: node tools/sidecar-smoke.ts com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge.exe
+
+      - name: Set platforms and version
+        id: manifest
+        env:
+          DECLARE_MAC: ${{ inputs.declare-mac && '--declare-mac' || '' }}
+          SUFFIX: ${{ inputs.version-suffix }}
+        shell: pwsh
+        run: |
+          $flags = @()
+          if ($env:DECLARE_MAC) { $flags += $env:DECLARE_MAC }
+          if ($env:SUFFIX) { $flags += @('--version-suffix', $env:SUFFIX) }
+          node tools/set-manifest-platforms.ts @flags
+
+      - name: Add the macOS helper
+        if: steps.manifest.outputs.declares-mac == 'true'
+        uses: actions/download-artifact@v7
+        with:
+          name: sidecar-macos
+          path: com.bad-duck.teamscontrol.sdPlugin/bin/sidecar/TeamsBridge.app
+
+      - name: Validate and package
+        run: |
+          # Refuses a manifest that declares a platform whose helper is absent.
+          node tools/check-sidecars.ts
+          npx streamdeck validate com.bad-duck.teamscontrol.sdPlugin --no-update-check
+          npx streamdeck pack com.bad-duck.teamscontrol.sdPlugin --output dist --force --no-update-check
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact }}
+          path: dist/*.streamDeckPlugin
+          if-no-files-found: error
+
+  verify:
+    needs: [helper-macos, plugin]
+    runs-on: macos-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: ${{ inputs.artifact }}
+          path: dist
+
+      - name: Open the package as a user receives it
+        env:
+          DECLARES_MAC: ${{ needs.plugin.outputs.declares-mac }}
+          SIGNED: ${{ needs.helper-macos.outputs.signed }}
+          NOTARIZED: ${{ needs.helper-macos.outputs.notarized }}
+          REQUIRE_NOTARIZED: ${{ inputs.require-notarized && '1' || '' }}
+        run: |
+          PKG="$(ls dist/*.streamDeckPlugin | head -n 1)"
+          mkdir -p unpacked
+          # ditto, not unzip: it is what Finder uses, and it keeps what a Mac
+          # user's extraction would keep.
+          ditto -x -k "$PKG" unpacked
+          PLUGIN="unpacked/com.bad-duck.teamscontrol.sdPlugin"
+          APP="$PLUGIN/bin/sidecar/TeamsBridge.app"
+          node -e "const m=require('./$PLUGIN/manifest.json'); console.log('package', m.Version, 'declares', m.OS.map(o=>o.Platform).join(', '))"
+
+          if [ "$DECLARES_MAC" != "true" ]; then
+            if [ -e "$APP" ]; then
+              echo "::error::A Windows-only package carries the macOS helper."
+              exit 1
+            fi
+            test -f "$PLUGIN/bin/sidecar/TeamsBridge.exe"
+            echo "Windows-only package, as declared."
+            exit 0
+          fi
+
+          test -f "$PLUGIN/bin/sidecar/TeamsBridge.exe" || { echo "::error::No Windows helper in a package that declares Windows"; exit 1; }
+          BIN="$APP/Contents/MacOS/TeamsBridge"
+          test -f "$BIN" || { echo "::error::No macOS helper in a package that declares macOS"; exit 1; }
+
+          ARCHS="$(lipo -archs "$BIN")"
+          echo "architectures: $ARCHS"
+          case "$ARCHS" in *arm64*x86_64*|*x86_64*arm64*) ;; *) echo "::error::Helper is not universal: $ARCHS"; exit 1 ;; esac
+
+          if [ "$SIGNED" = "true" ]; then
+            # Mode is not part of a code signature, so the 0644 the packer
+            # writes cannot break it - this proves it rather than assuming.
+            codesign --verify --deep --strict --verbose=2 "$APP"
+          else
+            echo "::warning::Helper is unsigned in this build (no certificate available)."
+          fi
+
+          if [ "$NOTARIZED" = "true" ]; then
+            xcrun stapler validate "$APP"
+            spctl --assess --type execute --verbose=4 "$APP"
+          elif [ -n "$REQUIRE_NOTARIZED" ]; then
+            echo "::error::This package declares macOS but its helper is not notarized."
+            exit 1
+          fi
+
+      - name: Smoke test the packaged helper
+        run: |
+          PLUGIN="unpacked/com.bad-duck.teamscontrol.sdPlugin"
+          if [ -f "$PLUGIN/bin/sidecar/TeamsBridge.app/Contents/MacOS/TeamsBridge" ]; then
+            node tools/sidecar-smoke.ts "$PLUGIN/bin/sidecar/TeamsBridge.app/Contents/MacOS/TeamsBridge" \
+              --selectors "$PLUGIN/selectors.json"
+          else
+            echo "No macOS helper in this package; nothing to run here."
+          fi

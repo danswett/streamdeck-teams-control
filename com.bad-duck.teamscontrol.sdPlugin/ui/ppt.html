@@ -10,20 +10,36 @@
 		<p class="hint" id="action-description"></p>
 
 		<sdpi-item label="Profile">
-			<sdpi-checkbox
-				global
-				setting="pptAutoProfile"
-				label="Follow the meeting between profiles"
-			></sdpi-checkbox>
+			<label><input id="profile-following" type="checkbox" disabled />
+				Follow the meeting between profiles</label>
 		</sdpi-item>
 		<p class="hint">
 			Moves the deck between the three bundled profiles as a meeting goes:
 			Teams Meeting when you join, PowerPoint Live (Attendee) or (Presenter)
 			while a deck is up, back to Teams Meeting when it ends, and back to
 			your own profile when you leave. Needs the bundled profiles, which
-			Stream Deck offers to install with the plugin. Shared setting — every
-			key in this plugin uses it.
+			Stream Deck offers to install only when following first needs them.
+			An unconfirmed change pauses following across restarts instead of
+			repeatedly asking to install. Turn this off and on to retry.
+			Shared setting — every key in this plugin uses it.
 		</p>
+		<p class="hint" id="profile-status" role="status"></p>
+		<script src="profile-settings.js"></script>
+		<div id="teams-control" hidden>
+			<sdpi-item label="Teams control">
+				<label><input id="teams-control-enabled" type="checkbox" disabled />
+					Allow Teams control on this Mac</label>
+			</sdpi-item>
+			<p class="hint">
+				Lets the plugin press Teams' meeting controls for you. Turning it on
+				asks macOS to allow Stream Deck under Accessibility. Every Teams key
+				needs it. Shared setting: every key in this plugin uses it. Slide
+				thumbnails need Screen Recording as well, asked for separately by the
+				slide dials.
+			</p>
+			<p class="hint" id="teams-control-status" role="status"></p>
+		</div>
+		<script src="teams-control-settings.js"></script>
 		<script src="action-descriptions.js"></script>
 		<script>
 			// Several actions share each inspector - most PowerPoint Live keys share

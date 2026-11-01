@@ -105,24 +105,35 @@ final class ParityTests: XCTestCase {
         XCTAssertEqual(presses, 0)
     }
 
-    // MARK: - Targets the plugin asks for that this sidecar cannot do
+    // MARK: - Every target the plugin asks for has somewhere to go
 
-    func testUnimplementedTargetsAreNamed() {
-        // These used to fall through to "unknown target", which reads like a
-        // mismatched build and sends anyone debugging it to the wrong place.
+    func testEveryWindowsTargetIsHandled() {
+        // These used to be reported as unimplemented on macOS. Each must now
+        // reach either the control map or a coded handler, never neither.
+        let controls = Defaults.config().controls
         for target in ["ppt-ink-color", "ppt-ink-thickness", "ppt-goto-slide", "timer-toggle", "timer-reset", "camera-select", "camera-swap"] {
-            let message = TeamsClient.unimplementedTargets[target]
-            XCTAssertNotNil(message, "\(target) should report itself unimplemented")
-            XCTAssertFalse(message?.isEmpty ?? true)
+            XCTAssertNil(TeamsClient.unimplementedTargets[target], "\(target) is still listed as unimplemented")
+            XCTAssertTrue(
+                controls[target] != nil || TeamsClient.codedTargets.contains(target),
+                "\(target) has no handler"
+            )
         }
     }
 
-    func testAnUnimplementedTargetIsNotAlsoAControl() {
-        // If one were ever implemented, it would need removing from the list
-        // or the control map entry would never be reached.
+    func testACodedTargetIsNotAlsoAControl() {
+        // A coded target is dispatched before the control map is consulted,
+        // so a control map entry under the same name would never be reached.
         let controls = Defaults.config().controls
-        for target in TeamsClient.unimplementedTargets.keys {
-            XCTAssertNil(controls[target], "\(target) is both a control and listed as unimplemented")
+        for target in TeamsClient.codedTargets.union(TeamsClient.unimplementedTargets.keys) {
+            XCTAssertNil(controls[target], "\(target) is both a control and handled in code")
+        }
+    }
+
+    func testCameraControlsOpenTheVideoFlyoutAndTakeTheirIdFromTheArgument() throws {
+        for key in ["camera-select", "camera-swap"] {
+            let spec = try XCTUnwrap(Defaults.config().controls[key])
+            XCTAssertEqual(spec.menu, "video-button-configure")
+            XCTAssertEqual(spec.menuItemAutomationId, "{arg}")
         }
     }
 
