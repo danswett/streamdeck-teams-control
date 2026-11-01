@@ -508,8 +508,23 @@ internal static class GuardedDom
                     } else if (data.kind === 'TimerToggle') {
                         await wait(() => item.isConnected === false || name(item) !== expectedName);
                     } else {
-                        await wait(() => rows[anchorIndex]?.isConnected === false ||
-                            name(rows[anchorIndex]) !== anchorName);
+                        // A running timer relabels itself every second, so any change
+                        // is not a reset. Wait for its numbers to rise (largest unit
+                        // first) or its wording to change; C# makes the final check.
+                        const digits = text => (text.match(/\d+/g) || []).map(Number);
+                        const words = text => text.replace(/\d+/g, '#');
+                        const rose = (now, then) => {
+                            for (let i = 0; i < now.length; i++)
+                                if (now[i] !== then[i]) return now[i] > then[i];
+                            return false;
+                        };
+                        await wait(() => {
+                            const anchor = rows[anchorIndex];
+                            if (anchor?.isConnected === false) return true;
+                            const label = name(anchor);
+                            if (words(label) !== words(anchorName)) return true;
+                            return rose(digits(label), digits(anchorName));
+                        });
                     }
                     Object.assign(out,snapshot());
                     out.confirmed = true; out.ok = true;

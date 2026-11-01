@@ -189,8 +189,11 @@ async function main() {
         toggle.__reactFiber$guard = { return: rootFiber };
     }
     button(timer, 'Reset timer', '', timerOwner).onClick = () => write(() => {
-        controls.setAttribute('aria-label', controlName(300));
-        running = true; setToggle();
+        const restart = () => { controls.setAttribute('aria-label', controlName(300)); running = true; setToggle(); };
+        // ticking-reset: the countdown ticks before Teams shows the reset.
+        if (scenario !== 'ticking-reset') return restart();
+        controls.setAttribute('aria-label', controlName(119));
+        schedule(restart, 100);
     });
     if (scenario === 'ambiguous' && kind.startsWith('Timer')) button(timer, controls.getAttribute('aria-label'), '', timerOwner);
     if (originalOpen && kind.startsWith('Timer')) {
