@@ -1,0 +1,85 @@
+name: signing-health
+
+# Catches a macOS release blocker before a release finds it. A Developer ID
+# certificate expires after five years and an App Store Connect key can be
+# revoked; either one silently turns the next release red, and the Mac helper
+# cannot ship without both. A scheduled failure emails the repository owner.
+
+on:
+  schedule:
+    - cron: "17 15 * * 1" # Mondays, 08:17 Pacific (daylight time)
+  workflow_dispatch:
+    inputs:
+      warn-days:
+        description: Fail if the certificate expires within this many days
+        type: number
+        default: 60
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: macos-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Certificate is present and not about to expire
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          WARN_DAYS: ${{ inputs.warn-days || 60 }}
+        run: |
+          if [ -z "$CERT_P12" ] || [ -z "$IDENTITY" ]; then
+            echo "::error::MACOS_CERT_P12 or MACOS_SIGN_IDENTITY is not set."
+            exit 1
+          fi
+          KEYCHAIN="$RUNNER_TEMP/health.keychain-db"
+          PASSPHRASE="$(uuidgen)"
+          security create-keychain -p "$PASSPHRASE" "$KEYCHAIN"
+          security unlock-keychain -p "$PASSPHRASE" "$KEYCHAIN"
+          printf '%s' "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" >/dev/null
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+          # The identity the build signs with must be the one in the .p12;
+          # a renewed certificate uploaded without updating the name fails the
+          # build at codesign, not here.
+          if ! security find-identity -v -p codesigning "$KEYCHAIN" | grep -qF "$IDENTITY"; then
+            echo "::error::MACOS_SIGN_IDENTITY is not a valid signing identity in MACOS_CERT_P12."
+            security find-identity -v -p codesigning "$KEYCHAIN"
+            exit 1
+          fi
+
+          PEM="$(security find-certificate -c "$IDENTITY" -p "$KEYCHAIN")"
+          END="$(printf '%s\n' "$PEM" | openssl x509 -noout -enddate | cut -d= -f2)"
+          echo "Certificate expires $END"
+          if ! printf '%s\n' "$PEM" | openssl x509 -noout -checkend $(( WARN_DAYS * 86400 )) >/dev/null; then
+            echo "::error::The Developer ID certificate expires within $WARN_DAYS days ($END). Renew it and update MACOS_CERT_P12."
+            exit 1
+          fi
+          security delete-keychain "$KEYCHAIN"
+
+      - name: Notary credentials are accepted
+        env:
+          NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          ISSUER: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          APP_PASSWORD: ${{ secrets.MACOS_NOTARY_PASSWORD }}
+          TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+        run: |
+          # Same order of preference as tools/build-sidecar-macos.sh.
+          if [ -n "$NOTARY_KEY" ]; then
+            printf '%s' "$NOTARY_KEY" > "$RUNNER_TEMP/notary.p8"
+            xcrun notarytool history --key "$RUNNER_TEMP/notary.p8" --key-id "$KEY_ID" --issuer "$ISSUER" >/dev/null
+            rm -f "$RUNNER_TEMP/notary.p8"
+            echo "App Store Connect API key accepted."
+          elif [ -n "$APP_PASSWORD" ]; then
+            xcrun notarytool history --apple-id "$APPLE_ID" --password "$APP_PASSWORD" --team-id "$TEAM_ID" >/dev/null
+            echo "Apple ID app-specific password accepted."
+          else
+            echo "::error::No notary credentials are configured."
+            exit 1
+          fi

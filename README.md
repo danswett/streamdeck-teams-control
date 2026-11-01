@@ -898,9 +898,38 @@ node tools/build-profile.ts    # rebuild the bundled profiles
 has no sidecar for. Neither machine can cross-build the other's — the .NET host
 is win-x64, the Swift one is Mach-O — so packing on Windows alone would produce
 a plugin that claims macOS support and then sits dimmed on every Mac that
-installs it, with nothing about the file saying so. CI builds both halves and
-packs on macOS. For a deliberate single-platform build, set
+installs it, with nothing about the file saying so. CI builds the Mac helper on
+a macOS runner and packs on Windows. For a deliberate single-platform build, set
 `SKIP_SIDECAR_CHECK=1`.
+
+### CI
+
+Every package, whoever asks for it, comes out of
+[`package.yml`](.github/workflows/package.yml):
+
+1. **macOS runner:** TypeScript tests on a POSIX filesystem, Swift tests, then
+   the universal helper is built, signed and, when asked, notarized. Then
+   [`tools/sidecar-smoke.ts`](tools/sidecar-smoke.ts) runs it and walks the
+   protocol.
+2. **Windows runner:** the docs audit plus TypeScript and C# tests, then a build
+   and a smoke test of the Windows helper. When the package declares macOS, the
+   Mac helper is added. The job validates and packs.
+3. **macOS runner again:** the package is unzipped as a user would receive it.
+   This checks that the helper is still universal, signed and stapled after
+   being packed on Windows, then smoke-tests it from inside the package.
+
+| workflow | when | what it produces |
+|---|---|---|
+| `build.yml` | every PR and push | a package declaring both platforms. Signed when the certificate is available; notarized only on request |
+| `macos-testbuild.yml` | every push to `main` | the same, notarized, published to the rolling [`macos-test`](https://github.com/danswett/streamdeck-teams-control/releases/tag/macos-test) prerelease |
+| `release.yml` | `v*` tags | whatever the tagged manifest declares. Fails if it declares macOS without a notarized helper |
+| `signing-health.yml` | weekly | fails 60 days before the Developer ID certificate expires, or as soon as the notary credentials stop working |
+
+The manifest in the tree is never edited by CI.
+[`tools/set-manifest-platforms.ts`](tools/set-manifest-platforms.ts) adds macOS
+to the build copy only. The docs audit holds the README and listing to whatever
+the manifest declares. Adding `mac` to the manifest fails it until the
+"Windows only" wording is gone.
 
 ### Which copy is Stream Deck running?
 

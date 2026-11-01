@@ -1,5 +1,10 @@
 name: release
 
+# Builds a tagged release through the same package.yml as CI. The package
+# declares whatever the manifest in the tag declares: Windows only today, both
+# platforms once macOS is declared in the tree. A release is never left to
+# guess - a macOS declaration with an unsigned or un-notarized helper fails it.
+
 on:
   push:
     tags: ["v*"]
@@ -13,52 +18,34 @@ permissions:
   contents: write
 
 jobs:
+  package:
+    uses: ./.github/workflows/package.yml
+    with:
+      ref: ${{ inputs.tag || github.ref }}
+      notarize: true
+      require-signing: true
+      require-notarized: true
+    secrets: inherit
+
   release:
-    runs-on: windows-latest
+    needs: package
+    runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ inputs.tag || github.ref }}
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: 10.0.x
-
-      - run: npm ci
-
-      - name: Unit tests
-        run: npm run test
-
-      - name: Build and package
-        run: |
-          npm run build
-          # The guard against shipping a package that declares a platform it
-          # cannot serve. Inert while the manifest is Windows-only on a Windows
-          # runner, and that is the point: the day `mac` is added to the
-          # manifest, a release built here would find no Mach-O and pack a
-          # plugin that installs on macOS and does nothing. Nothing about the
-          # file would say so. Fail the release instead.
-          node tools/check-sidecars.ts
-          npx streamdeck validate com.bad-duck.teamscontrol.sdPlugin --no-update-check
-          npx streamdeck pack com.bad-duck.teamscontrol.sdPlugin --output dist --force --no-update-check
-
       - name: Check the tag matches the manifest version
-        shell: pwsh
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+          VERSION: ${{ needs.package.outputs.version }}
         run: |
           # A tag that disagrees with the manifest would ship a build the
           # release notes do not describe.
-          $tag = "${{ inputs.tag || github.ref_name }}" -replace '^v', ''
-          $manifest = (Get-Content com.bad-duck.teamscontrol.sdPlugin/manifest.json -Raw | ConvertFrom-Json).Version
-          Write-Host "tag=$tag manifest=$manifest"
-          if (-not $manifest.StartsWith($tag)) {
-            throw "tag $tag does not match manifest version $manifest"
-          }
+          echo "tag=${TAG#v} manifest=$VERSION"
+          case "$VERSION" in "${TAG#v}"*) ;; *) echo "::error::tag ${TAG#v} does not match manifest version $VERSION"; exit 1 ;; esac
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: com.bad-duck.teamscontrol.streamDeckPlugin
+          path: dist
 
       - name: Attach the plugin to the release
         uses: softprops/action-gh-release@v3
