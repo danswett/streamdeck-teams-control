@@ -46,5 +46,8 @@
 	"dependencies": {
 		"@elgato/streamdeck": "^2.1.2",
 		"@elgato/utils": "^0.6.0"
+	},
+	"overrides": {
+		"zod": "4.6.6"
 	}
 }
