@@ -69,20 +69,26 @@ Full PowerPoint Live control too. Watching a deck? Move through slides at your o
 
 On a Stream Deck + or + XL the dials set ink color and thickness, move through the deck and run the meeting timer, and the touch strip shows the current and next slide.
 
-Three bundled profiles can follow the meeting: meeting controls when you join, attendee or presenter tools when a deck goes up, and back again when it ends. Every Stream Deck gets its own set.
+Three bundled profiles can follow the meeting: meeting controls when you join, attendee or presenter tools when a deck goes up, and back again when it ends.
 
 Teams never needs focus: keep working while you mute, react or raise your hand. No keystrokes are sent, so nothing leaks into what you type, and no hotkeys are taken. Keys dim when no meeting is running.
 
-Requires Windows 10 or later, Stream Deck 7.1 or later, and the Microsoft Teams desktop app. Not affiliated with or endorsed by Microsoft.
+Requires Windows 10 or later (macOS in preview), Stream Deck 7.1 or later, and the Microsoft Teams desktop app. Not affiliated with or endorsed by Microsoft.
 ```
 
-1,499 characters.
+1,482 characters.
 
 That is within the 1,500 limit and above the 250 minimum, and the opening two
 sentences run to 251 characters, so the search-engine snippet reads as complete
 sentences rather than breaking mid-clause. Maker Console accepted the 1,497 that
 was here before, which is the count this file and the test both use: line
 breaks as one character each.
+
+1.11.4 brought it in line with the listing, which had been edited in place to
+say macOS is in preview. That claim is the rolling `macos-test` prerelease, not
+the Marketplace package, which still declares Windows only. The 36 characters
+came from dropping "Every Stream Deck gets its own set." from the profiles
+paragraph.
 
 1.11.0 rewrote it for the webcam actions. They go in the opening, because search
 weighs those characters most, and "meetings" and "the five" came out to keep it
@@ -156,20 +162,18 @@ listing rather than a first publication. Use the version notes below; they
 describe what changed, which is what an existing user opens the listing to find
 out.
 
-**The published listing is on 1.11.0.17, the macOS test build, submitted by
-mistake in place of 1.11.0.** It is the package from the rolling `macos-test`
-prerelease: it declares macOS only and carries no Windows sidecar, so it cannot
-be installed on Windows. Test builds are numbered `<manifest version>.<run
-number>`, so it also outranks the stable 1.11.0.0, which therefore cannot
-replace it. 1.11.1.0 can.
+**The published listing is on 1.11.1**, updated on 2026-10-23. 1.11.2 and
+1.11.3 were released on GitHub and never submitted, so write a submission's copy
+as the delta from 1.11.1: everything since then is new to anyone installing
+from Marketplace.
 
-The last version Windows users could install from the listing is 1.9.11, built
-from `release-1.9.x`. Its notes on the listing are the description text, not the
-1.9.9 copy below. Before it, the six submissions after 1.5 —
-1.8.2, 1.8.3, 1.9.4, 1.9.6, 1.9.7 and 1.9.8 — were all rejected; 1.8.2 came
-back on the action-list icons, which is what 1.9.9 fixed. 1.10.0 to 1.10.2 were
-released on GitHub and never submitted, and nothing in them is visible on
-Windows, so write a submission's copy as the delta from 1.9.11.
+Before 1.11.1, the listing served 1.11.0.17, the macOS test build, submitted by
+mistake in place of 1.11.0. It declared macOS only and could not be installed on
+Windows. 1.11.1 replaced it, so the last version Windows users had before that
+was 1.9.11, built from `release-1.9.x`. Before it, the six submissions after
+1.5 — 1.8.2, 1.8.3, 1.9.4, 1.9.6, 1.9.7 and 1.9.8 — were all rejected; 1.8.2
+came back on the action-list icons, which is what 1.9.9 fixed. 1.10.0 to 1.10.2
+were released on GitHub and never submitted.
 
 Maker Console stores the notes and the description as Markdown, and Marketplace
 renders them: the listing draws its description through a `markdown-editor`
@@ -184,7 +188,80 @@ The first-release notes are kept further down for reference only — they descri
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
 
-### Version 1.11.1 — the next submission
+### Version 1.11.4 — the next submission
+
+Carries the two GitHub releases that never went to Marketplace with it: 1.11.2
+(Direct mode, per-webcam video settings, German state patterns, user selector
+overrides) and 1.11.3 (Direct ink dials). New in 1.11.4 itself are Direct paths
+for blur, grid view, the meeting timer and the Stop Presenting confirmation
+(#51), and three profile-following fixes (#53, #54, #55).
+
+```
+Optional Direct mode keeps Teams in the background, webcams get their own video settings, and following the meeting works with your own profiles.
+
+**DIRECT MODE**
+
+A new Direct Mode key, off until you turn it on, lets the plugin work inside Teams rather than through its window. Reactions, menus, background blur, webcam switching, grid view, the meeting timer, the Stop Presenting confirmation and the ink dials then work with nothing popping up and without Teams taking focus, even while it is minimized. The guide linked from the key's settings explains the setup and its security tradeoff first.
+
+**WEBCAM VIDEO SETTINGS**
+
+Change Camera and Swap Camera can also turn mirroring, soft focus and brightness adjustment on or off for each webcam they switch to.
+
+**PROFILES**
+
+Following the meeting no longer asks again and again to install a profile you said no to, and offers the bundled profiles only once you turn following on. App-specific profiles no longer pull the deck away mid-meeting while Teams is in the background, and they resume as soon as the meeting ends.
+
+**ALSO**
+
+Mute, camera and share state are recognized in German Teams. A selectors file in your user folder can work around a Teams update without reinstalling the plugin.
+
+A macOS preview is available from the project's GitHub releases.
+```
+
+1,312 characters.
+
+What each claim rests on:
+
+- **Direct Mode, off until turned on** — `directModeEnabled` defaults to false
+  and the plugin never opens a debugging port itself
+  ([docs/direct-mode.md](../docs/direct-mode.md)).
+- **The listed operations without Teams taking focus, even minimized** — #51's
+  live run on 2026-11-01 covered the timer and the Stop Presenting confirmation
+  with Teams on screen and minimized: one write each, no Teams activation, no
+  injected input. It found and fixed the minimized compact-view page being
+  picked instead of the meeting. Blur and grid were run live in #51 earlier.
+  The other Direct paths shipped in 1.11.2 (#42, #43) and 1.11.3 (#49, #50).
+- **Webcam video settings** — #43; each camera in Change Camera and Swap Camera
+  has Mirror, Soft focus and Adjust brightness, each defaulting to "Leave
+  unchanged".
+- **Profiles** — #53 (no repeated install prompts; profiles are not
+  auto-installed), #54 (the deck is always handed back, so app-specific
+  switching resumes) and #55 (an already-visible meeting layout is held, so an
+  app-specific profile cannot take the deck while Teams is in the background).
+  Reported by the tester on
+  [#52](https://github.com/danswett/streamdeck-teams-control/issues/52).
+- **German** — #33. **Selectors file** — #41,
+  `%APPDATA%\com.bad-duck.teamscontrol\selectors.json`.
+- **macOS preview** — the rolling
+  [`macos-test`](https://github.com/danswett/streamdeck-teams-control/releases/tag/macos-test)
+  prerelease. The Marketplace package itself still declares Windows only.
+
+Paste the description from this file into the **Details** tab too. The
+listing's copy was edited in place to mention the preview; this file now
+carries that wording.
+
+### Version 1.11.3 — released on GitHub, never submitted; 1.11.4 carries it
+
+Direct mode for the PPT Live ink color and thickness dials (#49, #50) and the
+persistent Direct setup documentation (#47).
+
+### Version 1.11.2 — released on GitHub, never submitted; 1.11.4 carries it
+
+Opt-in Direct mode (#42), per-webcam video settings and Direct camera control
+(#43), selector overrides outside the plugin package (#41), German state
+patterns (#33) and dependency updates.
+
+### Version 1.11.1 — submitted, on the listing
 
 Puts the Windows plugin back on the listing, carrying 1.11.0 with it, plus two
 fixes: [#27](https://github.com/danswett/streamdeck-teams-control/pull/27), the
@@ -744,9 +821,9 @@ through the workflow's `workflow_dispatch` input.
 2. Upload the `.streamDeckPlugin` attached to the stable `v*` GitHub release,
    so what ships is the artifact CI built rather than a local rebuild. **Never
    the rolling `macos-test` prerelease.** Its package has the same file name,
-   declares macOS only, carries no Windows sidecar, and is numbered above the
-   stable release of the same version, so Maker Console accepts it as an
-   update. That is how 1.11.0.17 was published in place of 1.11.0.
+   declares macOS as well as Windows, and is numbered above the stable release
+   of the same version, so Maker Console accepts it as an update. That is how
+   1.11.0.17, then a Mac-only test build, was published in place of 1.11.0.
 3. Paste the release notes.
 4. Tick **Automatically publish after being approved** unless the release has
    to land on a particular date — if it does, leave it unticked and press
@@ -774,11 +851,11 @@ to maker@elgato.com.
 - [ ] `npm run test` passes and CI is green on the commit being shipped.
 - [ ] The `.streamDeckPlugin` uploaded is the one the release workflow built.
 - [ ] It is the stable `v*` release's package, not `macos-test`'s: its manifest
-      declares Windows, it contains `bin/sidecar/TeamsBridge.exe`, and its
-      version is above the one the listing is on.
+      declares Windows only, its version ends in `.0`, it contains
+      `bin/sidecar/TeamsBridge.exe` and no `TeamsBridge.app`, and its version
+      is above the one the listing is on.
 - [ ] The **Details** tab carries the description from this file. A new
-      version does not refresh it, and the listing still shows the copy from
-      before the webcam actions.
+      version does not refresh it.
 - [ ] The **Media** tab carries all seven gallery items, not the original three.
 
 Media and copy are versioned separately from the product file, so the two

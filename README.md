@@ -82,8 +82,8 @@ the same accessibility layer screen readers use.
 |---|---|---|
 | **Mute** | ✅ muted / unmuted | Slashed glyph when muted |
 | **Camera** | ✅ on / off | Slashed glyph when off |
-| **Change Camera** | availability only | Choose a specific Windows webcam in each button's settings; does not toggle camera on/off |
-| **Swap Camera** | availability only | Toggle between two configured webcams, using Teams' current selection |
+| **Change Camera** | availability only | Choose a specific Windows webcam in each button's settings, optionally with its mirror, soft focus and brightness settings; does not toggle camera on/off |
+| **Swap Camera** | availability only | Toggle between two configured webcams, using Teams' current selection; each can carry its own mirror, soft focus and brightness settings |
 | **Raise Hand** | availability only | Lifts on press |
 | **React** — Like, Love, Applause, Laugh, Wow | availability only | Five actions, each animates on press |
 | **Background Blur** | availability only | |
