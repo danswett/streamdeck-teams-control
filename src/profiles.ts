@@ -328,18 +328,58 @@ export class ProfileSwitcher {
 		return device !== undefined && wanted !== null && profilePath(wanted, device.type) === profile;
 	}
 
-	#matchesLayout(id: string, profile: string): boolean {
-		const expected = layouts[profile];
-		if (!expected) return false;
-		const visible: string[] = [];
+	/** This plugin's keys and dials on a deck, or null while any of them has no position yet. */
+	#visible(id: string): Set<string> | null {
+		const visible = new Set<string>();
 		for (const action of streamDeck.actions) {
 			if (action.device.id !== id) continue;
 			const position = action.coordinates;
-			if (!position) return false;
-			visible.push(`${action.controllerType} ${position.column},${position.row} ${action.manifestId}`);
+			if (!position) return null;
+			visible.add(`${action.controllerType} ${position.column},${position.row} ${action.manifestId}`);
 		}
-		visible.sort();
-		return visible.length === expected.length && visible.every((value, index) => value === expected[index]);
+		return visible;
+	}
+
+	/** Shared placements over all placements (Jaccard), 0 when nothing is known. */
+	static #similarity(visible: Set<string>, expected: readonly string[]): number {
+		let shared = 0;
+		for (const entry of expected) if (visible.has(entry)) shared++;
+		const union = visible.size + expected.length - shared;
+		return union === 0 ? 0 : shared / union;
+	}
+
+	/**
+	 * Whether the deck shows the requested layout, or a customized copy of it.
+	 *
+	 * An exact match is not required: a user who moves, adds or removes a key
+	 * still has the profile installed, and treating that as "not arrived" paused
+	 * following for every later meeting (#52). It must still share at least half
+	 * of its placements with the request, and be closer to it than to any other
+	 * bundled layout for that deck, so a deck left showing the previous meeting
+	 * layout behind an install prompt is never mistaken for the new one.
+	 */
+	#recognizes(id: string, profile: string): boolean {
+		const expected = layouts[profile];
+		const visible = this.#visible(id);
+		const device = [...streamDeck.devices].find((item) => item.id === id);
+		if (!expected || !visible || !device) return false;
+		const score = ProfileSwitcher.#similarity(visible, expected);
+		if (score < 0.5) return false;
+		for (const base of [MEETING, ATTENDEE, PRESENTER]) {
+			const other = profilePath(base, device.type);
+			if (other === null || other === profile || !layouts[other]) continue;
+			if (ProfileSwitcher.#similarity(visible, layouts[other]) >= score) return false;
+		}
+		return true;
+	}
+
+	/** What the deck showed instead, for the log when a request is not confirmed. */
+	#describe(id: string, profile: string): string {
+		const expected = layouts[profile] ?? [];
+		const visible = this.#visible(id);
+		if (!visible) return "keys without positions";
+		const shared = expected.filter((entry) => visible.has(entry)).length;
+		return `${visible.size} plugin keys visible, ${shared} of ${expected.length} in place`;
 	}
 
 	async #savePending(
@@ -376,14 +416,16 @@ export class ProfileSwitcher {
 				await this.#savePending();
 				return;
 			}
-			const shown = this.#matchesLayout(id, profile);
+			const shown = this.#recognizes(id, profile);
 			const observation = this.#waitForLayout(id, INSTALL_GAP_MS, profile, shown ? QUIET_CLAIM_MS : undefined);
 			try {
 				this.#held.add(id);
 				await streamDeck.profiles.switchToProfile(id, profile);
 				const took = await observation.result;
 				if (took === null) {
-					this.#pause(`Could not confirm ${id} -> "${profile}" inside ${INSTALL_GAP_MS}ms`);
+					this.#pause(
+						`Could not confirm ${id} -> "${profile}" inside ${INSTALL_GAP_MS}ms (${this.#describe(id, profile)})`
+					);
 					return;
 				}
 				await this.#savePending(undefined, observation.isStable);
@@ -431,7 +473,7 @@ export class ProfileSwitcher {
 				resolve(value);
 			};
 			isStable = () => !stopped && profile !== undefined
-				&& Date.now() - changedAt >= SETTLE_MS && this.#matchesLayout(deviceId, profile);
+				&& Date.now() - changedAt >= SETTLE_MS && this.#recognizes(deviceId, profile);
 
 			const onEvent = (ev: { action: { device: { id: string } } }): void => {
 				if (stopped || ev.action.device.id !== deviceId) return;
@@ -445,7 +487,7 @@ export class ProfileSwitcher {
 					}
 					if (stabilization) clearTimeout(stabilization);
 					stabilization = undefined;
-					if (this.#matchesLayout(deviceId, profile)) {
+					if (this.#recognizes(deviceId, profile)) {
 						stabilization = setTimeout(() => {
 							stabilization = undefined;
 							if (isStable()) finish(Date.now() - startedAt);

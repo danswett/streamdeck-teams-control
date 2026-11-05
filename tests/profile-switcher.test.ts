@@ -482,20 +482,54 @@ describe("automatic profile installation policy", () => {
 		expect(mocks.switch.mock.calls).toEqual([["deck", profilePath(MEETING, 0)], ["deck"]]);
 	});
 
-	it("hands back a customized profile whose layout was never confirmed when the meeting ends", async () => {
+	it("keeps following a customized profile in every meeting and hands it back each time (#52)", async () => {
 		mocks.switch.mockImplementation(async (device: string, profile?: string) => {
 			showLayout(device, profile);
 			if (profile) addExtraControl();
 		});
 		await start();
 		await vi.advanceTimersByTimeAsync(10_000);
-		expect(mocks.global.pptProfilePending).toBeDefined();
+		expect(mocks.global.pptProfilePending).toBeUndefined();
 		await change({ inMeeting: false });
 		await vi.advanceTimersByTimeAsync(5000);
-		expect(mocks.switch.mock.calls).toEqual([["deck", profilePath(MEETING, 0)], ["deck"]]);
 		await change({ inMeeting: true });
+		await vi.advanceTimersByTimeAsync(10_000);
 		await change({ inMeeting: false });
-		expect(mocks.switch).toHaveBeenCalledTimes(2);
+		await vi.advanceTimersByTimeAsync(5000);
+		expect(mocks.switch.mock.calls).toEqual([
+			["deck", profilePath(MEETING, 0)], ["deck"], ["deck", profilePath(MEETING, 0)], ["deck"]
+		]);
+		expect(mocks.warn).not.toHaveBeenCalled();
+	});
+
+	it("claims a customized layout that is already showing and not redrawn, in every meeting (#52)", async () => {
+		// An app-specific profile put the edited meeting layout on screen when Teams took focus.
+		showLayout("deck", profilePath(MEETING, 0)!);
+		const moved = mocks.visible.values().next().value!;
+		moved.coordinates = { column: 99, row: 99 };
+		mocks.switch.mockImplementation(async () => {});
+		await start();
+		await vi.advanceTimersByTimeAsync(10_000);
+		expect(mocks.global.pptProfilePending).toBeUndefined();
+		await change({ inMeeting: false });
+		await change({ inMeeting: true });
+		await vi.advanceTimersByTimeAsync(10_000);
+		expect(mocks.switch.mock.calls).toEqual([
+			["deck", profilePath(MEETING, 0)], ["deck"], ["deck", profilePath(MEETING, 0)]
+		]);
+		expect(mocks.global.pptProfilePending).toBeUndefined();
+		expect(mocks.warn).not.toHaveBeenCalledWith(expect.stringContaining("paused"));
+	});
+
+	it.each([0, 9])("does not mistake the previous meeting layout for a missing PowerPoint layout on device type %s", async (type) => {
+		mocks.devices[0].type = type;
+		await start();
+		await vi.advanceTimersByTimeAsync(1000);
+		mocks.land = false;
+		await change({ states: { "ppt-live": true }, context: { "ppt.role": "attendee" } });
+		await vi.advanceTimersByTimeAsync(10_000);
+		expect(mocks.global.pptProfilePending).toEqual({ device: "deck", profile: profilePath(ATTENDEE, type) });
+		expect(mocks.warn).toHaveBeenCalledWith(expect.stringContaining("in place"));
 	});
 
 	it("hands back an unconfirmed profile when following is turned off mid-meeting", async () => {
@@ -538,17 +572,18 @@ describe("automatic profile installation policy", () => {
 		expect(mocks.switch).toHaveBeenCalledTimes(2);
 	});
 
-	it("does not confirm a transient match before a customized layout's extra key appears", async () => {
-		mocks.switch.mockImplementation(async (device: string, profile: string) => {
+	it("waits for a customized layout's late extra key to settle before confirming it", async () => {
+		mocks.switch.mockImplementationOnce(async (device: string, profile: string) => {
 			showLayout(device, profile);
 			setTimeout(addExtraControl, 100);
 		});
 		await start();
-		await vi.advanceTimersByTimeAsync(1000);
+		await vi.advanceTimersByTimeAsync(450);
 		expect(mocks.global.pptProfilePending).toBeDefined();
+		await vi.advanceTimersByTimeAsync(550);
+		expect(mocks.global.pptProfilePending).toBeUndefined();
 		await change(presenting);
-		await vi.advanceTimersByTimeAsync(10_000);
-		expect(mocks.switch).toHaveBeenCalledOnce();
+		expect(mocks.switch).toHaveBeenLastCalledWith("deck", profilePath(PRESENTER, 0));
 	});
 
 	it("revalidates the settled layout after the asynchronous settings read, before clearing the guard", async () => {
