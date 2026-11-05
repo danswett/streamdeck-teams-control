@@ -83,9 +83,7 @@ describe("captured Teams labels", () => {
 	}
 });
 
-describe("German (unverified)", () => {
-	// Plausible wordings, not a capture: they pin the pack's current intent
-	// until tests/fixtures/teams-labels/de.json replaces them.
+describe("German alternate wordings", () => {
 	const muted = ["Stummschaltung aufheben", "Stummschaltung des Mikrofons aufheben", "Mikrofon wieder aktivieren"];
 	const live = ["Stummschalten", "Mikrofon stummschalten", "Mikrofon deaktivieren"];
 

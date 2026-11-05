@@ -4,15 +4,14 @@
 		"language. Laid over selectors.json, and under the user's own selectors file.",
 		"See 'Languages' in the README before adding or changing one.",
 		"",
-		"UNVERIFIED: these patterns have not yet been checked against labels captured",
-		"from a German Teams. They deliberately accept several plausible wordings.",
-		"Replace them with exact patterns once a capture is checked in under",
-		"tests/fixtures/teams-labels/de.json, then mark the pack verified."
+		"Verified against the German Teams toolbar labels reported in issue #60.",
+		"The capture is checked in under tests/fixtures/teams-labels/de.json;",
+		"alternate wordings remain supported."
 	],
 	"language": {
 		"tag": "de",
 		"name": "Deutsch",
-		"status": "unverified"
+		"status": "verified"
 	},
 	"controls": {
 		"mute": {

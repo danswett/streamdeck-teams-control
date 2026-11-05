@@ -162,10 +162,10 @@ listing rather than a first publication. Use the version notes below; they
 describe what changed, which is what an existing user opens the listing to find
 out.
 
-**The published listing is on 1.11.1**, updated on 2026-10-23. 1.11.2 and
-1.11.3 were released on GitHub and never submitted, so write a submission's copy
-as the delta from 1.11.1: everything since then is new to anyone installing
-from Marketplace.
+**The published listing is on 1.11.4**, updated on 2026-11-05. It includes
+1.11.2 and 1.11.3, which were released on GitHub but never submitted separately.
+1.11.5 was released on GitHub after that submission, so write the next
+submission's copy as the delta from 1.11.4.
 
 Before 1.11.1, the listing served 1.11.0.17, the macOS test build, submitted by
 mistake in place of 1.11.0. It declared macOS only and could not be installed on
@@ -188,6 +188,29 @@ The first-release notes are kept further down for reference only — they descri
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
 
+### Version 1.11.6 — the next submission
+
+Includes 1.11.5's language support, verifies German against the labels reported
+in #60, and carries #63's fix for following customized profiles across meetings.
+The Marketplace package remains Windows-only; native macOS confirmation of
+#52 is still pending.
+
+```
+German Teams status is now correct, and customized meeting profiles keep following across meetings.
+
+**TEAMS LANGUAGE**
+
+Mute, camera and share state follow Teams' display language automatically, with a Teams language override in any meeting key's settings. English and German are verified against real Teams labels. When a state cannot be read, the key shows a neutral gray icon instead of a wrong guess.
+
+**PROFILE FOLLOWING**
+
+Following now recognizes customized bundled layouts instead of pausing after the first meeting. The deck stays on the meeting layout while Teams is in the background and returns to your previous profile when the meeting ends.
+
+If following was paused by an earlier build, turn "Follow the meeting between profiles" off and on once after updating.
+
+macOS remains a preview download on GitHub. This Marketplace package is for Windows.
+```
+
 ### Version 1.11.5 — released on GitHub for #60
 
 Language packs (#61). Mute, camera and share state now come from one pack per
@@ -205,7 +228,7 @@ with:
 Mute, camera and share follow the language Teams is shown in, detected automatically or chosen in any meeting key's settings. German support is new and still being checked; English is fully supported.
 ```
 
-### Version 1.11.4 — the next submission
+### Version 1.11.4 — published
 
 Carries the two GitHub releases that never went to Marketplace with it: 1.11.2
 (Direct mode, per-webcam video settings, German state patterns, user selector
