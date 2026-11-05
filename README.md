@@ -1237,7 +1237,7 @@ bundled `selectors.json`.
 | Language | Pack | Status |
 | --- | --- | --- |
 | English | `en` | Verified (Teams 26255.500.5120.7530, Windows) |
-| Deutsch | `de` | Unverified: not yet checked against a German Teams |
+| Deutsch | `de` | Verified (Teams 26276.513.5241.9675, Windows) |
 
 **Choosing the language.** By default it is automatic: during a meeting the
 plugin checks the toolbar labels and, if the pack in use cannot read them but
@@ -1264,7 +1264,8 @@ Teams label mute: "Stummschaltung aufheben" (de: active)
 
 To capture a language, join a meeting and toggle mute, camera and sharing once
 each, so both labels of each button are seen, then copy those lines from the
-plugin log. They contain only button names.
+plugin log. They contain only button names. Use these logged accessible names
+rather than hover tooltips: Teams can use different wording for the two.
 
 **Adding or fixing a language.**
 

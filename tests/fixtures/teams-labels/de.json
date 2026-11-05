@@ -1,0 +1,16 @@
+{
+	"$comment": [
+		"Accessible names from the plugin log, not the differently worded tooltips.",
+		"Source: https://github.com/danswett/streamdeck-teams-control/issues/60#issuecomment-6656676151",
+		"'active' means: mute -> muted, camera -> camera on, share -> sharing."
+	],
+	"language": "de",
+	"teamsVersion": "26276.513.5241.9675",
+	"platform": "windows",
+	"captured": "2026-11-05",
+	"labels": {
+		"mute": { "active": ["Mikrofon wieder aktivieren"], "inactive": ["Mikrofon stummschalten"] },
+		"camera": { "active": ["Kamera ausschalten"], "inactive": ["Kamera aktivieren"] },
+		"share": { "active": ["Teilen beenden"], "inactive": ["Teilen"] }
+	}
+}
