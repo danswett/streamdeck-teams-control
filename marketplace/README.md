@@ -188,6 +188,23 @@ The first-release notes are kept further down for reference only — they descri
 the plugin from scratch, which is the right shape for a first publication and
 the wrong shape now.
 
+### Version 1.11.5 — released on GitHub for #60
+
+Language packs (#61). Mute, camera and share state now come from one pack per
+Teams display language, detected automatically from the toolbar labels and
+overridable with a **Teams language** setting; a state that cannot be read is
+drawn as a neutral gray icon instead of a guess. English is verified; German
+ships unverified until a capture from a German Teams is checked in.
+
+**Correction for whichever submission comes next.** The 1.11.4 notes' line
+"Mute, camera and share state are recognized in German Teams" was not true:
+#60 reported the German keys always showing muted and camera on. Replace it
+with:
+
+```
+Mute, camera and share follow the language Teams is shown in, detected automatically or chosen in any meeting key's settings. German support is new and still being checked; English is fully supported.
+```
+
 ### Version 1.11.4 — the next submission
 
 Carries the two GitHub releases that never went to Marketplace with it: 1.11.2
