@@ -115,12 +115,15 @@ describe("renderToggle", () => {
 		expect(dimmed).not.toBe(available);
 	});
 
-	it("falls back to the resting glyph when state could not be read", () => {
-		// Teams hides the toolbar while a flyout is open; the key must still draw.
-		const unknown = renderToggle({ onKey: "mic", offKey: "mic-off", active: undefined, available: true });
+	it("draws a state it could not read as neither side", () => {
+		// Teams in a language with no pack: guessing showed a live mic as muted.
+		const unknown = renderToggle({ onKey: "micOff", offKey: "mic", unknownKey: "mic", active: undefined, available: true });
+		const muted = renderToggle({ onKey: "micOff", offKey: "mic", active: true, available: true });
+		const live = renderToggle({ onKey: "micOff", offKey: "mic", active: false, available: true, offTone: "on" });
 
 		expectSvg(unknown);
-		expect(unknown.length).toBeGreaterThan(64);
+		expect(unknown).not.toBe(muted);
+		expect(unknown).not.toBe(live);
 	});
 
 	it("keeps the off glyph while unavailable if that was the last known state", () => {

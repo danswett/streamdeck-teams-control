@@ -28,6 +28,7 @@ export class MuteAction extends TeamsAction {
 			offKey: "mic",
 			onTone: "on",
 			offTone: "on",
+			unknownKey: "mic",
 			active: state.states["mute"],
 			available: usable(state, "mute")
 		});

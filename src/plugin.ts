@@ -50,6 +50,7 @@ import {
 import { profileSwitcher } from "./profiles";
 import { DirectModeAction } from "./actions/direct-mode";
 import { directModeControl } from "./direct-mode";
+import { languageControl } from "./language";
 import { teamsControl } from "./teams-control";
 
 streamDeck.logger.setLevel("info");
@@ -110,4 +111,6 @@ await streamDeck.connect();
 void directModeControl.start();
 // Before the sidecar starts, so its gate and ready hook are in place for it.
 void teamsControl.start();
+// Awaited so the first sidecar already reads labels in Teams' language.
+await languageControl.start();
 bridge.start();

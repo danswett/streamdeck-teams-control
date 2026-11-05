@@ -1296,6 +1296,14 @@ public sealed partial class TeamsClient : IDisposable
         return null;
     }
 
+    /// <summary>
+    /// Whether a control's state comes from its own localized name, which is
+    /// what language detection and label capture need to see.
+    /// </summary>
+    internal static bool PublishesLabel(ControlSpec spec) =>
+        !spec.StateFromSelection && !spec.StateFromFullDescription && string.IsNullOrEmpty(spec.Menu) &&
+        (spec.ActiveRegex is not null || spec.InactiveRegex is not null);
+
     private static string FullDescriptionOf(AutomationElement el)
     {
         try { return el.Properties.FullDescription.ValueOrDefault ?? ""; }
@@ -2777,6 +2785,12 @@ public sealed partial class TeamsClient : IDisposable
             {
                 snap.States[key] = carried;
             }
+
+            // The plugin recognizes Teams' display language from these, and
+            // logs them so a new language pack can be checked against real
+            // labels. Only toolbar buttons named for their action qualify.
+            if (PublishesLabel(spec) && NameOf(el) is { Length: > 0 } label)
+                snap.Context[$"label.{key}"] = label;
 
             // The ink color rides along in the same name the selection came
             // from, so a key can be drawn in the color it will actually draw.

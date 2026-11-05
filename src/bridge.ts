@@ -89,6 +89,8 @@ class Bridge {
 	#directVersion = 0;
 	#directApplied = false;
 	#readyListeners = new Set<() => void>();
+	/** Language pack the sidecar lays over selectors.json; see language.ts. */
+	#localePack: string | undefined;
 	/** Why presses and captures are refused right now, or undefined when they are not. */
 	#gate: () => string | undefined = () => undefined;
 
@@ -111,6 +113,21 @@ class Bridge {
 
 	get state(): TeamsState {
 		return this.#state;
+	}
+
+	/**
+	 * Chooses the language pack the sidecar reads labels with.
+	 *
+	 * The sidecar loads its selectors once, at start, so a change restarts it.
+	 * Its exit handler brings the next one up with the new pack.
+	 */
+	setLocalePack(file: string | undefined): void {
+		if (file === this.#localePack) return;
+		this.#localePack = file;
+		if (!this.#proc) return;
+		logger.info(`Restarting sidecar for language pack ${file ?? "(none)"}`);
+		this.#restartDelay = 250;
+		this.#proc.kill();
 	}
 
 	start(): void {
@@ -167,6 +184,7 @@ class Bridge {
 
 		const args: string[] = [];
 		if (existsSync(SELECTORS)) args.push("--selectors", SELECTORS);
+		if (this.#localePack && existsSync(this.#localePack)) args.push("--locale-pack", this.#localePack);
 		if (process.platform === "win32") args.push("--direct-mode-managed");
 
 		logger.info(`Starting sidecar: ${SIDECAR}`);

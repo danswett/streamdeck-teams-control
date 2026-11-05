@@ -390,6 +390,10 @@ answered after the fact.
 The meeting window title is read to tell a meeting window from a chat window,
 but is never written to the log.
 
+The labels of the mute, camera and share buttons ("Unmute mic") are written to
+the log once each, so a [language pack](#languages) can be checked against
+them. They name an action, never a person or meeting.
+
 **Before attaching a `discover` dump to an issue**, read it. It lists every
 interactive control in the meeting window — automation id, accessible name and
 enabled state. Teams labels controls by action ("Mute", "Open chat"), so an
@@ -445,7 +449,7 @@ Five things make this reliable:
 
 4. **State comes from the accessible name, which is the inverse of state.** The
    label describes the action the button performs, so `Unmute mic` means you are
-   currently muted. This part is localized — see [Other languages](#other-languages).
+   currently muted. This part is localized — see [Languages](#languages).
 
 5. **State is event-driven, not polled.** The sidecar subscribes to UI Automation
    property-change events on the controls it has resolved, so a change made in
@@ -1216,24 +1220,75 @@ If Teams breaks something, please
 [open an issue](https://github.com/danswett/streamdeck-teams-control/issues)
 with a `discover` dump attached — after reading it, per [Privacy](#privacy).
 
-### Other languages
+### Languages
 
-Toolbar `AutomationId`s are locale-independent. The mute, camera, and sharing
-state patterns already cover English and German; controls found by accessible
-name can still require translated selectors.
+Toolbar `AutomationId`s are locale-independent, so **pressing** works in any
+Teams language. **State** is different: mute, camera and share read it from
+the button's accessible name, which Teams translates. Those patterns live in
+one **language pack** per language, in `locales/<tag>.json`, laid over the
+bundled `selectors.json`.
 
-On Windows, create `%APPDATA%\com.bad-duck.teamscontrol\selectors.json` for
-another language or a selector fix after a Teams update. Create the parent
-folder if needed. Include only the fields to change; the bundled IDs and other
-settings are retained. For example, this partial file restates the German mute
-patterns already included in the plugin:
+| Language | Pack | Status |
+| --- | --- | --- |
+| English | `en` | Verified (Teams 26255.500.5120.7530, Windows) |
+| Deutsch | `de` | Unverified: not yet checked against a German Teams |
+
+**Choosing the language.** By default it is automatic: during a meeting the
+plugin checks the toolbar labels and, if the pack in use cannot read them but
+exactly one other pack can, switches to that pack and remembers it. To pin a
+language, pick it under **Teams language** in the settings of any mute, camera
+or other meeting key. If no pack reads Teams' labels, mute and camera keys
+draw a gray, neutral icon instead of guessing, and the plugin log says so.
+
+**Verified vs. unverified.** A pack is *verified* only when labels captured
+from a real Teams in that language are checked in under
+`tests/fixtures/teams-labels/<tag>.json`. The tests then check every captured
+label against the pack, with the regex engines of the plugin, the Windows
+sidecar and the macOS sidecar, and confirm detection picks that language and no
+other. Unverified packs ship, marked as such, because a plausible guess beats
+no state at all - but they are the first suspect when a key shows the wrong
+state.
+
+**Capturing labels.** The plugin logs each distinct toolbar label once, with how
+the pack in use reads it:
+
+```text
+Teams label mute: "Stummschaltung aufheben" (de: active)
+```
+
+To capture a language, join a meeting and toggle mute, camera and sharing once
+each, so both labels of each button are seen, then copy those lines from the
+plugin log. They contain only button names.
+
+**Adding or fixing a language.**
+
+1. Copy `locales/en.json` to `locales/<tag>.json` and set `language.tag`,
+   `language.name` and `"status": "unverified"`. The tag must match the file
+   name.
+2. Write `activePattern` / `inactivePattern` for `mute`, `camera` and `share`.
+   A label names the action, so the mute *active* pattern matches the label
+   shown while muted ("Unmute mic"). Each label must match exactly one of the
+   two patterns.
+3. With a capture, add `tests/fixtures/teams-labels/<tag>.json` in the shape of
+   the English one, recording the Teams version and platform, and change the
+   status to `verified`.
+4. Run `npm test` (and `npm run test:sidecar:macos` on a Mac, which CI also
+   runs).
+
+PRs adding language packs, or captures that verify one, are very welcome.
+
+**Fixing it locally.** On Windows, `%APPDATA%\com.bad-duck.teamscontrol\selectors.json`
+overrides both the bundled file and the language pack, for a language with no
+pack yet or a selector fix after a Teams update. Create the parent folder if
+needed and include only the fields to change, for example (illustrative
+wording, not a verified translation):
 
 ```json
 {
   "controls": {
     "mute": {
-      "activePattern": "^\\s*unmute\\b|wieder\\s+aktivieren",
-      "inactivePattern": "^\\s*mute\\b|stumm\\s*schalten"
+      "activePattern": "^\\s*réactiver\\b",
+      "inactivePattern": "^\\s*désactiver\\b"
     }
   }
 }
@@ -1242,12 +1297,8 @@ patterns already included in the plugin:
 Restart the plugin after saving. Invalid JSON or patterns are reported in the
 sidecar log and working selectors are retained. Delete the **per-user** file to
 return to the bundled configuration. Never modify the installed package's
-`selectors.json`; even a one-line change can trigger tamper detection.
-
-The per-user file is currently supported by the Windows sidecar only.
-
-PRs adding language packs are very welcome.
-
+`selectors.json` or `locales/`; even a one-line change can trigger tamper
+detection. The per-user file is currently supported by the Windows sidecar only.
 The PowerPoint Live keys need little translating: role detection matches
 automation ids, and the drawing tools report which one is in use through UI
 Automation's selection rather than a label.

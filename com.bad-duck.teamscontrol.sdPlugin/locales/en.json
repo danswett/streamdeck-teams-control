@@ -1,0 +1,26 @@
+{
+	"$comment": [
+		"Language pack: the localized parts of selectors.json for one Teams display",
+		"language. Laid over selectors.json, and under the user's own selectors file.",
+		"See 'Languages' in the README before adding or changing one."
+	],
+	"language": {
+		"tag": "en",
+		"name": "English",
+		"status": "verified"
+	},
+	"controls": {
+		"mute": {
+			"activePattern": "^\\s*unmute\\b",
+			"inactivePattern": "^\\s*mute\\b"
+		},
+		"camera": {
+			"activePattern": "camera\\s+off",
+			"inactivePattern": "camera\\s+on"
+		},
+		"share": {
+			"activePattern": "stop\\s+(sharing|presenting)",
+			"inactivePattern": "^\\s*share\\b"
+		}
+	}
+}
