@@ -1,0 +1,31 @@
+{
+	"$comment": [
+		"Language pack: the localized parts of selectors.json for one Teams display",
+		"language. Laid over selectors.json, and under the user's own selectors file.",
+		"See 'Languages' in the README before adding or changing one.",
+		"",
+		"UNVERIFIED: these patterns have not yet been checked against labels captured",
+		"from a German Teams. They deliberately accept several plausible wordings.",
+		"Replace them with exact patterns once a capture is checked in under",
+		"tests/fixtures/teams-labels/de.json, then mark the pack verified."
+	],
+	"language": {
+		"tag": "de",
+		"name": "Deutsch",
+		"status": "unverified"
+	},
+	"controls": {
+		"mute": {
+			"activePattern": "stummschaltung\\b.*\\baufheben|mikrofon\\s+(wieder\\s+)?(aktivieren|einschalten)",
+			"inactivePattern": "stumm\\s*schalten|mikrofon\\s+(deaktivieren|ausschalten)"
+		},
+		"camera": {
+			"activePattern": "(kamera|video)\\s+(aus|deaktivieren)",
+			"inactivePattern": "(kamera|video)\\s+(ein|aktivieren)"
+		},
+		"share": {
+			"activePattern": "(teilen|freigabe|pr\u00e4sentation|pr\u00e4sentieren)\\s+beenden",
+			"inactivePattern": "^\\s*(teilen|freigeben)\\b(?!\\s+beenden)"
+		}
+	}
+}

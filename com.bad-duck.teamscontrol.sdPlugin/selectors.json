@@ -14,7 +14,8 @@
 		"",
 		"'automationId' values are locale-independent and are the preferred selector.",
 		"'activePattern' / 'inactivePattern' match the button's accessible NAME, which",
-		"IS localized - translate those in the user file for another language. A",
+		"IS localized. The patterns here are English; the language pack for Teams'",
+		"display language (locales/<tag>.json) is laid over them. A",
 		"button's name describes the action it performs, so it is the inverse of the",
 		"current state: 'Unmute mic' means you are currently muted.",
 		"",
@@ -137,13 +138,13 @@
 	"controls": {
 		"mute": {
 			"automationId": "microphone-button",
-			"activePattern": "^\\s*unmute\\b|wieder\\s+aktivieren",
-			"inactivePattern": "^\\s*mute\\b|stumm\\s*schalten"
+			"activePattern": "^\\s*unmute\\b",
+			"inactivePattern": "^\\s*mute\\b"
 		},
 		"camera": {
 			"automationId": "video-button",
-			"activePattern": "camera\\s+off|kamera\\s+(aus|deaktivieren)",
-			"inactivePattern": "camera\\s+on|kamera\\s+(ein|aktivieren)"
+			"activePattern": "camera\\s+off",
+			"inactivePattern": "camera\\s+on"
 		},
 		"camera-select": {
 			"menu": "video-button-configure",
@@ -160,8 +161,8 @@
 		},
 		"share": {
 			"automationId": "share-button",
-			"activePattern": "stop\\s+(sharing|presenting)|teilen\\s+beenden",
-			"inactivePattern": "^\\s*share\\b|^\\s*teilen\\s*$"
+			"activePattern": "stop\\s+(sharing|presenting)",
+			"inactivePattern": "^\\s*share\\b"
 		},
 		"chat": {
 			"automationId": "chat-button"

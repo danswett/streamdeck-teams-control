@@ -29,6 +29,17 @@
 		</p>
 		<p class="hint" id="profile-status" role="status"></p>
 		<script src="profile-settings.js"></script>
+		<sdpi-item label="Teams language">
+			<select id="language-select" disabled></select>
+		</sdpi-item>
+		<p class="hint">
+			The language Teams is shown in. Mute, camera and share read their
+			state from Teams' button labels, which are translated. Automatic
+			works it out from those labels during a meeting. Shared setting —
+			every key in this plugin uses it.
+		</p>
+		<p class="hint" id="language-status" role="status"></p>
+		<script src="language-settings.js"></script>
 		<div id="teams-control" hidden>
 			<sdpi-item label="Teams control">
 				<label><input id="teams-control-enabled" type="checkbox" disabled />

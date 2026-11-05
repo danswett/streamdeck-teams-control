@@ -28,13 +28,15 @@ const TOOL_IMAGES = toolImages.images as Record<string, string>;
 const SIZE = 144;
 
 /** Visual treatment applied to a monochrome control glyph. */
-export type Tone = "on" | "danger" | "accent" | "unavailable";
+export type Tone = "on" | "danger" | "accent" | "unavailable" | "unknown";
 
 const COLORS: Record<Tone, string> = {
 	on: "#FFFFFF",
 	danger: "#F1707B",
 	accent: "#FFC83D",
-	unavailable: "#4A4A4A"
+	unavailable: "#4A4A4A",
+	// Lighter than unavailable: the control works, only its state is unread.
+	unknown: "#9A9A9A"
 };
 
 /** Exported so the image pre-render uses exactly the same gray. */
@@ -133,6 +135,11 @@ type ToggleOptions = {
 	onTone?: Tone;
 	/** Tone for the inactive side. */
 	offTone?: Tone;
+	/**
+	 * Glyph for a state that could not be read, such as a Teams language with
+	 * no language pack. Should claim neither side; defaults to onKey.
+	 */
+	unknownKey?: string;
 };
 
 /**
@@ -145,7 +152,9 @@ export function renderToggle(opts: ToggleOptions): string {
 	// With no meeting, show the resting glyph grayed out.
 	if (!available) return renderGlyph(active === false ? offKey : onKey, "unavailable");
 
-	if (active === undefined) return renderGlyph(onKey, "on");
+	// Drawn neutral rather than as either side: a guess here showed a live mic
+	// as muted for as long as the labels went unread.
+	if (active === undefined) return renderGlyph(opts.unknownKey ?? onKey, "unknown");
 	return active
 		? renderGlyph(onKey, opts.onTone ?? "on")
 		: renderGlyph(offKey, opts.offTone ?? "danger");

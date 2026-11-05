@@ -164,7 +164,8 @@ public static class Program
         }
         var pollMs = int.TryParse(GetArg(args, "--poll"), out var p) ? Math.Clamp(p, 150, 5000) : 700;
 
-        var config = LoadConfig(selectorsPath, userSelectorsPath);
+        var localePackPath = GetArg(args, "--locale-pack");
+        var config = LoadConfig(selectorsPath, userSelectorsPath, localePackPath);
         // The plugin sends its saved consent on "ready". Do not use any
         // file-based opt-in before that handshake has completed.
         if (HasFlag(args, "--direct-mode-managed")) config.DirectMode.Enabled = false;
@@ -715,17 +716,28 @@ public static class Program
     private static bool HasFlag(string[] args, string name) =>
         args.Any(a => string.Equals(a, name, StringComparison.OrdinalIgnoreCase));
 
-    internal static SelectorConfig LoadConfig(string path, string? userSelectorsPath = null)
+    /// <summary>
+    /// Layers the selector sources: built-in defaults, the bundled file, the
+    /// language pack for Teams' display language, then the user's own file -
+    /// so a user override always wins over the pack it corrects.
+    /// </summary>
+    internal static SelectorConfig LoadConfig(string path, string? userSelectorsPath = null, string? localePackPath = null)
     {
         var config = Defaults.Config();
         var bundled = ReadSelectors(path);
         if (bundled is not null) ApplyConfig(config, bundled, path);
 
+        var layered = bundled?.DeepClone().AsObject() ?? new JsonObject();
+        if (localePackPath is not null && ReadSelectors(localePackPath) is { } pack)
+        {
+            MergeSelectors(layered, pack, localePackPath);
+            ApplyConfig(config, layered, localePackPath, inheritControls: true);
+        }
+
         if (userSelectorsPath is not null && ReadSelectors(userSelectorsPath) is { } user)
         {
-            var merged = bundled?.DeepClone().AsObject() ?? new JsonObject();
-            MergeSelectors(merged, user, userSelectorsPath);
-            ApplyConfig(config, merged, userSelectorsPath, inheritControls: true);
+            MergeSelectors(layered, user, userSelectorsPath);
+            ApplyConfig(config, layered, userSelectorsPath, inheritControls: true);
         }
         return config;
     }

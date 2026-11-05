@@ -180,25 +180,86 @@ public class SelectorConfigTests : IDisposable
     }
 
     [Theory]
-    [InlineData("mute", "Unmute mic", true)]
-    [InlineData("mute", "Mute mic", false)]
-    [InlineData("mute", "Mikrofon wieder aktivieren", true)]
-    [InlineData("mute", "Mikrofon stummschalten", false)]
-    [InlineData("camera", "Turn camera off", true)]
-    [InlineData("camera", "Turn camera on", false)]
-    [InlineData("camera", "Kamera ausschalten", true)]
-    [InlineData("camera", "Kamera aktivieren", false)]
-    [InlineData("share", "Stop sharing", true)]
-    [InlineData("share", "Share", false)]
-    [InlineData("share", "Teilen beenden", true)]
-    [InlineData("share", "Teilen", false)]
-    public void English_and_German_state_patterns_match_exactly_one_state(string target, string label, bool active)
+    [InlineData("en", "mute", "Unmute mic", true)]
+    [InlineData("en", "mute", "Mute mic", false)]
+    [InlineData("de", "mute", "Stummschaltung aufheben", true)]
+    [InlineData("de", "mute", "Mikrofon wieder aktivieren", true)]
+    [InlineData("de", "mute", "Mikrofon stummschalten", false)]
+    [InlineData("en", "camera", "Turn camera off", true)]
+    [InlineData("en", "camera", "Turn camera on", false)]
+    [InlineData("de", "camera", "Kamera ausschalten", true)]
+    [InlineData("de", "camera", "Kamera aktivieren", false)]
+    [InlineData("en", "share", "Stop sharing", true)]
+    [InlineData("en", "share", "Share", false)]
+    [InlineData("de", "share", "Teilen beenden", true)]
+    [InlineData("de", "share", "Teilen", false)]
+    public void Language_pack_state_patterns_match_exactly_one_state(string language, string target, string label, bool active)
     {
-        var path = Path.Combine(FindRepoRoot(), "com.bad-duck.teamscontrol.sdPlugin", "selectors.json");
-        var spec = Program.LoadConfig(path).Controls[target];
+        var plugin = Path.Combine(FindRepoRoot(), "com.bad-duck.teamscontrol.sdPlugin");
+        var spec = Program.LoadConfig(Path.Combine(plugin, "selectors.json"), null,
+            Path.Combine(plugin, "locales", $"{language}.json")).Controls[target];
 
         Assert.Equal(active, spec.ActiveRegex!.IsMatch(label));
         Assert.Equal(!active, spec.InactiveRegex!.IsMatch(label));
+    }
+
+    /// <summary>
+    /// The plugin decides a pack is verified from these captures, using
+    /// JavaScript regexes; this is the same check with the .NET ones the
+    /// sidecar actually reads state with.
+    /// </summary>
+    [Fact]
+    public void Every_captured_label_reads_as_its_state_through_its_language_pack()
+    {
+        var root = FindRepoRoot();
+        var plugin = Path.Combine(root, "com.bad-duck.teamscontrol.sdPlugin");
+        var fixtures = Directory.GetFiles(Path.Combine(root, "tests", "fixtures", "teams-labels"), "*.json");
+        Assert.NotEmpty(fixtures);
+
+        foreach (var file in fixtures)
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(file));
+            var language = doc.RootElement.GetProperty("language").GetString()!;
+            var config = Program.LoadConfig(Path.Combine(plugin, "selectors.json"), null,
+                Path.Combine(plugin, "locales", $"{language}.json"));
+            foreach (var control in doc.RootElement.GetProperty("labels").EnumerateObject())
+            {
+                var spec = config.Controls[control.Name];
+                foreach (var (side, expected) in new[] { ("active", true), ("inactive", false) })
+                    foreach (var label in control.Value.GetProperty(side).EnumerateArray())
+                    {
+                        var text = label.GetString()!;
+                        Assert.True(expected == spec.ActiveRegex!.IsMatch(text), $"{language} {control.Name} '{text}' active");
+                        Assert.True(expected != spec.InactiveRegex!.IsMatch(text), $"{language} {control.Name} '{text}' inactive");
+                    }
+            }
+        }
+    }
+
+    [Fact]
+    public void A_language_pack_overrides_the_bundled_file_and_the_user_file_overrides_the_pack()
+    {
+        var bundled = WriteTemp("""{"controls":{"mute":{"automationId":"mic","activePattern":"^bundled$","inactivePattern":"^bundled-off$"}}}""");
+        var pack = WriteTemp("""{"language":{"tag":"xx"},"controls":{"mute":{"activePattern":"^pack$","inactivePattern":"^pack-off$"}}}""");
+        var user = WriteTemp("""{"controls":{"mute":{"inactivePattern":"^user-off$"}}}""");
+
+        var config = Program.LoadConfig(bundled, user, pack);
+
+        Assert.Equal("mic", config.Controls["mute"].AutomationId);
+        Assert.Equal("^pack$", config.Controls["mute"].ActivePattern);
+        Assert.Equal("^user-off$", config.Controls["mute"].InactivePattern);
+    }
+
+    [Fact]
+    public void Only_controls_named_for_their_state_publish_their_label()
+    {
+        var config = Defaults.Config();
+
+        Assert.True(TeamsClient.PublishesLabel(config.Controls["mute"]));
+        Assert.True(TeamsClient.PublishesLabel(config.Controls["camera"]));
+        Assert.False(TeamsClient.PublishesLabel(config.Controls["chat"]));
+        Assert.False(TeamsClient.PublishesLabel(config.Controls["ppt-private-view"]));
+        Assert.False(TeamsClient.PublishesLabel(config.Controls["ppt-pen"]));
     }
 
     [Fact]

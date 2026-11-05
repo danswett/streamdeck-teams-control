@@ -64,7 +64,7 @@ const usedInspectors = new Set(
 );
 if (manifest.PropertyInspectorPath && !existsSync(path.join(PLUGIN, manifest.PropertyInspectorPath)))
 	fail("manifest", `plugin inspector "${manifest.PropertyInspectorPath}" is missing`);
-const support = new Set(["inspector.css", "action-descriptions.js", "profile-settings.js", "sdpi-components.js", "teams-control-settings.js"]);
+const support = new Set(["inspector.css", "action-descriptions.js", "language-settings.js", "profile-settings.js", "sdpi-components.js", "teams-control-settings.js"]);
 for (const f of readdirSync(uiDir)) {
 	if (!f.endsWith(".html")) continue;
 	if (!usedInspectors.has(f)) fail("ui", `${f} is not used by any action`);

@@ -193,6 +193,12 @@ public final class TeamsClient {
             snap.states[key] = false
             lastStates[key] = false
         }
+        // As on Windows: the plugin recognizes Teams' display language from
+        // these, and logs them so a language pack can be checked against
+        // real labels. Only toolbar buttons named for their action qualify.
+        if spec.publishesLabel, !node.label.isEmpty {
+            snap.context["label.\(key)"] = node.label
+        }
         if spec.stateFromSelection, let selected = AX.bool(node.element, "AXSelected") {
             snap.states[key] = selected
             lastStates[key] = selected

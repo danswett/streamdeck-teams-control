@@ -42,6 +42,13 @@ struct ControlSpec {
     var offRegex: NSRegularExpression? { Self.compile(offName) }
     var nameRegex: NSRegularExpression? { Self.compile(name) }
 
+    /// Whether the state comes from the control's own localized name, which is
+    /// what language detection and label capture need to see.
+    var publishesLabel: Bool {
+        !stateFromSelection && !stateFromFullDescription && (menu ?? "").isEmpty &&
+            (activeRegex != nil || inactiveRegex != nil)
+    }
+
     static func compile(_ pattern: String?) -> NSRegularExpression? {
         guard let pattern, !pattern.isEmpty else { return nil }
         return try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive])
@@ -185,13 +192,13 @@ public enum Defaults {
         c.controls = [
             "mute": ControlSpec(
                 automationId: "microphone-button",
-                activePattern: #"unmute|Mikrofon wieder aktivieren|Stummschaltung aufheben"#,
-                inactivePattern: #"^\s*mute\b|Stummschalten|Mikrofon deaktivieren"#
+                activePattern: #"unmute"#,
+                inactivePattern: #"^\s*mute\b"#
             ),
             "camera": ControlSpec(
                 automationId: "video-button",
-                activePattern: #"camera\s+off|Kamera ausschalten"#,
-                inactivePattern: #"camera\s+on|Kamera einschalten"#
+                activePattern: #"camera\s+off"#,
+                inactivePattern: #"camera\s+on"#
             ),
             // The camera's menu item carries the device id as its DOM id, as on
             // Windows. Whether Teams for Mac uses AVFoundation's uniqueID for it
@@ -201,8 +208,8 @@ public enum Defaults {
             "leave": ControlSpec(automationId: "hangup-button"),
             "share": ControlSpec(
                 automationId: "share-button",
-                activePattern: #"stop\s+(sharing|presenting)|Teilen beenden|Präsentation beenden"#,
-                inactivePattern: #"^\s*share\b|^\s*Teilen\b"#
+                activePattern: #"stop\s+(sharing|presenting)"#,
+                inactivePattern: #"^\s*share\b"#
             ),
             "chat": ControlSpec(automationId: "chat-button"),
             "people": ControlSpec(automationId: "roster-button"),

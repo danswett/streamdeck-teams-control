@@ -44,14 +44,18 @@ func emitState(_ snap: MeetingSnapshot) {
     ])
 }
 
-func loadConfig(path: String) -> SelectorConfig {
+func loadConfig(path: String, localePack: String? = nil) -> SelectorConfig {
     var cfg = Defaults.config()
-    guard FileManager.default.fileExists(atPath: path),
-          let text = try? String(contentsOfFile: path, encoding: .utf8) else {
-        return cfg
+    // Bundled selectors first, then the language pack for Teams' display
+    // language, so the pack's translated labels win over the English ones.
+    for source in [path, localePack].compactMap({ $0 }) {
+        guard FileManager.default.fileExists(atPath: source),
+              let text = try? String(contentsOfFile: source, encoding: .utf8) else {
+            continue
+        }
+        cfg = Defaults.overlay(cfg, json: text)
+        IO.err("applied selector overlay from \(source)")
     }
-    cfg = Defaults.overlay(cfg, json: text)
-    IO.err("applied selector overlay from \(path)")
     return cfg
 }
 
@@ -65,6 +69,7 @@ if hasFlag(args, "-h") || hasFlag(args, "--help") {
 
     OPTIONS
       --selectors PATH   Overlay control map (default: ./selectors.json beside the binary)
+      --locale-pack PATH Language pack overlaid after --selectors (Teams' display language)
       --poll MS          Backstop poll while in a meeting (default 700)
       --no-focus-guard   Do not AXRaise the previous app after a press
 
@@ -94,7 +99,7 @@ let selectorsPath = argValue(args, "--selectors")
     ?? exeDir + "/selectors.json"
 let pollMs = max(150, min(5000, Int(argValue(args, "--poll") ?? "700") ?? 700))
 let restoreFocus = !hasFlag(args, "--no-focus-guard")
-let config = loadConfig(path: selectorsPath)
+let config = loadConfig(path: selectorsPath, localePack: argValue(args, "--locale-pack"))
 
 // Never asked for here. Prompting is the plugin's decision, made only once the
 // user has turned Teams control on; see the "permissions" command below.

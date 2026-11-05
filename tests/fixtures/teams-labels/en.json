@@ -1,0 +1,18 @@
+{
+	"$comment": [
+		"Accessible names captured from a real Teams meeting toolbar. A language",
+		"pack is marked verified only when a file like this exists for it, and the",
+		"tests check that every label here reads as exactly the state it is listed",
+		"under - in the plugin, the Windows sidecar and the macOS sidecar.",
+		"'active' means: mute -> muted, camera -> camera on, share -> sharing."
+	],
+	"language": "en",
+	"teamsVersion": "26255.500.5120.7530",
+	"platform": "windows",
+	"captured": "2026-09-14",
+	"labels": {
+		"mute": { "active": ["Unmute mic"], "inactive": ["Mute mic"] },
+		"camera": { "active": ["Turn camera off"], "inactive": ["Turn camera on"] },
+		"share": { "active": ["Stop sharing"], "inactive": ["Share"] }
+	}
+}
