@@ -217,8 +217,10 @@ plugin.
 
 **No automatic retries after an unconfirmed change.** If the requested layout
 does not settle within nine seconds, automatic following pauses across meetings, reconnects
-and plugin restarts. The SDK cannot tell whether you cancelled an install,
-deleted a profile, or customized it, so the plugin does not keep retrying.
+and plugin restarts. The SDK cannot tell whether you cancelled an install or
+deleted a profile, so the plugin does not keep retrying. A bundled profile you
+have customized still counts as arrived, as long as most of its keys are where
+the plugin put them, so editing the layout does not pause following.
 Your existing layouts and manual controls are left alone. Close any outstanding
 install prompt, then turn **Follow the meeting between profiles** off and on
 when you want to retry. A paused request is still handed back when the meeting
@@ -683,8 +685,12 @@ A few operational notes:
 - **That dialog holds Stream Deck's profile lock until it is answered**, which
   may be hours. A second switch request meanwhile is refused with `Another
   operation is already in progress`. Each named request is saved before it is
-  sent and cleared after the requested layout has remained matching and quiet
-  for 400 ms, or the user explicitly retries. The layout is checked again after
+  sent and cleared after the requested layout has remained recognizable and quiet
+  for 400 ms, or the user explicitly retries. Recognizable means the deck's plugin
+  placements (controller, position, action) and the bundled layout's share at least
+  half of their combined placements, and are closer to that layout than to the deck's other bundled
+  layouts, so a customized profile still confirms (#52) but the previous meeting
+  layout left on screen behind an install prompt does not. The layout is checked again after
   reading settings, immediately before clearing the guard. If the layout does
   not settle within nine seconds, following pauses
   across meetings and restarts until the
